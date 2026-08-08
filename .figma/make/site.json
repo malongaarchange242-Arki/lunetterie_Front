@@ -1,0 +1,10 @@
+{
+  "description": "Manage eyewear inventory and operations with features for tracking glasses, employee management, order processing, and financial reporting, tailored for eyewear businesses.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
