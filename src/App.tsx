@@ -1822,6 +1822,7 @@ function ReceptionView() {
       })
       if (!response.ok) throw new Error('delete failed')
       setSessions(prev => prev.filter(session => session.orderId !== orderId))
+      setReceptionCommands(prev => prev.filter(cmd => cmd.orderId !== orderId))
       setExpandedId(prev => (prev === `EXP-${orderId}` ? null : prev))
       setReceptionSession(prev => (prev?.orderId === orderId ? null : prev))
     } catch {
@@ -2383,15 +2384,17 @@ function ReceptionView() {
                   <p className="text-3xl font-black text-blue-600 dark:text-blue-400 tabular-nums">{s.frames}</p>
                   <p className="text-xs text-slate-400">quantité</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void deleteReceptionSession(s.orderId)}
-                  disabled={isDeletingSessionId === s.orderId}
-                  className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/40"
-                >
-                  {ic.trash('w-4 h-4')}
-                  Supprimer
-                </button>
+                {s.orderId !== undefined && (
+                  <button
+                    type="button"
+                    onClick={() => void deleteReceptionSession(s.orderId)}
+                    disabled={isDeletingSessionId === s.orderId}
+                    className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/40"
+                  >
+                    {ic.trash('w-4 h-4')}
+                    {isDeletingSessionId === s.orderId ? 'Suppression...' : 'Supprimer'}
+                  </button>
+                )}
               </div>
             </div>
             <div className="mt-3 border-t border-slate-400/40 dark:border-slate-700/70 pt-3">
