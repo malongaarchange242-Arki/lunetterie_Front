@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
+// Importé plutôt que référencé par URL : sans dossier public/, un chemin littéral ne
+// serait pas copié dans dist/ au build.
+import logoUrl from '../logo.jpeg'
 
-const API_URL = 'https://api-lunetterie.universearch.com/api/v1'
+const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 const RP_ID = 'api-lunetterie.universearch.com'
 
 function getRoleRedirect(user: any) {
@@ -16,6 +19,15 @@ function getRoleRedirect(user: any) {
     RESPONSABLE_STATION: '/index.html',
   }
   return redirects[role as string] || '/index.html'
+}
+
+// Le code de connexion fait exactement 4 ou 6 chiffres — même règle que IsValidPIN côté Go.
+function isValidPin(value: string) {
+  return /^(\d{4}|\d{6})$/.test(value)
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, '').slice(0, 6)
 }
 
 function normalizeRoleName(value: unknown) {
@@ -63,33 +75,35 @@ function LoginPage() {
     })()
   }, [])
 
-  async function checkEmailExists(nextEmail: string) {
-    const normalized = nextEmail.trim().toLowerCase()
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+  async function checkEmailExists(nextName: string) {
+    const normalized = nextName.trim()
+    // Un nom complet, donc au moins deux mots : sans ça on interroge le serveur à chaque
+    // lettre tapée, pour rien.
+    if (normalized.split(/\s+/).filter(Boolean).length < 2) {
       setPasswordStepVisible(false)
       setFeedback('')
       return
     }
     try {
-      setFeedback('Vérification de votre adresse…')
-      const response = await fetch(`${API_URL}/auth/check-email`, {
+      setFeedback('Vérification du nom…')
+      const response = await fetch(`${API_URL}/auth/check-user`, {
         method: 'POST',
         mode: 'cors',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalized }),
+        body: JSON.stringify({ name: normalized }),
       })
-      if (!response.ok) throw new Error('Impossible de vérifier l’adresse e-mail.')
-      const result = await response.json()
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result?.message || result?.error || 'Impossible de vérifier ce nom.')
       const data = result?.data || {}
       if (!data.exists) {
         setPasswordStepVisible(false)
-        setFeedback('Aucun compte ne correspond à cette adresse e-mail.')
+        setFeedback('Aucun employé ne correspond à ce nom.')
         setFeedbackType('error')
         return
       }
       setNeedsPasswordSetup(!data.has_password)
       setPasswordStepVisible(true)
-      setFeedback(data.has_password ? 'Adresse reconnue. Saisissez votre mot de passe.' : 'Première connexion : choisissez votre mot de passe.')
+      setFeedback(data.has_password ? 'Nom reconnu. Saisissez votre code.' : 'Première connexion : choisissez votre code.')
       setFeedbackType('success')
     } catch (error: any) {
       setPasswordStepVisible(false)
@@ -101,6 +115,18 @@ function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!email.trim()) return
+
+    if (!isValidPin(password)) {
+      setFeedback('Le code doit contenir exactement 4 ou 6 chiffres.')
+      setFeedbackType('error')
+      return
+    }
+    if (needsPasswordSetup && password !== confirmPassword) {
+      setFeedback('Les deux codes ne correspondent pas.')
+      setFeedbackType('error')
+      return
+    }
+
     setLoading(true)
     setFeedback('Connexion en cours...')
     setFeedbackType('')
@@ -110,7 +136,7 @@ function LoginPage() {
         method: 'POST',
         mode: 'cors',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+        body: JSON.stringify({ name: email.trim(), password }),
       })
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -183,30 +209,35 @@ function LoginPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/10 shadow-2xl backdrop-blur-xl p-8">
-        <img src="/logo.jpeg" alt="La Lunetterie" className="mx-auto mb-6 h-20 w-auto rounded-2xl" />
+        <img src={logoUrl} alt="La Lunetterie" className="mx-auto mb-6 h-20 w-auto rounded-2xl bg-white p-2" />
         <h1 className="text-center text-2xl font-semibold">Connexion</h1>
-        <p className="mt-2 text-center text-sm text-slate-300">Connectez-vous par e-mail ou par authentification biométrique</p>
+        <p className="mt-2 text-center text-sm text-slate-300">Connectez-vous avec votre nom ou par authentification biométrique</p>
 
         <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
-          <label className="block text-sm font-medium text-slate-200" htmlFor="loginEmail">Adresse e-mail</label>
-          <input id="loginEmail" type="email" value={email} onChange={e => setEmail(e.target.value)} onBlur={() => void checkEmailExists(email)} className="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm outline-none ring-0" placeholder="vous@lunetterie.com" />
+          <label className="block text-sm font-medium text-slate-200" htmlFor="loginName">Nom de l'employé</label>
+          <input id="loginName" type="text" autoComplete="name" value={email} onChange={e => setEmail(e.target.value)} onBlur={() => void checkEmailExists(email)} className="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm outline-none ring-0" placeholder="MALONGA Archange" />
 
           <p className={`text-sm ${feedbackType === 'error' ? 'text-red-300' : feedbackType === 'success' ? 'text-emerald-300' : 'text-slate-300'}`}>{feedback}</p>
 
           {passwordStepVisible && (
             <div className="space-y-3">
-              <label className="block text-sm font-medium text-slate-200" htmlFor="loginPassword">{needsPasswordSetup ? 'Nouveau mot de passe' : 'Mot de passe'}</label>
+              <label className="block text-sm font-medium text-slate-200" htmlFor="loginPassword">{needsPasswordSetup ? 'Nouveau code' : 'Code'}</label>
+              {/* inputMode numeric : pavé numérique sur mobile. type text plutôt que number,
+                  qui ignore maxLength et laisserait passer « e », « + » et « - ». */}
               <div className="flex items-center rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
-                <input id="loginPassword" type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder={needsPasswordSetup ? 'Choisissez un mot de passe' : 'Saisissez votre mot de passe'} />
+                <input id="loginPassword" type={showPassword ? 'text' : 'password'} inputMode="numeric" pattern="[0-9]*" maxLength={6} autoComplete="one-time-code" value={password} onChange={e => setPassword(onlyDigits(e.target.value))} className="w-full bg-transparent text-sm tracking-[0.4em] outline-none" placeholder={needsPasswordSetup ? 'Choisissez 4 ou 6 chiffres' : '••••'} />
                 <button type="button" onClick={() => setShowPassword(v => !v)} className="ml-2 text-slate-400">{showPassword ? 'Cacher' : 'Voir'}</button>
               </div>
               {needsPasswordSetup && (
-                <div className="flex items-center rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
-                  <input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder="Confirmez votre mot de passe" />
-                </div>
+                <>
+                  <div className="flex items-center rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
+                    <input type={showPassword ? 'text' : 'password'} inputMode="numeric" pattern="[0-9]*" maxLength={6} value={confirmPassword} onChange={e => setConfirmPassword(onlyDigits(e.target.value))} className="w-full bg-transparent text-sm tracking-[0.4em] outline-none" placeholder="Confirmez le code" />
+                  </div>
+                  <p className="text-xs text-slate-400">Le code doit contenir exactement 4 ou 6 chiffres.</p>
+                </>
               )}
               <button type="submit" disabled={loading} className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60">
-                {loading ? 'Connexion...' : needsPasswordSetup ? 'Définir mon mot de passe' : 'Se connecter'}
+                {loading ? 'Connexion...' : needsPasswordSetup ? 'Définir mon code' : 'Se connecter'}
               </button>
             </div>
           )}

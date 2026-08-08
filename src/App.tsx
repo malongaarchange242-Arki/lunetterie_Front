@@ -1,6 +1,9 @@
-import React, { useState, useRef, useEffect, type ReactNode } from 'react'
-import { buildAssistantPayload, mapChatActionToScreen } from './chatContext'
+import React, { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
+import { buildAssistantPayload, buildStockDigest, mapChatActionToScreen } from './chatContext'
 import { summarizeStockSummary } from './dashboardMetrics'
+// Importé plutôt que référencé par URL : il n'y a pas de dossier public/ ici, donc un
+// chemin littéral ne serait pas copié dans dist/ au build.
+import logoUrl from '../logo.jpeg'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type ModuleId = 'register' | 'reception' | 'employees' | 'orders' | 'supplier' | 'history'
@@ -33,6 +36,7 @@ interface CountryItem {
 interface FrameRecord {
   ref: string
   marque: string
+  /** Employé ayant enregistré la monture — la table glasses ne porte pas d'auteur. */
   enregistrePar: string
   date: string
   status: string
@@ -42,6 +46,7 @@ interface FrameRecord {
   photo?: string
   gamme?: string
   price?: number | string
+  emplacement?: string
 }
 
 interface Employee {
@@ -111,7 +116,25 @@ function formatMovementDate(dateValue?: string) {
 interface ChatMsg { role: 'user' | 'assistant'; content: string }
 
 // ── Data ──────────────────────────────────────────────────────────────────────
-const API_URL = 'https://api-lunetterie.universearch.com/api/v1'
+const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
+
+function logoutAndRedirectToIndex() {
+  window.localStorage.removeItem('token')
+  window.localStorage.removeItem('user')
+  window.location.assign('/index.html')
+}
+
+if (typeof window !== 'undefined' && window.fetch) {
+  const originalFetch = window.fetch.bind(window) as unknown as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+  const patchedFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> = async (input, init) => {
+    const response = await originalFetch(input, init)
+    if (response.status === 401 || response.status === 403) {
+      logoutAndRedirectToIndex()
+    }
+    return response
+  }
+  window.fetch = patchedFetch as unknown as typeof window.fetch
+}
 
 const COUNTRIES: CountryItem[] = []
 
@@ -181,6 +204,10 @@ function resolveFrameGamme(value?: string, price?: number | string) {
 
 const SHAPE_FILTER_OPTIONS = ['all', 'Rectangle', 'Rond', 'Ovale', 'Carré', 'Papillon', 'Aviateur', 'Wayfarer', 'Cat-eye', 'Clubmaster', 'Browline', 'Hexagonal', 'Pantos', 'Masque', 'Papillon oversize'] as const
 const GAMME_FILTER_OPTIONS = ['all', 'classique', 'moyenne', 'luxe'] as const
+// Genres de monture — à ne pas confondre avec le genre d'un employé (Homme/Femme/Autre),
+// qui décrit une personne et n'a rien à voir avec ces valeurs.
+const GENRE_FILTER_OPTIONS = ['all', 'Homme', 'Femme', 'Enfant', 'Unisexe'] as const
+type GenreFilterValue = typeof GENRE_FILTER_OPTIONS[number]
 
 type ShapeFilterValue = typeof SHAPE_FILTER_OPTIONS[number]
 type GammeFilterValue = typeof GAMME_FILTER_OPTIONS[number]
@@ -211,7 +238,7 @@ function buildFrameRowsFromGlasses(glasses: any[], stationMap: Map<number, strin
     const row: FrameRecord = {
       ref,
       marque: glass.brand || '—',
-      enregistrePar: '—',
+      enregistrePar: glass.registered_by || '—',
       date,
       status: mapGlassStatusToUI(glass.status),
       genre: glass.gender || '—',
@@ -220,6 +247,7 @@ function buildFrameRowsFromGlasses(glasses: any[], stationMap: Map<number, strin
       photo: glass.photo_monture_url || '',
       gamme: resolveFrameGamme(glass.material, glass.price),
       price: glass.price ?? 0,
+      emplacement: glass.location_code || glass.station_name || '—',
     }
 
     if (!rowsByCity[city]) rowsByCity[city] = []
@@ -232,6 +260,14 @@ function buildFrameRowsFromGlasses(glasses: any[], stationMap: Map<number, strin
 const MOVEMENTS_DATA: Movement[] = []
 
 const STOCK_STATUSES = ['EN_STOCK_GENERAL', 'EN_STOCK_SOUS_STATION', 'EN_PRESENTOIR', 'EN_LABORATOIRE', 'RESERVE'] as const
+
+// Tous les statuts de models/enums.go. Le chatbot reçoit la base entière, vendues et
+// pertes comprises, et filtre lui-même sur le champ `status`.
+const ALL_GLASS_STATUSES = [
+  'RECU_FOURNISSEUR', 'EN_STOCK_GENERAL', 'EN_TRANSIT', 'EN_STOCK_SOUS_STATION',
+  'EN_PRESENTOIR', 'RESERVEE', 'EN_LABORATOIRE', 'PRETE_A_LIVRER',
+  'VENDUE', 'PERDUE', 'CASSEE', 'RETOURNEE',
+] as const
 
 const EMPLOYEES: Array<{ id: number; name: string; role: string; station: string; group: string; status: string; avatar: string }> = []
 
@@ -291,6 +327,337 @@ function isGeneralStockStatus(status: string) {
 function isLocalStockStatus(status: string) {
   const normalized = String(status || '').trim().toUpperCase()
   return normalized === 'EN_STOCK_SOUS_STATION'
+}
+
+// ── Stock magasin : manquants ─────────────────────────────────────────────────
+// Les manquants d'un magasin viennent uniquement de son panier de demande, c'est-à-dire
+// des recherches client réellement enregistrées par le chatbot.
+type StockAction = '' | 'PANIER' | 'ENVOI'
+
+function normalizeGenderName(value?: string) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+
+  const normalized = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (normalized.startsWith('femme')) return 'Femme'
+  if (normalized.startsWith('homme')) return 'Homme'
+  if (normalized.startsWith('enfant') || normalized.startsWith('junior')) return 'Enfant'
+  if (normalized.startsWith('unisex') || normalized.startsWith('mixte')) return 'Unisexe'
+  return raw
+}
+
+function getGlassRef(glass: any) {
+  return String(glass.reference || glass.barcode || '—')
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, char => (
+    char === '&' ? '&amp;' : char === '<' ? '&lt;' : char === '>' ? '&gt;' : char === '"' ? '&quot;' : '&#39;'
+  ))
+}
+
+// ── Envoi d'une session de réception vers un magasin ──────────────────────────
+function exportSessionListCSV(magasin: string, sessionCode: string, glasses: any[]) {
+  const headers = ['Référence', 'Code-barres', 'Marque', 'Genre', 'Forme', 'Taille', 'Emplacement']
+  const lines = glasses.map(glass => [
+    getGlassRef(glass),
+    glass.barcode || '—',
+    glass.brand || '—',
+    normalizeGenderName(glass.gender) || '—',
+    normalizeShapeName(glass.shape) || '—',
+    glass.size || '—',
+    glass.location_code || '—',
+  ])
+  const csv = '﻿' + [headers, ...lines].map(row => row.join(';')).join('\r\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `envoi-${sessionCode}-${magasin}-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(link); link.click()
+  document.body.removeChild(link); URL.revokeObjectURL(url)
+}
+
+function printSessionList(magasin: string, sessionCode: string, glasses: any[]) {
+  const printWindow = window.open('', '_blank', 'width=900,height=700')
+  if (!printWindow) {
+    window.alert("Impossible d'ouvrir la fenêtre d'impression. Autorisez les pop-ups pour ce site.")
+    return
+  }
+
+  const body = glasses.map(glass => `
+    <tr>
+      <td>${escapeHtml(getGlassRef(glass))}</td>
+      <td>${escapeHtml(String(glass.barcode || '—'))}</td>
+      <td>${escapeHtml(String(glass.brand || '—'))}</td>
+      <td>${escapeHtml(normalizeGenderName(glass.gender) || '—')}</td>
+      <td>${escapeHtml(normalizeShapeName(glass.shape) || '—')}</td>
+      <td>${escapeHtml(String(glass.location_code || '—'))}</td>
+      <td class="tick"></td>
+    </tr>`).join('')
+
+  printWindow.document.write(`<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Envoi ${escapeHtml(sessionCode)} vers ${escapeHtml(magasin)}</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; margin: 24px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { font-size: 12px; color: #475569; margin: 0 0 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+  th { background: #f1f5f9; }
+  .tick { width: 40px; }
+</style></head>
+<body>
+  <h1>Envoi vers ${escapeHtml(magasin)}</h1>
+  <p>Session ${escapeHtml(sessionCode)} · ${glasses.length} monture(s) · ${escapeHtml(new Date().toLocaleDateString('fr-FR'))}</p>
+  <table>
+    <thead><tr><th>Réf</th><th>Code-barres</th><th>Marque</th><th>Genre</th><th>Forme</th><th>Emplacement</th><th>Fait</th></tr></thead>
+    <tbody>${body || '<tr><td colspan="7">Aucune monture dans cette session.</td></tr>'}</tbody>
+  </table>
+</body></html>`)
+  printWindow.document.close()
+  printWindow.focus()
+  printWindow.print()
+}
+
+interface SendListLine {
+  id: string
+  forme: ShapeFilterValue
+  genre: 'all' | 'Homme' | 'Femme' | 'Enfant' | 'Unisexe'
+  gamme: GammeFilterValue
+}
+
+function createSendListLine(): SendListLine {
+  return {
+    id: `line-${Math.random().toString(36).slice(2, 10)}`,
+    forme: 'all',
+    genre: 'all',
+    gamme: 'all',
+  }
+}
+
+// ── Paniers de demande ────────────────────────────────────────────────────────
+// Un panier par magasin (= une ville). Chaque recherche de monture faite via le chatbot y
+// dépose une ligne ; le compteur du panier est le nombre de lignes encore ouvertes.
+interface BasketItem {
+  id: number
+  city: string
+  genre?: string
+  forme?: string
+  gamme?: string
+  taille?: string
+  source: string
+  status: string
+  created_at: string
+}
+
+// Le chatbot et l'écran stock vivent dans deux composants sans parent commun : le chatbot
+// signale par cet événement qu'il vient de déposer une demande, l'écran stock rafraîchit
+// ses compteurs.
+const BASKET_UPDATED_EVENT = 'lunetterie:basket-updated'
+
+async function postBasketDemand(demand: { city: string; genre?: string; forme?: string; gamme?: string; taille?: string }) {
+  const token = window.localStorage.getItem('token')
+  if (!token) return false
+
+  try {
+    const response = await fetch(`${API_URL}/inventory/baskets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        city: demand.city,
+        genre: demand.genre || '',
+        forme: demand.forme || '',
+        gamme: demand.gamme || '',
+        taille: demand.taille || '',
+        source: 'CHATBOT',
+      }),
+    })
+    if (!response.ok) return false
+    window.dispatchEvent(new CustomEvent(BASKET_UPDATED_EVENT))
+    return true
+  } catch {
+    return false
+  }
+}
+
+// La taille demandée est comparée par inclusion : le client dit « 52 » alors que la base
+// stocke souvent la mesure complète (« 52C18-140 »).
+function sizeMatchesDemand(demandSize: string | undefined, glassSize: unknown) {
+  const wanted = String(demandSize || '').trim().toLowerCase()
+  if (!wanted) return true
+  return String(glassSize || '').trim().toLowerCase().includes(wanted)
+}
+
+// Une monture du stock principal satisfait une demande quand CHAQUE critère exprimé
+// correspond. Un critère absent de la demande n'exclut rien.
+function matchesDemand(glass: any, demand: BasketItem) {
+  if (demand.genre && normalizeGenderName(demand.genre) !== normalizeGenderName(glass.gender)) return false
+  if (demand.forme && normalizeShapeName(demand.forme) !== normalizeShapeName(glass.shape)) return false
+  if (demand.gamme && demand.gamme.trim().toLowerCase() !== resolveFrameGamme(glass.material, glass.price)) return false
+  if (!sizeMatchesDemand(demand.taille, glass.size)) return false
+  return true
+}
+
+interface DemandMatchRow {
+  demand: BasketItem
+  match: any | null
+}
+
+// Rapproche chaque demande du stock principal. Une monture déjà attribuée n'est pas
+// reproposée : deux clients qui cherchent la même chose ne doivent pas se voir promettre
+// la même monture.
+function buildDemandMatches(demands: BasketItem[], generalGlasses: any[]): DemandMatchRow[] {
+  const pool = generalGlasses.map((glass, index) => ({ glass, key: String(glass.id ?? `g-${index}`) }))
+  const taken = new Set<string>()
+
+  return demands.map(demand => {
+    const hit = pool.find(entry => !taken.has(entry.key) && matchesDemand(entry.glass, demand))
+    if (hit) taken.add(hit.key)
+    return { demand, match: hit ? hit.glass : null }
+  })
+}
+
+function formatDemandCriteria(demand: BasketItem) {
+  return [demand.genre, demand.forme, demand.gamme, demand.taille].filter(Boolean).join(' · ') || '—'
+}
+
+function exportDemandCSV(city: string, rows: DemandMatchRow[]) {
+  const headers = ['Genre', 'Forme', 'Gamme', 'Taille', 'Disponible', 'Monture proposée', 'Emplacement']
+  const lines = rows.map(({ demand, match }) => [
+    demand.genre || '—',
+    demand.forme || '—',
+    demand.gamme || '—',
+    demand.taille || '—',
+    match ? 'oui' : 'non',
+    match ? getGlassRef(match) : '—',
+    match ? (match.location_code || match.station_name || '—') : '—',
+  ])
+  const csv = '﻿' + [headers, ...lines].map(row => row.join(';')).join('\r\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `demande-stock-principal-${city}-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(link); link.click()
+  document.body.removeChild(link); URL.revokeObjectURL(url)
+}
+
+function printDemandList(city: string, rows: DemandMatchRow[]) {
+  const printWindow = window.open('', '_blank', 'width=900,height=700')
+  if (!printWindow) {
+    window.alert("Impossible d'ouvrir la fenêtre d'impression. Autorisez les pop-ups pour ce site.")
+    return
+  }
+
+  const body = rows.map(({ demand, match }) => `
+    <tr>
+      <td>${escapeHtml(demand.genre || '—')}</td>
+      <td>${escapeHtml(demand.forme || '—')}</td>
+      <td>${escapeHtml(demand.gamme || '—')}</td>
+      <td>${escapeHtml(demand.taille || '—')}</td>
+      <td>${match ? escapeHtml(getGlassRef(match)) : '<em>à commander</em>'}</td>
+      <td>${match ? escapeHtml(String(match.location_code || match.station_name || '—')) : '—'}</td>
+    </tr>`).join('')
+
+  printWindow.document.write(`<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Demande au stock principal ${escapeHtml(city)}</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; margin: 24px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { font-size: 12px; color: #475569; margin: 0 0 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+  th { background: #f1f5f9; }
+  em { color: #b45309; font-style: normal; }
+</style></head>
+<body>
+  <h1>Demande au stock principal — ${escapeHtml(city)}</h1>
+  <p>${rows.length} demande(s) client · ${rows.filter(r => r.match).length} disponible(s) en stock principal · ${escapeHtml(new Date().toLocaleDateString('fr-FR'))}</p>
+  <table>
+    <thead><tr><th>Genre</th><th>Forme</th><th>Gamme</th><th>Taille</th><th>Monture proposée</th><th>Emplacement</th></tr></thead>
+    <tbody>${body || '<tr><td colspan="6">Aucune demande.</td></tr>'}</tbody>
+  </table>
+</body></html>`)
+  printWindow.document.close()
+  printWindow.focus()
+  printWindow.print()
+}
+
+// Le bon de préparation ne retient que les demandes que le stock principal peut satisfaire :
+// une monture physique à aller chercher en rayon, et la demande client qu'elle couvre.
+interface PreparationRow {
+  demand: BasketItem
+  glass: any
+}
+
+function buildPreparationRows(demands: BasketItem[], generalGlasses: any[]): PreparationRow[] {
+  return buildDemandMatches(demands, generalGlasses)
+    .filter(row => row.match)
+    .map(row => ({ demand: row.demand, glass: row.match }))
+}
+
+function exportPreparationCSV(magasin: string, rows: PreparationRow[]) {
+  const headers = ['Référence', 'Marque', 'Genre', 'Forme', 'Taille', 'Emplacement', 'Demande couverte']
+  const lines = rows.map(({ demand, glass }) => [
+    getGlassRef(glass),
+    glass.brand || glass.marque || '—',
+    normalizeGenderName(glass.gender) || '—',
+    normalizeShapeName(glass.shape) || '—',
+    glass.size || '—',
+    glass.location_code || glass.station_name || '—',
+    formatDemandCriteria(demand),
+  ])
+  const csv = '﻿' + [headers, ...lines].map(row => row.join(';')).join('\r\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `bon-preparation-${magasin}-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(link); link.click()
+  document.body.removeChild(link); URL.revokeObjectURL(url)
+}
+
+function printPreparationList(magasin: string, rows: PreparationRow[]) {
+  const printWindow = window.open('', '_blank', 'width=900,height=700')
+  if (!printWindow) {
+    window.alert("Impossible d'ouvrir la fenêtre d'impression. Autorisez les pop-ups pour ce site.")
+    return
+  }
+
+  const body = rows.map(({ demand, glass }) => `
+    <tr>
+      <td>${escapeHtml(getGlassRef(glass))}</td>
+      <td>${escapeHtml(String(glass.brand || glass.marque || '—'))}</td>
+      <td>${escapeHtml(normalizeGenderName(glass.gender) || '—')}</td>
+      <td>${escapeHtml(normalizeShapeName(glass.shape) || '—')}</td>
+      <td>${escapeHtml(String(glass.location_code || glass.station_name || '—'))}</td>
+      <td>${escapeHtml(formatDemandCriteria(demand))}</td>
+      <td class="tick"></td>
+    </tr>`).join('')
+
+  printWindow.document.write(`<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Bon de préparation ${escapeHtml(magasin)}</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; margin: 24px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { font-size: 12px; color: #475569; margin: 0 0 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+  th { background: #f1f5f9; }
+  .tick { width: 40px; }
+</style></head>
+<body>
+  <h1>Bon de préparation — ${escapeHtml(magasin)}</h1>
+  <p>${rows.length} monture(s) à sortir du stock général · ${escapeHtml(new Date().toLocaleDateString('fr-FR'))}</p>
+  <table>
+    <thead><tr><th>Réf</th><th>Marque</th><th>Genre</th><th>Forme</th><th>Emplacement</th><th>Demande couverte</th><th>Fait</th></tr></thead>
+    <tbody>${body || '<tr><td colspan="7">Aucune monture à préparer.</td></tr>'}</tbody>
+  </table>
+</body></html>`)
+  printWindow.document.close()
+  printWindow.focus()
+  printWindow.print()
 }
 
 function buildFallbackCityCounts(totalUnits: number): Record<string, CityStats> {
@@ -467,10 +834,18 @@ const ic = {
   cal: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
   filter: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
   pkg: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
+  flask: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6M10 2v6.4a2 2 0 0 1-.4 1.2L4.7 17a2 2 0 0 0 1.6 3.2h11.4a2 2 0 0 0 1.6-3.2l-4.9-7.4a2 2 0 0 1-.4-1.2V2"/></svg>,
 }
 
+// Bloc de base repris de historique.html : --surface, --line, --radius-lg (20px), --shadow-sm.
+const BLOCK_CLASS = 'rounded-[20px] border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900'
+
+// Carte-sélecteur : carrousel à accroche sur mobile, grille à partir de sm.
+const CARD_ROW_CLASS = '-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-x-visible sm:px-0 sm:pb-0'
+const CARD_CLASS = 'flex w-[62%] flex-shrink-0 snap-start flex-col items-start gap-2.5 rounded-[20px] border p-5 text-left shadow-sm transition-all hover:-translate-y-[3px] hover:shadow-lg sm:w-auto sm:flex-shrink'
+
 const STAGE_META: Record<MvtStage, { label: string; color: string; bg: string; icon: ReactNode }> = {
-  ordered: { label: 'Commande Dubai', color: '#d97706', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: ic.order() },
+  ordered: { label: 'Commande', color: '#d97706', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: ic.order() },
   shipped: { label: 'En transit', color: '#2563eb', bg: 'bg-blue-50 dark:bg-blue-900/20', icon: ic.plane() },
   received: { label: 'Réceptionné', color: '#16a34a', bg: 'bg-green-50 dark:bg-green-900/20', icon: ic.box() },
   transferred: { label: 'Transfert station', color: '#0891b2', bg: 'bg-cyan-50 dark:bg-cyan-900/20', icon: ic.transfer() },
@@ -486,6 +861,10 @@ const ROLE_LABEL: Record<string, string> = {
   VENDEUR: 'Vendeur', MAGASINIER: 'Magasinier', LABORATOIRE: 'Labo',
   RESPONSABLE_STATION: 'Resp. Station',
 }
+
+// Gabarit du tableau de suivi, partagé par l'en-tête et les lignes : dupliqué, les deux
+// finissent toujours par diverger d'une colonne.
+const SUIVI_GRID_COLUMNS = '110px minmax(150px, 1.3fr) minmax(110px, 1fr) minmax(110px, 1fr) minmax(80px, 0.8fr) minmax(90px, 0.8fr) minmax(110px, 1fr) minmax(110px, 0.9fr) auto'
 
 const MONTH_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
@@ -1240,51 +1619,51 @@ function SuiviDetailScreen({ pays, city, section, cityStockCounts, framesByCity 
 
       {/* Table */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-        <div
-          className="border-b border-slate-200 dark:border-slate-700 text-xs font-bold text-white"
-          style={{
-            backgroundColor: SECTION_COLOR,
-            display: 'grid',
-            gridTemplateColumns: '110px minmax(150px, 1.3fr) minmax(110px, 1fr) minmax(110px, 1fr) minmax(80px, 0.8fr) minmax(90px, 0.8fr) minmax(110px, 0.9fr) auto',
-          }}
-        >
-          {['Photo', 'Réf', 'Marque', 'Enregistré', 'Genre', 'Forme', 'Entrée', 'Statut'].map(h => (
-            <div key={h} className="px-2 py-2.5 text-left">{h}</div>
-          ))}
-        </div>
-        <div className="divide-y divide-slate-100 dark:divide-slate-700">
-          {frames.length === 0 ? (
-            <div className="py-10 text-center text-sm text-slate-400">
-              {selectedDay ? `Aucune monture le ${selectedDay} ${MONTH_FR[calMonth]}` : 'Aucune monture dans cette section'}
-            </div>
-          ) : frames.map(f => (
+        <div className="overflow-x-auto">
+          <div className="min-w-[940px]">
             <div
-              key={f.ref + f.date}
-              className="items-center hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '110px minmax(150px, 1.3fr) minmax(110px, 1fr) minmax(110px, 1fr) minmax(80px, 0.8fr) minmax(90px, 0.8fr) minmax(110px, 0.9fr) auto',
-              }}
+              className="border-b border-slate-200 dark:border-slate-700 text-xs font-bold text-white"
+              style={{ backgroundColor: SECTION_COLOR, display: 'grid', gridTemplateColumns: SUIVI_GRID_COLUMNS }}
             >
-              <div className="px-2 py-3 flex justify-start">
-                <div className="w-14 h-10 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-700">
-                  <FramePhoto src={f.photo} alt={f.ref} className="w-full h-full object-cover" />
-                </div>
-              </div>
-              <div className="px-2 py-3 text-xs font-bold text-slate-900 dark:text-white truncate">{f.ref}</div>
-              <div className="px-2 py-3 text-xs text-slate-600 dark:text-slate-400 truncate">{f.marque}</div>
-              <div className="px-2 py-3 text-xs text-slate-500 dark:text-slate-400 truncate">{f.enregistrePar || '—'}</div>
-              <div className="px-2 py-3 text-xs text-slate-500 dark:text-slate-400 truncate">{f.genre || '—'}</div>
-              <div className="px-2 py-3 text-xs text-slate-500 dark:text-slate-400 truncate">{f.forme || '—'}</div>
-              <div className="px-2 py-3 text-xs text-slate-500 dark:text-slate-400">
-                <div className="truncate">{f.entree ? f.entree.split(' ')[0] : (f.date ? f.date : '—')}</div>
-                <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                  {f.entree ? f.entree.split(' ')[1] || '—' : '—'}
-                </div>
-              </div>
-              <div className="px-2 py-3 flex justify-end"><Badge status={f.status} /></div>
+              {['Photo', 'Réf', 'Marque', 'Enregistré', 'Genre', 'Forme', 'Emplacement', 'Entrée', 'Statut'].map(h => (
+                <div key={h} className="px-2 py-2.5 text-left">{h}</div>
+              ))}
             </div>
-          ))}
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {frames.length === 0 ? (
+                <div className="py-10 text-center text-sm text-slate-400">
+                  {selectedDay ? `Aucune monture le ${selectedDay} ${MONTH_FR[calMonth]}` : 'Aucune monture dans cette section'}
+                </div>
+              ) : frames.map(f => (
+                <div
+                  key={f.ref + f.date}
+                  className="items-center hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors"
+                  style={{ display: 'grid', gridTemplateColumns: SUIVI_GRID_COLUMNS }}
+                >
+                  <div className="px-2 py-3 flex justify-start">
+                    <div className="w-14 h-10 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-700">
+                      <FramePhoto src={f.photo} alt={f.ref} className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                  <div className="px-2 py-3 text-xs font-bold text-slate-900 dark:text-white truncate">{f.ref}</div>
+                  <div className="px-2 py-3 text-xs text-slate-600 dark:text-slate-400 truncate">{f.marque}</div>
+                  <div className="px-2 py-3 text-xs text-slate-500 dark:text-slate-400 truncate">{f.enregistrePar || '—'}</div>
+                  <div className="px-2 py-3 text-xs text-slate-500 dark:text-slate-400 truncate">{f.genre || '—'}</div>
+                  <div className="px-2 py-3 text-xs text-slate-500 dark:text-slate-400 truncate">{f.forme || '—'}</div>
+                  {/* Pas de `truncate` ici : le code se replie sur les tirets (point de
+                      coupure naturel) pour rester lisible en entier. */}
+                  <div className="px-2 py-3 font-mono text-[11px] leading-tight text-slate-500 dark:text-slate-400">{f.emplacement || '—'}</div>
+                  <div className="px-2 py-3 text-xs text-slate-500 dark:text-slate-400">
+                    <div className="truncate">{f.entree ? f.entree.split(' ')[0] : (f.date ? f.date : '—')}</div>
+                    <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                      {f.entree ? f.entree.split(' ')[1] || '—' : '—'}
+                    </div>
+                  </div>
+                  <div className="px-2 py-3 flex justify-end"><Badge status={f.status} /></div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1492,9 +1871,10 @@ function FrameDetailScreen({ frameRef, city, framesByCity }: { frameRef: string;
 // ── History view — live movement feed ─────────────────────────────────────────
 function HistoryView() {
   const [activeTab, setActiveTab] = useState<'lunettes' | 'employes'>('lunettes')
-  const [filter, setFilter] = useState<MvtStage | 'all'>('all')
+  // La grille d'étapes reste affichée en permanence et sert de sélecteur : seul le détail
+  // en dessous change. Une étape est donc toujours sélectionnée.
+  const [selectedStage, setSelectedStage] = useState<MvtStage>('ordered')
   const [liveItems, setLiveItems] = useState<Movement[]>(MOVEMENTS_DATA)
-  const [pulse, setPulse] = useState(false)
 
   useEffect(() => {
     const token = window.localStorage.getItem('token')
@@ -1542,141 +1922,139 @@ function HistoryView() {
         setLiveItems(mapped.slice(0, 60))
       })
       .catch(() => setLiveItems([]))
-
-    const interval = setInterval(() => {
-      setPulse(true)
-      setTimeout(() => setPulse(false), 1000)
-    }, 15000)
-
-    return () => clearInterval(interval)
   }, [])
 
-  const stages: Array<{ id: MvtStage | 'all'; label: string }> = [
-    { id: 'all', label: 'Tous' },
-    { id: 'ordered', label: 'Commandes' },
-    { id: 'shipped', label: 'Transit' },
-    { id: 'received', label: 'Réception' },
-    { id: 'transferred', label: 'Transferts' },
-    { id: 'display', label: 'Présentoir' },
-    { id: 'sold', label: 'Ventes' },
-  ]
-
-  const filtered = filter === 'all' ? liveItems : liveItems.filter(m => m.stage === filter)
-
-  // Full lifecycle pipeline banner
   const pipeline: MvtStage[] = ['ordered', 'shipped', 'received', 'transferred', 'display', 'sold']
 
+  const stageItems = liveItems.filter(m => m.stage === selectedStage)
+  const activeMeta = STAGE_META[selectedStage]
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab('lunettes')}
-          className={`px-4 py-2 rounded-2xl text-sm font-semibold transition-all ${activeTab === 'lunettes' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'}`}
-        >
-          Lunettes
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('employes')}
-          className={`px-4 py-2 rounded-2xl text-sm font-semibold transition-all ${activeTab === 'employes' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'}`}
-        >
-          Employés
-        </button>
+    <div className="space-y-5">
+      {/* .page-title */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-xl font-extrabold text-slate-900 dark:text-white">
+            <span className="text-blue-600">{ic.hist('w-5 h-5')}</span>
+            Suivi Global
+          </h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            Traçabilité complète des montures : commandes, transits, réceptions, transferts, présentoir, ventes.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('lunettes')}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all ${activeTab === 'lunettes' ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900'}`}
+          >
+            Lunettes
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('employes')}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all ${activeTab === 'employes' ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900'}`}
+          >
+            Employés
+          </button>
+        </div>
       </div>
 
-      {activeTab === 'lunettes' ? (
-        <>
-          {/* Pipeline visual */}
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4">
-            <div className="flex items-center gap-1 overflow-x-auto pb-1">
-              {pipeline.map((stage, i) => {
-                const meta = STAGE_META[stage]
-                return (
-                  <div key={stage} className="flex items-center gap-1 flex-shrink-0">
-                    <div className={`flex flex-col items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${filter === stage ? 'opacity-100' : 'opacity-60'}`}
-                      style={{ backgroundColor: `${meta.color}15`, color: meta.color }}
-                      onClick={() => setFilter(filter === stage ? 'all' : stage)}
-                    >
-                      <span className="text-base">{meta.icon}</span>
-                      <span className="whitespace-nowrap">{meta.label}</span>
-                    </div>
-                    {i < pipeline.length - 1 && (
-                      <div className="text-slate-200 dark:text-slate-600 flex-shrink-0">→</div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+      {activeTab !== 'lunettes' ? (
+        <EmployeesView />
+      ) : (
+      <>
+        {/* .stage-grid — sélecteur du détail, toujours affiché.
+            Mobile : carrousel horizontal à accroche, les cartes débordent volontairement
+            de la marge du conteneur (-mx-4/px-4) pour que le défilement aille bord à bord.
+            sm+ : sm:grid reprend la main sur le flex et on revient à une vraie grille. */}
+        <div className={`${CARD_ROW_CLASS} sm:grid-cols-3 xl:grid-cols-6`}>
+          {pipeline.map(stage => {
+            const items = liveItems.filter(m => m.stage === stage)
+            const frames = items.reduce((sum, m) => sum + m.frames, 0)
+            const meta = STAGE_META[stage]
+            const isActive = stage === selectedStage
+            return (
+              <button
+                key={stage}
+                type="button"
+                onClick={() => setSelectedStage(stage)}
+                aria-pressed={isActive}
+                className={`${CARD_CLASS} sm:aspect-square ${isActive
+                  ? 'bg-white dark:bg-slate-900'
+                  : 'border-slate-200 bg-white hover:border-blue-200 dark:border-slate-700 dark:bg-slate-900'}`}
+                style={isActive ? { borderColor: meta.color, backgroundColor: `${meta.color}0f` } : undefined}
+              >
+                <span
+                  className="flex h-[42px] w-[42px] items-center justify-center rounded-lg"
+                  style={isActive
+                    ? { backgroundColor: meta.color, color: '#fff' }
+                    : { backgroundColor: `${meta.color}1f`, color: meta.color }}
+                >
+                  {meta.icon}
+                </span>
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{meta.label}</span>
+                <span className="mt-auto text-[28px] font-extrabold leading-none tracking-tight tabular-nums text-slate-900 dark:text-white">{items.length}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">{frames} monture(s)</span>
+              </button>
+            )
+          })}
+        </div>
 
-          {/* Live indicator */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full bg-green-500 ${pulse ? 'scale-150' : 'scale-100'} transition-transform duration-300`} />
-              <span className="text-xs font-semibold text-green-600 dark:text-green-400">Flux en direct</span>
-            </div>
-            <div className="flex gap-1 overflow-x-auto">
-              {stages.map(s => (
-                <button key={s.id} onClick={() => setFilter(s.id)}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg whitespace-nowrap transition-all ${
-                    filter === s.id ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'
-                  }`}
-                >{s.label}</button>
-              ))}
-            </div>
-          </div>
+        {/* .stage-activity — le détail de l'étape sélectionnée, directement sous les cartes */}
+        <div className={`overflow-hidden ${BLOCK_CLASS}`}>
+            <h3 className="flex items-center gap-2 border-b border-slate-200 px-5 py-4 text-[15px] font-bold text-slate-900 dark:border-slate-700 dark:text-white">
+              <span style={{ color: activeMeta.color }}>{ic.hist('w-[17px] h-[17px]')}</span>
+              {activeMeta.label}
+              <span className="ml-1 text-sm font-medium text-slate-500 dark:text-slate-400">· {stageItems.length} mouvement(s)</span>
+            </h3>
 
-          {filtered.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 p-4 text-sm text-slate-500 dark:text-slate-400">
-              Aucune donnée disponible pour le moment.
-            </div>
-          ) : (
-          <div className="relative">
-            <div className="absolute left-5 top-0 bottom-0 w-px bg-gradient-to-b from-slate-200 via-slate-200 to-transparent dark:from-slate-700 dark:via-slate-700" />
-            <div className="space-y-3">
-              {filtered.map((mvt, idx) => {
-                const meta = STAGE_META[mvt.stage]
-                return (
-                  <div key={mvt.id} className="relative flex gap-4 pl-11">
-                    {/* Node */}
-                    <div className="absolute left-3 top-3.5 w-5 h-5 rounded-full flex items-center justify-center text-xs shadow-md border-2 border-white dark:border-slate-900 flex-shrink-0 z-10"
-                      style={{ backgroundColor: meta.color }}>
-                      <span style={{ fontSize: '10px', lineHeight: 1 }}>{meta.icon}</span>
-                    </div>
+            {stageItems.length === 0 ? (
+              <div className="px-5 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
+                Aucun mouvement pour cette étape.
+              </div>
+            ) : (
+              <div className="flex flex-col">
+                {stageItems.map((mvt, idx) => {
+                  const meta = STAGE_META[mvt.stage]
+                  return (
+                    <div key={mvt.id} className="flex items-center gap-3.5 border-b border-slate-100 px-5 py-3.5 transition-colors last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60">
+                      {/* .glass-photo — pas de photo sur un mouvement, l'icône tient la place */}
+                      <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800">
+                        {ic.glasses('w-[18px] h-[18px]')}
+                      </span>
 
-                    {/* Card */}
-                    <div className={`flex-1 rounded-2xl border border-slate-100 dark:border-slate-700 p-3.5 ${meta.bg} transition-all`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-bold" style={{ color: meta.color }}>{meta.label}</span>
-                            <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">{mvt.id}</span>
-                            {idx === 0 && <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded-full font-semibold">Nouveau</span>}
-                          </div>
-                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-1">
-                            {mvt.from} <span className="text-slate-400 font-normal">→</span> {mvt.to}
-                          </p>
-                          {mvt.notes && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 italic">{mvt.notes}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          {/* .badge, teinté à la couleur de l'étape */}
+                          <span className="inline-block rounded-full px-[11px] py-1 text-xs font-bold" style={{ backgroundColor: `${meta.color}1f`, color: meta.color }}>
+                            {meta.label}
+                          </span>
+                          <span className="font-mono text-xs text-slate-400 dark:text-slate-500">{mvt.id}</span>
+                          {idx === 0 && (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Nouveau</span>
                           )}
-                          <p className="text-xs text-slate-400 mt-1">{mvt.date} à {mvt.time} · {mvt.operator}</p>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-2xl font-black tabular-nums" style={{ color: meta.color }}>{mvt.frames}</p>
-                          <p className="text-xs text-slate-400">montures</p>
+                        {mvt.notes && <p className="mt-0.5 text-xs italic text-slate-500 dark:text-slate-400">{mvt.notes}</p>}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2.5 text-xs">
+                          <span className="text-slate-600 dark:text-slate-300">
+                            {mvt.from} <span className="text-slate-400">→</span> {mvt.to}
+                          </span>
+                          <span className="text-slate-400">{mvt.date} à {mvt.time} · {mvt.operator}</span>
                         </div>
                       </div>
+
+                      <div className="flex-shrink-0 text-right">
+                        <p className="text-xl font-black leading-none tabular-nums" style={{ color: meta.color }}>{mvt.frames}</p>
+                        <p className="text-[11px] text-slate-400">montures</p>
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-          )}
-        </>
-      ) : (
-        <EmployeesView />
+                  )
+                })}
+              </div>
+            )}
+        </div>
+      </>
       )}
     </div>
   )
@@ -1690,7 +2068,7 @@ function ReceptionView() {
   const [detailSearch, setDetailSearch] = useState('')
   const [detailStatusFilter, setDetailStatusFilter] = useState<'all' | 'Reçu' | 'En attente'>('all')
   const [detailFormeFilter, setDetailFormeFilter] = useState<ShapeFilterValue>('all')
-  const [detailGenreFilter, setDetailGenreFilter] = useState<'all' | 'Homme' | 'Femme' | 'Enfant'>('all')
+  const [detailGenreFilter, setDetailGenreFilter] = useState<GenreFilterValue>('all')
   const [detailGammeFilter, setDetailGammeFilter] = useState<GammeFilterValue>('all')
   const [isLoadingSessions, setIsLoadingSessions] = useState(false)
   const [showSupplierModal, setShowSupplierModal] = useState(false)
@@ -1702,6 +2080,59 @@ function ReceptionView() {
   const [showReceptionSessionCard, setShowReceptionSessionCard] = useState(true)
   const [isCreatingReceptionSession, setIsCreatingReceptionSession] = useState(false)
   const [isDeletingSessionId, setIsDeletingSessionId] = useState<number | null>(null)
+  const [showStockPage, setShowStockPage] = useState(false)
+  const [stockGlasses, setStockGlasses] = useState<any[]>([])
+  const [isLoadingStock, setIsLoadingStock] = useState(false)
+  // 'GENERAL' = liste du stock général ; sinon le nom du magasin dont on regarde les manquants.
+  const [stockScope, setStockScope] = useState<string>('GENERAL')
+  const [stockAction, setStockAction] = useState<StockAction>('')
+  const [excludedPreparationKeys, setExcludedPreparationKeys] = useState<string[]>([])
+  const [basketCounts, setBasketCounts] = useState<Record<string, number>>({})
+  const [basketItems, setBasketItems] = useState<BasketItem[]>([])
+  const [isLoadingBasket, setIsLoadingBasket] = useState(false)
+  const [excludedDemandIds, setExcludedDemandIds] = useState<number[]>([])
+  const [isSendingDemand, setIsSendingDemand] = useState(false)
+  // Envoi de la liste d'une session terminée vers un magasin.
+  const [sendListSession, setSendListSession] = useState<(typeof RECEPTION_SESSIONS)[number] | null>(null)
+  const [sendListMagasin, setSendListMagasin] = useState('')
+  const [sendListGlasses, setSendListGlasses] = useState<any[]>([])
+  const [isLoadingSendList, setIsLoadingSendList] = useState(false)
+  const [isSubmittingSendList, setIsSubmittingSendList] = useState(false)
+  const [sendListSent, setSendListSent] = useState(false)
+  // Composition de la liste : autant de lignes que de lots à envoyer, chacune qualifiée
+  // par Forme / Genre / Gamme. Le nombre affiché est le total des montures correspondantes.
+  const [sendListLines, setSendListLines] = useState<SendListLine[]>([createSendListLine()])
+  const sendListShapeOptions = useMemo(() => {
+    const shapes = new Set<string>()
+    sendListGlasses.forEach(glass => {
+      const shape = normalizeShapeName(glass.shape)
+      if (shape) shapes.add(shape)
+    })
+    return ['all', ...Array.from(shapes).sort((a, b) => a.localeCompare(b, 'fr'))]
+  }, [sendListGlasses])
+  const sendListGenreOptions = useMemo(() => {
+    const genres = new Set<string>()
+    sendListGlasses.forEach(glass => {
+      const genre = normalizeGenderName(glass.gender)
+      if (genre) genres.add(genre)
+    })
+    return ['all', ...Array.from(genres).sort((a, b) => a.localeCompare(b, 'fr'))]
+  }, [sendListGlasses])
+  const sendListGammeOptions = useMemo(() => {
+    const gammes = new Set<string>()
+    sendListGlasses.forEach(glass => {
+      const gamme = resolveFrameGamme(glass.material, glass.price)
+      if (gamme) gammes.add(gamme)
+    })
+    return ['all', ...Array.from(gammes).sort((a, b) => a.localeCompare(b, 'fr'))]
+  }, [sendListGlasses])
+  // Codes des sessions dont la liste est déjà partie : leur bouton reste grisé, pour ne
+  // pas envoyer deux fois le même colis au stock général.
+  // Villes déjà desservies par session : une session peut être envoyée en plusieurs fois
+  // vers des magasins différents (la liste se compose par forme/genre/gamme/nombre), d'où
+  // un tableau de villes et non une seule.
+  const [sentListSessions, setSentListSessions] = useState<Record<string, string[]>>({})
+  const [magasinOptions, setMagasinOptions] = useState<Array<{ city: string; country: string }>>([])
   const [countryOptions, setCountryOptions] = useState<Array<{ id: number; name: string; code?: string }>>([])
   const [cityOptions, setCityOptions] = useState<Array<{ id: number; name: string; country_id: number }>>([])
   const [isLoadingCountries, setIsLoadingCountries] = useState(false)
@@ -1717,9 +2148,11 @@ function ReceptionView() {
 
     void loadSessions()
     void loadReceptionCommands()
+    void loadSentLists()
 
     const handleWindowFocus = () => {
       void loadReceptionCommands()
+      void loadSentLists()
     }
     window.addEventListener('focus', handleWindowFocus)
 
@@ -1765,6 +2198,181 @@ function ReceptionView() {
       .catch(() => setCityOptions([]))
       .finally(() => setIsLoadingCities(false))
   }, [countryOptions, supplierForm.country])
+
+  // Destinations possibles pour l'envoi : toutes les villes enregistrées (table `villes`,
+  // via /inventory/cities), complétées par les stations magasin dont la ville ne serait pas
+  // encore déclarée — sans quoi un magasin existant disparaîtrait silencieusement du choix.
+  // /inventory/cities exige un country_id : on éclate donc la requête par pays.
+  useEffect(() => {
+    const token = window.localStorage.getItem('token')
+    if (!token || countryOptions.length === 0) return
+
+    let cancelled = false
+
+    void (async () => {
+      const headers = { Authorization: `Bearer ${token}` }
+
+      const cityResults = await Promise.allSettled(countryOptions.map(async country => {
+        const response = await fetch(`${API_URL}/inventory/cities?country_id=${country.id}`, { headers })
+        if (!response.ok) throw new Error('cities unavailable')
+        const payload = await response.json().catch(() => ({}))
+        return (payload?.data?.cities || []).map((city: any) => ({
+          city: String(city.name || '').trim(),
+          country: country.name,
+        }))
+      }))
+
+      const stationNames = await fetch(`${API_URL}/auth/stations`, { headers })
+        .then(async response => {
+          if (!response.ok) throw new Error('stations unavailable')
+          const payload = await response.json().catch(() => ({}))
+          return (payload?.data?.stations || [])
+            .filter(isStoreStation)
+            .map((station: any) => normalizeStationCityName(station) || String(station.name || '').trim())
+            .filter(Boolean) as string[]
+        })
+        .catch(() => [] as string[])
+
+      if (cancelled) return
+
+      const options: Array<{ city: string; country: string }> = cityResults
+        .flatMap(result => (result.status === 'fulfilled' ? result.value : []))
+        .filter((option: { city: string }) => option.city)
+
+      const seen = new Set(options.map(option => option.city.toLowerCase()))
+      for (const name of stationNames) {
+        if (seen.has(name.toLowerCase())) continue
+        seen.add(name.toLowerCase())
+        options.push({ city: name, country: '' })
+      }
+
+      setMagasinOptions(options.sort((a, b) => a.city.localeCompare(b.city, 'fr')))
+    })()
+
+    return () => { cancelled = true }
+  }, [countryOptions])
+
+  // Charge les montures enregistrées sous la session, qui composent la liste à envoyer.
+  async function openSendList(session: (typeof RECEPTION_SESSIONS)[number]) {
+    setSendListSession(session)
+    setSendListMagasin('')
+    setSendListGlasses([])
+    setSendListSent(false)
+    setSendListLines([createSendListLine()])
+
+    const linkedCommand = receptionCommands.find(cmd => cmd.orderId === session.orderId)
+    if (!linkedCommand?.id) return
+
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+
+    setIsLoadingSendList(true)
+    try {
+      const response = await fetch(`${API_URL}/inventory/glasses?reception_command_id=${linkedCommand.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) throw new Error('glasses unavailable')
+      const payload = await response.json().catch(() => ({}))
+      setSendListGlasses(payload?.data?.glasses || [])
+    } catch {
+      setSendListGlasses([])
+    } finally {
+      setIsLoadingSendList(false)
+    }
+  }
+
+  // Relit les listes déjà parties pour que le bouton reste grisé après un rechargement :
+  // sans ça l'état de la carte ne survivrait qu'à la session courante du navigateur.
+  async function loadSentLists() {
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+
+    try {
+      const response = await fetch(`${API_URL}/inventory/send-lists`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) throw new Error('send lists unavailable')
+      const payload = await response.json().catch(() => ({}))
+      const bySession: Record<string, string[]> = {}
+      for (const list of payload?.data?.lists || []) {
+        const code = String(list.session_code || '').trim()
+        const city = String(list.city || '').trim()
+        if (!code || !city) continue
+        if (!bySession[code]) bySession[code] = []
+        if (!bySession[code].includes(city)) bySession[code].push(city)
+      }
+      setSentListSessions(bySession)
+    } catch {
+      // Route absente ou réseau coupé : on ne grise rien plutôt que de bloquer l'envoi.
+      setSentListSessions({})
+    }
+  }
+
+  // Applique les critères de composition aux montures de la session. `matches` sert au
+  // compteur affiché, `selected` est ce qui part réellement — plafonné par le nombre
+  // demandé, ou tout si le champ est laissé vide.
+  function getSendListSelection() {
+    const lines = sendListLines.map(line => {
+      const hasCriteria = line.forme !== 'all' || line.genre !== 'all' || line.gamme !== 'all'
+      const matches = hasCriteria ? sendListGlasses.filter((glass: any) => {
+        if (line.forme !== 'all' && normalizeShapeName(glass.shape) !== normalizeShapeName(line.forme)) return false
+        if (line.genre !== 'all' && normalizeGenderName(glass.gender) !== normalizeGenderName(line.genre)) return false
+        if (line.gamme !== 'all' && resolveFrameGamme(glass.material, glass.price) !== normalizeGammeName(line.gamme)) return false
+        return true
+      }) : []
+      const selected = matches
+      return { line, matches, selected }
+    })
+
+    return {
+      lines,
+      matches: lines.flatMap(({ matches }) => matches),
+      selected: lines.flatMap(({ selected }) => selected),
+    }
+  }
+
+  // Écrit la liste en base, puis affiche la confirmation. Rien d'autre : c'est
+  // l'enregistrement qui prévient le stock général, l'impression reste à la demande.
+  async function submitSendList() {
+    if (!sendListSession || !sendListMagasin) return
+
+    const { selected } = getSendListSelection()
+    if (selected.length === 0) return
+
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+
+    setIsSubmittingSendList(true)
+    try {
+      const response = await fetch(`${API_URL}/inventory/send-lists`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          session_code: sendListSession.id,
+          city: sendListMagasin,
+          items: selected.map((glass: any) => ({
+            glass_id: glass.id ?? null,
+            barcode: glass.barcode || '',
+            reference: glass.reference || '',
+            brand: glass.brand || '',
+            location_code: glass.location_code || '',
+          })),
+        }),
+      })
+      if (!response.ok) throw new Error('send list failed')
+
+      setSendListSent(true)
+      setSentListSessions(prev => {
+        const cities = prev[sendListSession.id] || []
+        if (cities.includes(sendListMagasin)) return prev
+        return { ...prev, [sendListSession.id]: [...cities, sendListMagasin] }
+      })
+    } catch {
+      window.alert("Impossible d'envoyer la liste pour le moment.")
+    } finally {
+      setIsSubmittingSendList(false)
+    }
+  }
 
   async function loadSessions() {
     const token = window.localStorage.getItem('token')
@@ -1966,6 +2574,500 @@ function ReceptionView() {
     }
   }
 
+  async function loadBasketCounts() {
+    const token = window.localStorage.getItem('token')
+    if (!token) {
+      setBasketCounts({})
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/inventory/baskets/counts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) throw new Error('counts unavailable')
+      const payload = await response.json().catch(() => ({}))
+      const counts: Record<string, number> = {}
+      for (const row of payload?.data?.counts || []) {
+        counts[String(row.city)] = Number(row.count || 0)
+      }
+      setBasketCounts(counts)
+    } catch {
+      setBasketCounts({})
+    }
+  }
+
+  async function loadBasketItems(city: string) {
+    const token = window.localStorage.getItem('token')
+    if (!token || !city) {
+      setBasketItems([])
+      return
+    }
+
+    setIsLoadingBasket(true)
+    try {
+      const response = await fetch(`${API_URL}/inventory/baskets?city=${encodeURIComponent(city)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) throw new Error('basket unavailable')
+      const payload = await response.json().catch(() => ({}))
+      setBasketItems(payload?.data?.items || [])
+    } catch {
+      setBasketItems([])
+    } finally {
+      setIsLoadingBasket(false)
+    }
+  }
+
+  // Clôt les demandes reprises dans la liste adressée au stock principal : elles sortent
+  // du panier, donc du compteur.
+  async function markDemandsSent(city: string, ids: number[]) {
+    if (ids.length === 0) return
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+
+    setIsSendingDemand(true)
+    try {
+      const response = await fetch(`${API_URL}/inventory/baskets/sent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids }),
+      })
+      if (!response.ok) throw new Error('mark sent failed')
+      setExcludedDemandIds([])
+      await Promise.all([loadBasketItems(city), loadBasketCounts()])
+    } catch {
+      window.alert('Impossible de clôturer ces demandes pour le moment.')
+    } finally {
+      setIsSendingDemand(false)
+    }
+  }
+
+  async function loadStockGlasses() {
+    const token = window.localStorage.getItem('token')
+    if (!token) {
+      setStockGlasses([])
+      return
+    }
+
+    setIsLoadingStock(true)
+    try {
+      const response = await fetch(`${API_URL}/inventory/glasses`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) throw new Error('glasses unavailable')
+      const payload = await response.json().catch(() => ({}))
+      const glasses = payload?.data?.glasses || []
+      // Stock général ET stock magasin : comparer les deux est tout l'objet de l'écran.
+      setStockGlasses(glasses || [])
+    } catch {
+      setStockGlasses([])
+    } finally {
+      setIsLoadingStock(false)
+    }
+  }
+
+  function selectStockScope(scope: string) {
+    setStockScope(scope)
+    setStockAction('')
+    setExcludedPreparationKeys([])
+    setExcludedDemandIds([])
+  }
+
+  // Cliquer un panier ouvre directement la demande du magasin : c'est le chemin le plus court
+  // entre « il y a 4 demandes à Kinshasa » et « voilà ce qu'on peut leur envoyer ».
+  function openBasket(magasin: string) {
+    setStockScope(magasin)
+    setStockAction('PANIER')
+    setExcludedPreparationKeys([])
+    setExcludedDemandIds([])
+  }
+
+  function renderStockPage() {
+    const generalGlasses = (stockGlasses || []).filter((g: any) => isGeneralStockStatus(g.status))
+    const magasinGlasses = (stockGlasses || []).filter((g: any) => isLocalStockStatus(g.status))
+
+    const fixedMagasins = ['Pointe-Noire', 'Kinshasa']
+    const discoveredMagasins = magasinGlasses
+      .map((g: any) => String(g.station_name || '').trim())
+      .filter(Boolean)
+    // Une ville peut avoir un panier sans avoir encore de stock : elle doit quand même
+    // apparaître, c'est précisément le magasin qui a tout à recevoir.
+    const magasins = Array.from(new Set([...fixedMagasins, ...discoveredMagasins, ...Object.keys(basketCounts)]))
+
+    const selectedMagasin = stockScope === 'GENERAL' ? '' : stockScope
+
+    const header = selectedMagasin
+      ? {
+        title: stockAction === 'PANIER'
+          ? `Panier — ${selectedMagasin}`
+          : stockAction === 'ENVOI'
+            ? `Envoyer le stock — ${selectedMagasin}`
+            : `Stock magasin — ${selectedMagasin}`,
+        subtitle: stockAction === 'PANIER'
+          ? 'Recherches client enregistrées par le chatbot pour ce magasin.'
+          : stockAction === 'ENVOI'
+            ? 'Bon de préparation des montures à sortir du stock général.'
+            : "Choisissez l'action à effectuer sur ce magasin.",
+      }
+      : { title: 'Stock général', subtitle: 'Liste des lunettes enregistrées en base.' }
+
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-2">
+            <button
+              onClick={() => setShowStockPage(false)}
+              aria-label="Retour aux sessions de réception"
+              className="mt-0.5 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            >
+              {ic.back('w-5 h-5')}
+            </button>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">{header.title}</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{header.subtitle}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={stockScope} onChange={e => selectStockScope(e.target.value)} className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-700 dark:bg-green-900/20 dark:text-green-200">
+              <option value="GENERAL">Stock général</option>
+              <optgroup label="Stock magasin">
+                {magasins.map(magasin => <option key={magasin} value={magasin}>{magasin}</option>)}
+              </optgroup>
+            </select>
+            <select
+              value={stockAction}
+              disabled={!selectedMagasin}
+              onChange={e => { setStockAction(e.target.value as StockAction); setExcludedPreparationKeys([]) }}
+              className={`rounded-xl border px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${selectedMagasin && !stockAction
+                ? 'border-amber-300 bg-amber-50 text-amber-700 ring-2 ring-amber-200 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200 dark:ring-amber-900'
+                : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200'}`}
+            >
+              <option value="">Action…</option>
+              <option value="PANIER">Voir le panier</option>
+              <option value="ENVOI">Envoyer le stock</option>
+            </select>
+          </div>
+        </div>
+
+        {renderBasketRow(magasins, selectedMagasin)}
+
+        {!selectedMagasin && renderGeneralStockTable(generalGlasses)}
+        {selectedMagasin && !stockAction && renderStockActionChooser(selectedMagasin)}
+        {selectedMagasin && stockAction === 'PANIER' && renderBasketAnalysis(selectedMagasin, generalGlasses)}
+        {selectedMagasin && stockAction === 'ENVOI' && renderStockPreparation(selectedMagasin, generalGlasses)}
+      </div>
+    )
+  }
+
+  function renderBasketRow(magasins: string[], selectedMagasin: string) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Paniers de demande</span>
+        {magasins.map(magasin => {
+          const count = basketCounts[magasin] || 0
+          const isActive = magasin === selectedMagasin && stockAction === 'PANIER'
+          return (
+            <button
+              key={`basket-${magasin}`}
+              onClick={() => openBasket(magasin)}
+              className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold transition-colors ${isActive
+                ? 'border-blue-500 bg-blue-600 text-white'
+                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800'}`}
+            >
+              {ic.cart('w-4 h-4')}
+              {magasin}
+              <span className={`min-w-[1.5rem] rounded-full px-1.5 py-0.5 text-xs font-bold tabular-nums ${count > 0
+                ? 'bg-amber-500 text-white'
+                : isActive ? 'bg-blue-500 text-blue-100' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'}`}>
+                {count}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
+  function renderGeneralStockTable(generalGlasses: any[]) {
+    return (
+      <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
+        <div className="min-w-[720px]">
+          <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
+            <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
+              <tr>
+                <th className="px-2 py-2 text-left font-semibold">Photo</th>
+                <th className="px-2 py-2 text-left font-semibold">Réf</th>
+                <th className="px-2 py-2 text-left font-semibold">Marque</th>
+                <th className="px-2 py-2 text-left font-semibold">Forme</th>
+                <th className="px-2 py-2 text-left font-semibold">Genre</th>
+                <th className="px-2 py-2 text-left font-semibold">Statut</th>
+                <th className="px-2 py-2 text-left font-semibold">Date</th>
+                <th className="px-2 py-2 text-left font-semibold">Emplacement</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-green-200 dark:divide-green-700 bg-white dark:bg-slate-900">
+              {isLoadingStock ? (
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-green-700">Chargement...</td></tr>
+              ) : generalGlasses.length === 0 ? (
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-green-700">Aucune lunette trouvée.</td></tr>
+              ) : (
+                generalGlasses.map((g: any, idx: number) => (
+                  <tr key={`stock-${g.id || idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <td className="px-2 py-2">
+                      {g.photo_monture_url ? (
+                        <img src={g.photo_monture_url} alt={g.reference || g.barcode || ''} className="h-12 w-12 rounded-md object-cover" />
+                      ) : (
+                        <span className="inline-block rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-500">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 font-mono text-slate-900 dark:text-white">{g.reference || g.barcode || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.brand || g.marque || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.shape || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.gender || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.status || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.created_at ? String(g.created_at).slice(0, 10) : '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.location_code || g.station_name || '—'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
+  function renderStockActionChooser(magasin: string) {
+    const choices: Array<{ action: StockAction; icon: React.ReactElement; label: string; hint: string; accent: string }> = [
+      {
+        action: 'PANIER',
+        icon: ic.cart('w-5 h-5'),
+        label: 'Voir le panier',
+        hint: `Les recherches client enregistrées pour ${magasin}, et ce que le stock général peut couvrir.`,
+        accent: 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200',
+      },
+      {
+        action: 'ENVOI',
+        icon: ic.transfer('w-5 h-5'),
+        label: 'Envoyer le stock',
+        hint: 'Préparer la liste des montures à sortir du stock général.',
+        accent: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200',
+      },
+    ]
+
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        {choices.map(choice => (
+          <button
+            key={choice.action}
+            onClick={() => { setStockAction(choice.action); setExcludedPreparationKeys([]) }}
+            className={`flex flex-col items-start gap-2 rounded-2xl border p-4 text-left transition-colors active:scale-[0.99] ${choice.accent}`}
+          >
+            {choice.icon}
+            <span className="text-sm font-semibold">{choice.label}</span>
+            <span className="text-xs opacity-80">{choice.hint}</span>
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  function renderBasketAnalysis(magasin: string, generalGlasses: any[]) {
+    const matchRows = buildDemandMatches(basketItems, generalGlasses)
+    const keptRows = matchRows.filter(row => !excludedDemandIds.includes(row.demand.id))
+    const availableCount = matchRows.filter(row => row.match).length
+
+    function toggleDemand(id: number) {
+      setExcludedDemandIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+    }
+
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-3">
+            <div className="rounded-2xl border border-slate-200 px-3 py-2 dark:border-slate-700">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Demandes</p>
+              <p className="text-lg font-black tabular-nums text-slate-900 dark:text-white">{matchRows.length}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-900/20">
+              <p className="text-xs text-emerald-700 dark:text-emerald-300">Disponibles</p>
+              <p className="text-lg font-black tabular-nums text-emerald-700 dark:text-emerald-300">{availableCount}</p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-900/20">
+              <p className="text-xs text-amber-700 dark:text-amber-300">À commander</p>
+              <p className="text-lg font-black tabular-nums text-amber-700 dark:text-amber-300">{matchRows.length - availableCount}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => exportDemandCSV(magasin, keptRows)}
+              disabled={keptRows.length === 0}
+              className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              {ic.download('w-4 h-4')} Exporter
+            </button>
+            <button
+              onClick={() => printDemandList(magasin, keptRows)}
+              disabled={keptRows.length === 0}
+              className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              {ic.box('w-4 h-4')} Imprimer
+            </button>
+            <button
+              onClick={() => void markDemandsSent(magasin, keptRows.map(row => row.demand.id))}
+              disabled={keptRows.length === 0 || isSendingDemand}
+              className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {ic.send('w-4 h-4')} {isSendingDemand ? 'Envoi…' : 'Envoyer au stock principal'}
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
+          <div className="min-w-[680px]">
+            <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
+              <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
+                <tr>
+                  <th className="px-2 py-2 text-left font-semibold">Retenir</th>
+                  <th className="px-2 py-2 text-left font-semibold">Genre</th>
+                  <th className="px-2 py-2 text-left font-semibold">Forme</th>
+                  <th className="px-2 py-2 text-left font-semibold">Gamme</th>
+                  <th className="px-2 py-2 text-left font-semibold">Taille</th>
+                  <th className="px-2 py-2 text-left font-semibold">Stock principal</th>
+                  <th className="px-2 py-2 text-left font-semibold">Emplacement</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-green-200 dark:divide-green-700 bg-white dark:bg-slate-900">
+                {isLoadingBasket ? (
+                  <tr><td colSpan={7} className="px-3 py-6 text-center text-green-700">Chargement du panier...</td></tr>
+                ) : matchRows.length === 0 ? (
+                  <tr><td colSpan={7} className="px-3 py-6 text-center text-green-700">Panier vide : aucune recherche client enregistrée pour {magasin}.</td></tr>
+                ) : (
+                  matchRows.map(({ demand, match }) => {
+                    const isKept = !excludedDemandIds.includes(demand.id)
+                    return (
+                      <tr key={`demand-${demand.id}`} className={isKept ? '' : 'opacity-40'}>
+                        <td className="px-2 py-2">
+                          <input type="checkbox" checked={isKept} onChange={() => toggleDemand(demand.id)} className="h-4 w-4 accent-emerald-600" />
+                        </td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{demand.genre || '—'}</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{demand.forme || '—'}</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{demand.gamme || '—'}</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{demand.taille || '—'}</td>
+                        <td className="px-2 py-2">
+                          {match ? (
+                            <span className="font-mono text-emerald-700 dark:text-emerald-300">{getGlassRef(match)}</span>
+                          ) : (
+                            <span className="text-amber-700 dark:text-amber-300">à commander</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 font-mono text-slate-700 dark:text-slate-200">
+                          {match ? (match.location_code || match.station_name || '—') : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Chaque ligne est une recherche client déposée par le chatbot. « Envoyer au stock principal » sort les lignes retenues du panier — le stock lui-même n'est pas déplacé.
+        </p>
+      </div>
+    )
+  }
+
+  // Le bon de préparation découle du panier : on ne sort du stock général que ce qui répond
+  // à une demande client réellement enregistrée.
+  function renderStockPreparation(magasin: string, generalGlasses: any[]) {
+    const preparationRows = buildPreparationRows(basketItems, generalGlasses)
+    const keptRows = preparationRows.filter(row => !excludedPreparationKeys.includes(String(row.demand.id)))
+    const uncovered = basketItems.length - preparationRows.length
+
+    function togglePreparationRow(key: string) {
+      setExcludedPreparationKeys(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+    }
+
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <button onClick={() => { setStockAction('PANIER'); setExcludedPreparationKeys([]) }} className="self-start rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+            Revoir le panier
+          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => exportPreparationCSV(magasin, keptRows)}
+              disabled={keptRows.length === 0}
+              className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              {ic.download('w-4 h-4')} Exporter
+            </button>
+            <button
+              onClick={() => printPreparationList(magasin, keptRows)}
+              disabled={keptRows.length === 0}
+              className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {ic.box('w-4 h-4')} Imprimer le bon
+            </button>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {basketItems.length} demande(s) au panier · {preparationRows.length} couverte(s) par le stock général · {keptRows.length} retenue(s) pour l'envoi
+          {uncovered > 0 ? ` · ${uncovered} à commander` : ''}.
+          {' '}Rien n'est déplacé en base : ce bon sert à préparer physiquement le colis.
+        </p>
+
+        <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
+          <div className="min-w-[680px]">
+            <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
+              <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
+                <tr>
+                  <th className="px-2 py-2 text-left font-semibold">Prendre</th>
+                  <th className="px-2 py-2 text-left font-semibold">Réf</th>
+                  <th className="px-2 py-2 text-left font-semibold">Marque</th>
+                  <th className="px-2 py-2 text-left font-semibold">Genre</th>
+                  <th className="px-2 py-2 text-left font-semibold">Forme</th>
+                  <th className="px-2 py-2 text-left font-semibold">Emplacement</th>
+                  <th className="px-2 py-2 text-left font-semibold">Demande couverte</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-green-200 dark:divide-green-700 bg-white dark:bg-slate-900">
+                {isLoadingStock || isLoadingBasket ? (
+                  <tr><td colSpan={7} className="px-3 py-6 text-center text-green-700">Chargement...</td></tr>
+                ) : preparationRows.length === 0 ? (
+                  <tr><td colSpan={7} className="px-3 py-6 text-center text-green-700">Aucune demande du panier ne peut être couverte par le stock général.</td></tr>
+                ) : (
+                  preparationRows.map(row => {
+                    const key = String(row.demand.id)
+                    const isKept = !excludedPreparationKeys.includes(key)
+                    return (
+                      <tr key={`prep-${key}`} className={isKept ? '' : 'opacity-40'}>
+                        <td className="px-2 py-2">
+                          <input type="checkbox" checked={isKept} onChange={() => togglePreparationRow(key)} className="h-4 w-4 accent-emerald-600" />
+                        </td>
+                        <td className="px-2 py-2 font-mono text-slate-900 dark:text-white">{getGlassRef(row.glass)}</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{row.glass.brand || row.glass.marque || '—'}</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{normalizeGenderName(row.glass.gender) || '—'}</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{normalizeShapeName(row.glass.shape) || '—'}</td>
+                        <td className="px-2 py-2 font-mono text-slate-700 dark:text-slate-200">{row.glass.location_code || row.glass.station_name || '—'}</td>
+                        <td className="px-2 py-2 text-slate-500 dark:text-slate-400">{formatDemandCriteria(row.demand)}</td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   async function openReceptionDetail(session: (typeof RECEPTION_SESSIONS)[number]) {
     setDetailSession(session)
     setDetailSearch('')
@@ -2108,7 +3210,26 @@ function ReceptionView() {
     }).catch(() => {
       // barcode rendering is optional; fail silently if module cannot be loaded
     })
-  }, [receptionSession])
+    // showStockPage : la page stock démonte le <svg>, il faut le redessiner au retour.
+  }, [receptionSession, showStockPage, showReceptionSessionCard])
+
+  useEffect(() => {
+    if (!showStockPage) return
+
+    void loadBasketCounts()
+
+    // Le chatbot vit dans un autre composant : il signale par cet événement qu'il vient de
+    // déposer une demande, ce qui fait monter le compteur sans recharger la page.
+    const handleBasketUpdate = () => { void loadBasketCounts() }
+    window.addEventListener(BASKET_UPDATED_EVENT, handleBasketUpdate)
+    return () => window.removeEventListener(BASKET_UPDATED_EVENT, handleBasketUpdate)
+  }, [showStockPage])
+
+  useEffect(() => {
+    if (!showStockPage || stockScope === 'GENERAL') return
+    if (stockAction !== 'PANIER' && stockAction !== 'ENVOI') return
+    void loadBasketItems(stockScope)
+  }, [showStockPage, stockScope, stockAction])
 
   function renderDetailSession() {
     if (!detailSession) return null
@@ -2182,11 +3303,12 @@ function ReceptionView() {
                 <option key={option} value={option}>{option === 'all' ? 'Toutes formes' : option}</option>
               ))}
             </select>
-            <select value={detailGenreFilter} onChange={e => setDetailGenreFilter(e.target.value as 'all' | 'Homme' | 'Femme' | 'Enfant')} className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
+            <select value={detailGenreFilter} onChange={e => setDetailGenreFilter(e.target.value as GenreFilterValue)} className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
               <option value="all">Tous genres</option>
               <option value="Homme">Homme</option>
               <option value="Femme">Femme</option>
               <option value="Enfant">Enfant</option>
+              <option value="Unisexe">Unisexe</option>
             </select>
             <select value={detailGammeFilter} onChange={e => setDetailGammeFilter(e.target.value as GammeFilterValue)} className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
               {GAMME_FILTER_OPTIONS.map(option => (
@@ -2257,14 +3379,22 @@ function ReceptionView() {
     )
   }
 
+  // Le stock occupe toute la page : il remplace la liste des sessions au lieu de s'y superposer.
+  if (showStockPage) return renderStockPage()
+
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <h2 className="text-base font-semibold text-slate-900 dark:text-white">Sessions de réception</h2>
-        <button onClick={() => setShowSupplierModal(true)} className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors active:scale-95">
-          {ic.plus('w-4 h-4')} Nouvelle
-        </button>
-      </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setShowStockPage(true); void loadStockGlasses() }} className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 text-slate-800 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors active:scale-95">
+            {ic.box('w-4 h-4')} Voir mon stock
+          </button>
+          <button onClick={() => setShowSupplierModal(true)} className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors active:scale-95">
+            {ic.plus('w-4 h-4')} Nouvelle
+          </button>
+        </div>
+        </div>
       {receptionSession && !showReceptionSessionCard && (() => {
         const currentState = getReceptionCardState(receptionSession, Number(receptionSession.registeredCount || 0), Number(receptionSession.targetCount || 0))
         return (
@@ -2373,11 +3503,44 @@ function ReceptionView() {
                 <div className="mt-2 inline-flex max-w-full items-center rounded-lg border border-blue-100 bg-blue-50/80 px-2.5 py-1.5 text-xs font-medium text-blue-700 dark:border-blue-800/60 dark:bg-blue-900/20 dark:text-blue-300">
                   <span className="truncate">{formatReceptionNote(s.note, s.operator)}</span>
                 </div>
-                {s.orderId !== undefined && receptionCommands.some(cmd => cmd.orderId === s.orderId) && (
-                  <button type="button" onClick={() => void viewReceptionBarcode(s.orderId)} className="mt-3 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
-                    Revoir le code-barres
-                  </button>
+                {/* Destination(s) de la session, une fois sa liste envoyée. Plusieurs villes
+                    possibles : la liste se compose par lots et peut partir en plusieurs fois. */}
+                {(sentListSessions[s.id] || []).length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Destination</span>
+                    {sentListSessions[s.id].map(city => (
+                      <span key={city} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-300">
+                        {ic.store('w-3.5 h-3.5')} {city}
+                      </span>
+                    ))}
+                  </div>
                 )}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {s.orderId !== undefined && receptionCommands.some(cmd => cmd.orderId === s.orderId) && (
+                    <button type="button" onClick={() => void viewReceptionBarcode(s.orderId)} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+                      Revoir le code-barres
+                    </button>
+                  )}
+                  {/* La session est complète (carte verte) : elle peut partir en magasin.
+                      Une fois la liste envoyée, le bouton est grisé et inerte. */}
+                  {receptionState === 'complete' && (() => {
+                    const alreadySent = (sentListSessions[s.id] || []).length > 0
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => void openSendList(s)}
+                        disabled={alreadySent}
+                        title={alreadySent ? 'La liste de cette session a déjà été envoyée au stock général' : undefined}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${alreadySent
+                          ? 'cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                          : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'}`}
+                      >
+                        {alreadySent ? ic.check('w-3.5 h-3.5') : ic.send('w-3.5 h-3.5')}
+                        {alreadySent ? 'Liste envoyée' : 'Envoyer la liste'}
+                      </button>
+                    )
+                  })()}
+                </div>
               </div>
               <div className="flex flex-col items-end gap-2 text-right">
                 <div>
@@ -2425,6 +3588,199 @@ function ReceptionView() {
       })}
 
       {renderDetailSession()}
+
+      {sendListSession && (() => {
+        const { matches, selected } = getSendListSelection()
+        return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={() => setSendListSession(null)}>
+          <div className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900" onClick={e => e.stopPropagation()}>
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Envoyer la liste</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Session {sendListSession.id} · {isLoadingSendList ? 'chargement…' : `${sendListGlasses.length} monture(s)`}
+                </p>
+              </div>
+              <button onClick={() => setSendListSession(null)} className="self-start text-slate-400 hover:text-slate-600">{ic.x()}</button>
+            </div>
+
+            {sendListSent ? (
+              <>
+                <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-900/20">
+                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                    {ic.check('w-5 h-5')}
+                  </span>
+                  <div>
+                    <p className="text-sm font-bold text-emerald-800 dark:text-emerald-200">Liste envoyée au stock général</p>
+                    <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+                      Session {sendListSession.id} · destination {sendListMagasin} · {selected.length} monture(s).
+                      Le poste de scan est prévenu et prépare le colis.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => printSessionList(sendListMagasin, sendListSession!.id, selected)}
+                    className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                  >
+                    {ic.box('w-4 h-4')} Imprimer le bon
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSendListSession(null)}
+                    className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </>
+            ) : (
+            <>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Vers quel stock magasin ?
+            </p>
+
+            {magasinOptions.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                Aucune ville disponible. Vérifiez que des villes sont enregistrées en base.
+              </div>
+            ) : (
+              <div className="grid max-h-64 gap-2 overflow-y-auto pr-1 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+                {magasinOptions.map(option => {
+                  const isActive = option.city === sendListMagasin
+                  return (
+                    <button
+                      key={`${option.country}-${option.city}`}
+                      type="button"
+                      onClick={() => setSendListMagasin(option.city)}
+                      aria-pressed={isActive}
+                      className={`flex items-center gap-2.5 rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition-colors ${isActive
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:border-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-200'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800'}`}
+                    >
+                      <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${isActive ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>
+                        {ic.store('w-4 h-4')}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[11px] font-medium uppercase tracking-wide opacity-60">
+                          {option.country || 'Stock magasin'}
+                        </span>
+                        <span className="block truncate">{option.city}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <p className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Que faut-il envoyer ?
+            </p>
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/60">
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_2.5rem] gap-2 bg-slate-100 px-3 py-3 text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                <span>Forme</span>
+                <span>Genre</span>
+                <span>Gamme</span>
+                <span>Nombre</span>
+                <span className="sr-only">Actions</span>
+              </div>
+              <div className="space-y-2 p-3">
+                {sendListLines.map((line, index) => (
+                  <div key={line.id} className="grid grid-cols-[2fr_1fr_1fr_1fr_2.5rem] gap-2 items-center rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                    <select
+                      value={line.forme}
+                      onChange={e => setSendListLines(prev => prev.map(item => item.id === line.id ? { ...item, forme: e.target.value as ShapeFilterValue } : item))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    >
+                      {(sendListShapeOptions.length > 1 ? sendListShapeOptions : SHAPE_FILTER_OPTIONS).map(option => (
+                        <option key={option} value={option}>{option === 'all' ? 'Toutes formes' : option}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={line.genre}
+                      onChange={e => setSendListLines(prev => prev.map(item => item.id === line.id ? { ...item, genre: e.target.value as 'all' | 'Homme' | 'Femme' | 'Enfant' | 'Unisexe' } : item))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    >
+                      {(sendListGenreOptions.length > 1 ? sendListGenreOptions : ['all', 'Homme', 'Femme', 'Enfant', 'Unisexe']).map(option => (
+                        <option key={option} value={option}>{option === 'all' ? 'Tous genres' : option}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={line.gamme}
+                      onChange={e => setSendListLines(prev => prev.map(item => item.id === line.id ? { ...item, gamme: e.target.value as GammeFilterValue } : item))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    >
+                      {(sendListGammeOptions.length > 1 ? sendListGammeOptions : GAMME_FILTER_OPTIONS).map(option => (
+                        <option key={option} value={option}>{option === 'all' ? 'Toutes gammes' : option}</option>
+                      ))}
+                    </select>
+                    <div className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                      {(line.forme === 'all' && line.genre === 'all' && line.gamme === 'all') ? 0 : sendListGlasses.filter((glass: any) => {
+                        if (line.forme !== 'all' && normalizeShapeName(glass.shape) !== normalizeShapeName(line.forme)) return false
+                        if (line.genre !== 'all' && normalizeGenderName(glass.gender) !== normalizeGenderName(line.genre)) return false
+                        if (line.gamme !== 'all' && resolveFrameGamme(glass.material, glass.price) !== normalizeGammeName(line.gamme)) return false
+                        return true
+                      }).length}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSendListLines(prev => prev.filter(item => item.id !== line.id))}
+                      disabled={sendListLines.length === 1}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-600 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => setSendListLines(prev => [...prev, createSendListLine()])}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  {ic.plus('w-4 h-4')} Ajouter une ligne
+                </button>
+              </div>
+            </div>
+
+            <div className={`mt-3 rounded-xl px-3 py-2 text-xs font-medium ${selected.length === 0
+              ? 'bg-amber-50 text-amber-800 dark:bg-amber-900/20 dark:text-amber-200'
+              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+              {matches.length === 0
+                ? 'Aucune monture de la session ne correspond à ces critères.'
+                : <>{matches.length} monture(s) correspondent · <span className="font-bold">{selected.length} retenue(s)</span> pour l'envoi</>}
+            </div>
+
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+              Rien n'est déplacé en base : la liste sert à préparer et accompagner l'envoi physique.
+            </p>
+
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => exportSessionListCSV(sendListMagasin, sendListSession!.id, selected)}
+                disabled={!sendListMagasin || selected.length === 0}
+                className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+              >
+                {ic.download('w-4 h-4')} Exporter
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitSendList()}
+                disabled={!sendListMagasin || selected.length === 0 || isSubmittingSendList}
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {ic.send('w-4 h-4')} {isSubmittingSendList ? 'Envoi…' : `Envoyer ${selected.length || ''}`.trim()}
+              </button>
+            </div>
+            </>
+            )}
+          </div>
+        </div>
+        )
+      })()}
 
       {showSupplierModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={() => setShowSupplierModal(false)}>
@@ -2627,12 +3983,44 @@ function SupplierView() {
   )
 }
 
+// Une couleur et une icône par groupe, comme STAGE_META pour les étapes : c'est ce qui
+// teinte la carte sélectionnée et l'en-tête de la liste.
+const ROLE_OPTIONS = [
+  { id: 1, label: 'Super administrateur', value: 'SUPER_ADMIN' },
+  { id: 2, label: 'Administrateur', value: 'ADMIN' },
+  { id: 3, label: 'Magasinier', value: 'MAGASINIER' },
+  { id: 4, label: 'Vendeur', value: 'VENDEUR' },
+  { id: 5, label: 'Laboratoire', value: 'LABORATOIRE' },
+  { id: 6, label: 'Responsable de station', value: 'RESPONSABLE_STATION' },
+]
+
+const EMPLOYEE_GROUP_META: Record<string, { color: string; icon: (c?: string) => React.ReactElement }> = {
+  'Station Générale': { color: '#2563eb', icon: ic.box },
+  'Sous-stations': { color: '#0891b2', icon: ic.store },
+  'Laboratoire': { color: '#9333ea', icon: ic.flask },
+}
+
 function EmployeesView() {
   const [search, setSearch] = useState('')
   const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [hasError, setHasError] = useState(false)
+  const [stations, setStations] = useState<Array<{ id: number; name: string }>>([])
+  const [showAddEmployee, setShowAddEmployee] = useState(false)
+  const [employeeForm, setEmployeeForm] = useState({
+    fullName: '',
+    gender: '',
+    phone: '',
+    email: '',
+    password: '',
+    roleId: '',
+    stationId: '',
+  })
+  const [isSavingEmployee, setIsSavingEmployee] = useState(false)
+  const [employeeFormError, setEmployeeFormError] = useState('')
   const groups = ['Station Générale', 'Sous-stations', 'Laboratoire']
+  // Même principe que les étapes : les cartes restent affichées, seule la liste change.
+  const [selectedGroup, setSelectedGroup] = useState<string>(groups[0])
 
   useEffect(() => {
     const token = window.localStorage.getItem('token')
@@ -2641,13 +4029,20 @@ function EmployeesView() {
     setIsLoading(true)
     setHasError(false)
 
-    fetch(`${API_URL}/auth/users`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async response => {
-        if (!response.ok) throw new Error('users unavailable')
-        const payload = await response.json().catch(() => ({}))
-        const users = Array.isArray(payload?.data?.users) ? payload.data.users : []
+    Promise.all([
+      fetch(`${API_URL}/auth/users`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/auth/stations`, { headers: { Authorization: `Bearer ${token}` } }),
+    ])
+      .then(async ([usersResponse, stationsResponse]) => {
+        if (!usersResponse.ok) throw new Error('users unavailable')
+        if (!stationsResponse.ok) throw new Error('stations unavailable')
+
+        const usersPayload = await usersResponse.json().catch(() => ({}))
+        const stationsPayload = await stationsResponse.json().catch(() => ({}))
+        const users = Array.isArray(usersPayload?.data?.users) ? usersPayload.data.users : []
+        const stations = Array.isArray(stationsPayload?.data?.stations) ? stationsPayload.data.stations : []
+
+        setStations(stations.map((station: any) => ({ id: Number(station.id) || 0, name: String(station.name || 'Non assigné') })))
         return users
       })
       .then((users: any[]) => {
@@ -2674,12 +4069,164 @@ function EmployeesView() {
     e.role.toLowerCase().includes(search.toLowerCase())
   )
 
+  const activeMeta = EMPLOYEE_GROUP_META[selectedGroup]
+  const members = filtered.filter(e => e.group === selectedGroup)
+
+  const fullNameParts = employeeForm.fullName.trim().split(/\s+/)
+  const firstName = fullNameParts.slice(0, -1).join(' ') || fullNameParts[0] || ''
+  const lastName = fullNameParts.slice(-1).join(' ') || ''
+
+  async function saveEmployee() {
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+
+    if (!employeeForm.fullName.trim() || !employeeForm.gender || !employeeForm.phone.trim() || !employeeForm.roleId) {
+      setEmployeeFormError('Veuillez remplir au moins le nom, le genre, le téléphone et le rôle.')
+      return
+    }
+
+    setIsSavingEmployee(true)
+    setEmployeeFormError('')
+
+    try {
+      const response = await fetch(`${API_URL}/auth/users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          first_name: firstName,
+          last_name: lastName,
+          email: employeeForm.email.trim(),
+          password: employeeForm.password.trim(),
+          phone: employeeForm.phone.trim(),
+          gender: employeeForm.gender,
+          role_id: Number(employeeForm.roleId),
+          station_id: employeeForm.stationId ? Number(employeeForm.stationId) : null,
+        }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload?.message || 'Impossible d’ajouter l’employé')
+      }
+
+      const payload = await response.json().catch(() => ({}))
+      const user = payload?.data?.user
+      if (user) {
+        setEmployees(prev => [
+          {
+            id: Number(user.id) || 0,
+            name: `${String(user.first_name || '').trim()} ${String(user.last_name || '').trim()}`.trim() || 'Utilisateur',
+            role: String(user.role_name || user.role || 'INCONNU').toUpperCase(),
+            station: String(user.station_name || 'Non assigné').trim() || 'Non assigné',
+            group: getEmployeeGroup(user.station_name),
+            status: user.is_active ? 'Actif' : 'Inactif',
+            avatar: getEmployeeAvatar(`${user.first_name || ''} ${user.last_name || ''}`),
+          },
+          ...prev,
+        ])
+      }
+
+      setShowAddEmployee(false)
+      setEmployeeForm({ fullName: '', gender: '', phone: '', email: '', password: '', roleId: '', stationId: '' })
+    } catch (error: any) {
+      setEmployeeFormError(error?.message || 'Erreur lors de la création de l’employé.')
+    } finally {
+      setIsSavingEmployee(false)
+    }
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{ic.search()}</span>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un employé..." className="w-full pl-9 pr-4 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{ic.search()}</span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un employé..." className="w-full pl-9 pr-4 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <button type="button" onClick={() => setShowAddEmployee(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          {ic.plus('w-4 h-4')}
+          Ajouter un employé
+        </button>
       </div>
+
+      {showAddEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={() => setShowAddEmployee(false)}>
+          <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-700" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Ajouter un employé</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Remplissez les informations de base pour créer un compte.</p>
+              </div>
+              <button type="button" onClick={() => setShowAddEmployee(false)} className="text-slate-400 hover:text-slate-600">{ic.x()}</button>
+            </div>
+
+            <div className="space-y-4">
+              {employeeFormError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                  {employeeFormError}
+                </div>
+              )}
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Nom complet *</label>
+                  <input value={employeeForm.fullName} onChange={e => setEmployeeForm(f => ({ ...f, fullName: e.target.value }))} placeholder="Jean Dupont" className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Genre *</label>
+                  <select value={employeeForm.gender} onChange={e => setEmployeeForm(f => ({ ...f, gender: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                    <option value="">Sélectionner</option>
+                    <option value="Homme">Homme</option>
+                    <option value="Femme">Femme</option>
+                    <option value="Autre">Autre</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Téléphone *</label>
+                  <input value={employeeForm.phone} onChange={e => setEmployeeForm(f => ({ ...f, phone: e.target.value }))} placeholder="+242 06 123 4567" className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Email</label>
+                  <input type="email" value={employeeForm.email} onChange={e => setEmployeeForm(f => ({ ...f, email: e.target.value }))} placeholder="jean.dupont@lunetterie.com" className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Mot de passe</label>
+                  <input type="password" value={employeeForm.password} onChange={e => setEmployeeForm(f => ({ ...f, password: e.target.value }))} placeholder="Laisser vide pour création simple" className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Rôle *</label>
+                  <select value={employeeForm.roleId} onChange={e => setEmployeeForm(f => ({ ...f, roleId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                    <option value="">Sélectionner</option>
+                    {ROLE_OPTIONS.map(role => (
+                      <option key={role.id} value={role.id}>{role.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Station</label>
+                  <select value={employeeForm.stationId} onChange={e => setEmployeeForm(f => ({ ...f, stationId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                    <option value="">Aucune station</option>
+                    {stations.map(station => (
+                      <option key={station.id} value={station.id}>{station.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button type="button" disabled={isSavingEmployee} onClick={saveEmployee} className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">
+                  {isSavingEmployee ? 'Enregistrement...' : 'Enregistrer'}
+                </button>
+                <button type="button" onClick={() => setShowAddEmployee(false)} className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 p-4 text-sm text-slate-500 dark:text-slate-400">
@@ -2689,35 +4236,69 @@ function EmployeesView() {
         <div className="rounded-2xl border border-rose-200 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/30 p-4 text-sm text-rose-700 dark:text-rose-200">
           Impossible de charger la liste des employés pour le moment.
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 p-4 text-sm text-slate-500 dark:text-slate-400">
-          Aucun employé trouvé.
-        </div>
       ) : (
-        groups.map(group => {
-          const members = filtered.filter(e => e.group === group)
-          if (!members.length) return null
-          return (
-            <div key={group}>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{group}</p>
-                <span className="text-xs text-slate-500 dark:text-slate-400">{members.length} employé{members.length > 1 ? 's' : ''}</span>
+        <>
+          {/* Cartes de groupe — mêmes blocs que les étapes, carrousel sur mobile */}
+          <div className={`${CARD_ROW_CLASS} sm:grid-cols-3`}>
+            {groups.map(group => {
+              const groupMembers = filtered.filter(e => e.group === group)
+              const meta = EMPLOYEE_GROUP_META[group]
+              const isActive = group === selectedGroup
+              return (
+                <button
+                  key={group}
+                  type="button"
+                  onClick={() => setSelectedGroup(group)}
+                  aria-pressed={isActive}
+                  className={`${CARD_CLASS} ${isActive
+                    ? 'bg-white dark:bg-slate-900'
+                    : 'border-slate-200 bg-white hover:border-blue-200 dark:border-slate-700 dark:bg-slate-900'}`}
+                  style={isActive ? { borderColor: meta.color, backgroundColor: `${meta.color}0f` } : undefined}
+                >
+                  <span
+                    className="flex h-[42px] w-[42px] items-center justify-center rounded-lg"
+                    style={isActive
+                      ? { backgroundColor: meta.color, color: '#fff' }
+                      : { backgroundColor: `${meta.color}1f`, color: meta.color }}
+                  >
+                    {meta.icon()}
+                  </span>
+                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{group}</span>
+                  <span className="mt-auto text-[28px] font-extrabold leading-none tracking-tight tabular-nums text-slate-900 dark:text-white">{groupMembers.length}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">employé{groupMembers.length > 1 ? 's' : ''}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* .stage-activity — la liste du groupe sélectionné */}
+          <div className={`overflow-hidden ${BLOCK_CLASS}`}>
+            <h3 className="flex items-center gap-2 border-b border-slate-200 px-5 py-4 text-[15px] font-bold text-slate-900 dark:border-slate-700 dark:text-white">
+              <span style={{ color: activeMeta.color }}>{activeMeta.icon('w-[17px] h-[17px]')}</span>
+              {selectedGroup}
+              <span className="ml-1 text-sm font-medium text-slate-500 dark:text-slate-400">· {members.length} employé{members.length > 1 ? 's' : ''}</span>
+            </h3>
+
+            {members.length === 0 ? (
+              <div className="px-5 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
+                {search ? 'Aucun employé ne correspond à cette recherche.' : 'Aucun employé dans ce groupe.'}
               </div>
-              <div className="space-y-2">
+            ) : (
+              <div className="flex flex-col">
                 {members.map(emp => (
-                  <div key={emp.id} className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-3">
-                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white text-xs font-black shrink-0 shadow-sm" style={{ backgroundColor: ROLE_COLOR[emp.role] || '#6b7280' }}>{emp.avatar}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900 dark:text-white text-sm truncate">{emp.name}</p>
-                      <p className="text-xs text-slate-400 truncate">{ROLE_LABEL[emp.role] || emp.role} · {emp.station}</p>
+                  <div key={emp.id} className="flex items-center gap-3.5 border-b border-slate-100 px-5 py-3.5 transition-colors last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60">
+                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-xs font-black text-white shadow-sm" style={{ backgroundColor: ROLE_COLOR[emp.role] || '#6b7280' }}>{emp.avatar}</div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{emp.name}</p>
+                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">{ROLE_LABEL[emp.role] || emp.role} · {emp.station}</p>
                     </div>
                     <Badge status={emp.status} />
                   </div>
                 ))}
               </div>
-            </div>
-          )
-        })
+            )}
+          </div>
+        </>
       )}
     </div>
   )
@@ -2745,8 +4326,41 @@ function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose
   const [isSending, setIsSending] = useState(false)
   const [status, setStatus] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
+  // Le digest est chargé dès l'ouverture du chat, mais `send` peut partir avant la fin :
+  // on garde la promesse pour l'attendre plutôt que de partir avec un contexte vide.
+  const digestRef = useRef<Promise<Record<string, unknown>> | null>(null)
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  useEffect(() => { digestRef.current = loadAssistantDigest() }, [])
+
+  // Rassemble tout ce à quoi le chatbot doit avoir accès. Chaque source est indépendante :
+  // une 403 sur les commandes fournisseur ne doit pas priver le chatbot du stock.
+  async function loadAssistantDigest(): Promise<Record<string, unknown>> {
+    const token = window.localStorage.getItem('token')
+    if (!token) return {}
+
+    const headers = { Authorization: `Bearer ${token}` }
+    const get = async (path: string, key: string) => {
+      const response = await fetch(`${API_URL}${path}`, { headers })
+      if (!response.ok) throw new Error(`${path} unavailable`)
+      const payload = await response.json().catch(() => ({}))
+      return payload?.data?.[key] || []
+    }
+
+    const results = await Promise.allSettled([
+      get(`/inventory/glasses?status=${ALL_GLASS_STATUSES.join(',')}`, 'glasses'),
+      get('/inventory/movements?limit=500&offset=0', 'movements'),
+      get('/auth/users', 'users'),
+      get('/auth/stations', 'stations'),
+      get('/inventory/reception-commands', 'commands'),
+      get('/inventory/supplier-orders', 'orders'),
+    ])
+    const [glasses, movements, users, stations, receptionCommands, supplierOrders] =
+      results.map(result => (result.status === 'fulfilled' ? result.value : []))
+
+    return buildStockDigest({ glasses, movements, users, stations, receptionCommands, supplierOrders })
+  }
 
   function getScreenContext(screen: NavScreen) {
     switch (screen.type) {
@@ -2770,6 +4384,7 @@ function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose
 
     try {
       const token = window.localStorage.getItem('token')
+      const digest = await (digestRef.current ?? Promise.resolve({}))
       const response = await fetch(`${API_URL}/ai/chat`, {
         method: 'POST',
         headers: {
@@ -2780,6 +4395,7 @@ function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose
           screen: getScreenContext(currentScreen),
           stockSummary,
           summary: { currentScreen: currentScreen.type },
+          digest,
         })),
       })
 
@@ -2787,6 +4403,19 @@ function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose
       const reply = payload?.data?.reply || "Je ne peux pas joindre le service IA pour le moment."
       const actions = payload?.data?.actions || []
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
+
+      // Chaque recherche de monture repérée par le chatbot alimente le panier de demande
+      // du magasin concerné : c'est ce qui fait monter le compteur côté écran stock.
+      const searchActions = actions.filter((action: any) => action?.type === 'search' && action?.ville)
+      for (const action of searchActions) {
+        await postBasketDemand({
+          city: String(action.ville),
+          genre: action.genre,
+          forme: action.forme,
+          gamme: action.gamme,
+          taille: action.taille,
+        })
+      }
 
       const firstAction = actions[0]
       const screenTarget = firstAction ? mapChatActionToScreen(firstAction) : null
@@ -2848,23 +4477,24 @@ function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose
 }
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
-function Sidebar({ currentScreen, onNavigate, dark, onToggleDark }: {
+function Sidebar({ currentScreen, onNavigate, dark, onToggleDark, onLogout }: {
   currentScreen: NavScreen; onNavigate: (s: NavScreen) => void
   dark: boolean; onToggleDark: () => void
+  onLogout: () => void
 }) {
   const isDash = ['dashboard', 'pays', 'city', 'frame'].includes(currentScreen.type)
 
   return (
     <aside className="hidden md:flex flex-col w-56 lg:w-60 bg-slate-900 dark:bg-slate-950 h-screen sticky top-0 flex-shrink-0">
-      <div className="px-4 py-4 border-b border-slate-800 flex-shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl overflow-hidden bg-white flex items-center justify-center flex-shrink-0 border border-slate-700">
-            <img src="/src/assets/logo.jpeg" alt="La Lunetterie" className="w-full h-full object-cover" />
+      {/* Même composition que la sidebar de direction.html : le logo en grand, centré, avec
+          le rôle dessous. Pas de texte « La Lunetterie » — le logo porte déjà le nom.
+          Le fond blanc est nécessaire ici, le JPEG n'a pas de transparence. */}
+      <div className="px-4 py-5 border-b border-slate-800 flex-shrink-0">
+        <div className="flex flex-col items-center gap-2.5 text-center">
+          <div className="w-full max-w-[180px] rounded-xl bg-white px-3 py-2">
+            <img src={logoUrl} alt="La Lunetterie" className="w-full h-auto object-contain" />
           </div>
-          <div>
-            <p className="font-black text-white text-sm leading-none tracking-tight">La Lunetterie</p>
-            <p className="text-xs text-slate-500 mt-0.5">Direction</p>
-          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Direction</p>
         </div>
       </div>
 
@@ -2896,6 +4526,10 @@ function Sidebar({ currentScreen, onNavigate, dark, onToggleDark }: {
         <button onClick={onToggleDark} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full">
           {dark ? ic.sun('w-4 h-4') : ic.moon('w-4 h-4')}
           <span className="text-xs">{dark ? 'Thème clair' : 'Thème sombre'}</span>
+        </button>
+        <button onClick={onLogout} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full">
+          {ic.x('w-4 h-4')}
+          <span className="text-xs">Déconnexion</span>
         </button>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-xl bg-blue-600 flex items-center justify-center text-white text-xs font-black">D</div>
@@ -3166,7 +4800,7 @@ export default function App() {
   return (
     <div className={dark ? 'dark' : ''}>
       <div className="flex min-h-screen bg-slate-50 dark:bg-slate-900">
-        <Sidebar currentScreen={current} onNavigate={navigateRoot} dark={dark} onToggleDark={() => setDark(d => !d)} />
+        <Sidebar currentScreen={current} onNavigate={navigateRoot} dark={dark} onToggleDark={() => setDark(d => !d)} onLogout={logoutAndRedirectToIndex} />
 
         <div className="flex-1 flex flex-col min-w-0">
           <TopBar navStack={navStack} onBack={goBack} dark={dark} onToggleDark={() => setDark(d => !d)} onOpenChat={() => setChatOpen(v => !v)} />

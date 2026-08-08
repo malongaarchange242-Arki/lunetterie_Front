@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <script src="auth-guard.js"></script>
+    <script>redirectIfAuthenticated();</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connexion - La Lunetterie</title>
+    <!-- Font Awesome 6 Pro (simulé avec Free) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- CSS de la page de connexion -->
+    <link rel="stylesheet" href="login.css" />
+</head>
+<body>
+
+    <!-- ARRIÈRE-PLAN AVEC FLOU (logo.jpeg) -->
+    <div class="bg-wrapper">
+        <div class="bg-image" id="bgImage"></div>
+        <div class="bg-overlay"></div>
+    </div>
+    
+
+    <!-- CONTENEUR PRINCIPAL -->
+    <div class="login-container">
+        <div class="login-card" id="loginCard">
+            <!-- LOGO -->
+            <img src="logo.jpeg" alt="La Lunetterie" class="login-logo" />
+            
+            <h2>Connexion</h2>
+            <p class="subtitle">Connectez-vous par e-mail ou par authentification biométrique</p>
+
+            <!-- CONNEXION PAR E-MAIL : le mot de passe apparaît dès que
+                 l'adresse est reconnue, sans étape ou bouton intermédiaire. -->
+            <form class="email-login-form" id="emailLoginForm" novalidate>
+                <label class="field-label" for="loginEmail">Nom de l'employé</label>
+                <div class="input-wrap">
+                    <i class="fas fa-user" aria-hidden="true"></i>
+                    <input id="loginEmail" name="name" type="text" autocomplete="name" placeholder="MALONGA Archange" required />
+                </div>
+                <p class="email-feedback" id="emailFeedback" aria-live="polite"></p>
+
+                <div class="password-step" id="passwordStep" hidden>
+                    <label class="field-label" for="loginPassword" id="loginPasswordLabel">Mot de passe</label>
+                    <div class="input-wrap has-toggle">
+                        <i class="fas fa-lock" aria-hidden="true"></i>
+                        <input id="loginPassword" name="password" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="Saisissez votre code" required />
+                        <button type="button" class="toggle-password" id="toggleLoginPassword" tabindex="-1" aria-label="Afficher le mot de passe">
+                            <i class="fas fa-eye" aria-hidden="true"></i>
+                        </button>
+                    </div>
+
+                    <div class="input-wrap has-toggle" id="confirmPasswordWrap" hidden>
+                        <i class="fas fa-lock" aria-hidden="true"></i>
+                        <input id="confirmPassword" name="confirmPassword" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="Confirmez le code" />
+                        <button type="button" class="toggle-password" id="toggleConfirmPassword" tabindex="-1" aria-label="Afficher le mot de passe">
+                            <i class="fas fa-eye" aria-hidden="true"></i>
+                        </button>
+                    </div>
+
+                    <button class="email-login-btn" id="emailLoginBtn" type="submit">
+                        <i class="fas fa-right-to-bracket" aria-hidden="true"></i>
+                        <span id="emailLoginBtnText">Se connecter</span>
+                    </button>
+                </div>
+            </form>
+
+            <div class="login-separator" aria-hidden="true"><span>ou</span></div>
+
+            <!-- ZONE DE SCAN -->
+            <div class="scanner-wrapper">
+                <div class="scanner-box" id="scannerBox">
+                    <i class="fas fa-fingerprint scanner-icon" id="scannerIcon"></i>
+                    <div class="scanner-line" id="scannerLine"></div>
+                </div>
+            </div>
+
+            <!-- MESSAGES DE STATUT -->
+            <div class="status-message" id="statusMessage">
+                Utilisez votre empreinte digitale pour vous connecter.
+            </div>
+            
+            <p class="help-text">
+                <i class="fas fa-info-circle"></i> Placez votre doigt sur le lecteur connecté pour accéder au système.
+            </p>
+        </div>
+    </div>
+
+    
+    <script src="ui-slider.js"></script>
+    <script src="login.js"></script>
+</body>
+</html>

@@ -35,6 +35,14 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       hmr: false,
       watch: { ignored: ['**/.figma/**'] },
+      proxy: {
+        '/api': {
+          target: 'https://api-lunetterie.universearch.com',
+          changeOrigin: true,
+          secure: true,
+          rewrite: path => path.replace(/^\/api/, '/api/v1'),
+        },
+      },
     },
     preview: {
       host: '0.0.0.0',
