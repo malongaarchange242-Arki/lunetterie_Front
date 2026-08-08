@@ -17,6 +17,7 @@ type NavScreen =
   | { type: 'pays'; block: Block }
   | { type: 'city'; block: 'total' | 'ca'; pays: string; city: string }
   | { type: 'suivi-detail'; pays: string; city: string; section: SuiviSection }
+  | { type: 'stock-general' }
   | { type: 'frame'; ref: string; city: string }
   | { type: 'module'; id: ModuleId }
 
@@ -327,6 +328,32 @@ function isGeneralStockStatus(status: string) {
 function isLocalStockStatus(status: string) {
   const normalized = String(status || '').trim().toUpperCase()
   return normalized === 'EN_STOCK_SOUS_STATION'
+}
+
+// Découpe un code d'emplacement « RAYON-A-ETA-01-BAC-B-POS-12 ». Hissé au niveau module :
+// la page Expédition et l'écran Stock général filtrent sur les mêmes trois axes, deux copies
+// finiraient par diverger.
+function parseStockLocationCode(locationCode: string): { rayon: string; etagere: string; bac: string } | null {
+  const normalized = String(locationCode || '').trim().toUpperCase()
+  if (!normalized) return null
+  const match = normalized.match(/^RAYON-([A-Z])-ETA-([0-9]+)-BAC-([A-Z]+)/i)
+  if (!match) return null
+  return {
+    rayon: String(match[1]).toUpperCase(),
+    etagere: String(match[2]).toUpperCase(),
+    bac: String(match[3]).toUpperCase(),
+  }
+}
+
+// Une monture sans emplacement lisible disparaît dès qu'un filtre est posé : on ne peut pas
+// affirmer qu'elle est dans le bac demandé.
+function matchesLocationFilters(glass: any, rayon: string, etagere: string, bac: string) {
+  const parsed = parseStockLocationCode(String(glass?.location_code || glass?.station_name || ''))
+  if (!parsed) return rayon === 'all' && etagere === 'all' && bac === 'all'
+  if (rayon !== 'all' && parsed.rayon !== rayon) return false
+  if (etagere !== 'all' && parsed.etagere !== etagere) return false
+  if (bac !== 'all' && parsed.bac !== bac) return false
+  return true
 }
 
 // ── Stock magasin : manquants ─────────────────────────────────────────────────
@@ -816,6 +843,7 @@ const ic = {
   cart: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>,
   store: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
   hist: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>,
+  warehouse: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M22 20V8.35a2 2 0 0 0-1.26-1.86l-8-3.2a2 2 0 0 0-1.48 0l-8 3.2A2 2 0 0 0 2 8.35V20"/><path d="M2 20h20"/><path d="M7 20v-7h10v7"/><path d="M7 16.5h10"/></svg>,
   sun: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>,
   moon: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>,
   bot: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M12 11V7M9 7h6"/><circle cx="9" cy="16" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="16" r="1" fill="currentColor" stroke="none"/></svg>,
@@ -1213,8 +1241,15 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
     const cities = country.cities.length > 0 ? country.cities : stationCities
     return sum + cities.reduce((citySum, city) => citySum + (cityStockCounts[city]?.revenue || 0), 0)
   }, 0)
-  const totalFrames = summary.hasData && computedCityTotal === 0 ? summary.totalUnits : computedCityTotal
+  // Le bandeau annonce le parc complet enregistré en base, pas seulement ce qui est déjà
+  // arrivé en magasin : les lignes en dessous n'en sont qu'une répartition.
+  const totalFrames = summary.hasData ? summary.totalUnits : computedCityTotal
   const totalRevenue = summary.hasData && computedCityRevenue === 0 ? 0 : computedCityRevenue
+  // Tout ce qui n'est pas encore parti vers un magasin est resté à l'entrepôt central. On le
+  // déduit par soustraction plutôt que de le lire d'une autre source : ainsi la somme affichée
+  // (pays + stock général) retombe toujours sur le total annoncé, même si les deux requêtes
+  // divergeaient. Le plancher à zéro couvre le cas où les deux sources se contrediraient.
+  const stockGeneralFrames = Math.max(0, totalFrames - computedCityTotal)
 
   function toggleCountry(name: string) {
     setExpandedCountries(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name])
@@ -1243,20 +1278,24 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
         <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Pays</p>
       </div>
 
-      {(block === 'total' || block === 'ca') && (
-        <div className="space-y-4">
-          <div className={`rounded-2xl border px-4 py-4 ${block === 'total' ? 'bg-slate-50 border-slate-200 dark:bg-slate-900/20 dark:border-slate-700' : 'bg-green-50 border-green-100 dark:bg-green-900/20 dark:border-green-900/40'}`}>
-            <div>
-              <p className="text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                {block === 'total' ? 'Total lunette' : "Chiffre d'affaire"}
+      {/* Le suivi compte les mêmes montures que le total : il mérite le même bandeau. */}
+      <div className="space-y-4">
+        <div className={`rounded-2xl border px-4 py-4 ${block === 'ca' ? 'bg-green-50 border-green-100 dark:bg-green-900/20 dark:border-green-900/40' : 'bg-slate-50 border-slate-200 dark:bg-slate-900/20 dark:border-slate-700'}`}>
+          <div>
+            <p className="text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              {block === 'ca' ? "Chiffre d'affaire" : 'Total lunette'}
+            </p>
+            <p className={`text-3xl font-black ${block === 'ca' ? 'text-green-700 dark:text-green-300' : 'text-slate-900 dark:text-white'} tabular-nums`}>
+              {block === 'ca' ? fmtFCFA(totalRevenue) : totalFrames.toLocaleString('fr-FR')}
+            </p>
+            {block !== 'ca' && (
+              <p className="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
+                {totalFrames.toLocaleString('fr-FR')} monture{totalFrames > 1 ? 's' : ''} en base
               </p>
-              <p className={`text-3xl font-black ${block === 'total' ? 'text-slate-900 dark:text-white' : 'text-green-700 dark:text-green-300'} tabular-nums`}>
-                {block === 'total' ? totalFrames.toLocaleString('fr-FR') : fmtFCFA(totalRevenue)}
-              </p>
-            </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       {isLoadingCountries ? (
         <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 p-4 text-sm text-slate-500 dark:text-slate-400">
@@ -1348,8 +1387,11 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
                               >
                                 <span className="font-semibold text-slate-800 dark:text-slate-200">{city}</span>
                                 <div className="flex items-center gap-2">
+                                  {/* Le total de la ville, pas son seul stock magasin : le pays
+                                      au-dessus additionne les quatre sous-stations, la ville doit
+                                      annoncer la même chose sous peine de ne jamais retomber dessus. */}
                                   <span className="text-xs font-bold tabular-nums" style={{ color: stats?.color || '#94a3b8' }}>
-                                    {stats?.local || '—'}
+                                    {getCityTotal(stats) || '—'}
                                   </span>
                                   {cityExpanded ? ic.chevDown('w-3 h-3 text-slate-300 group-hover:text-slate-500 transition-colors') : ic.chevRight('w-3 h-3 text-slate-300 group-hover:text-slate-500 transition-colors')}
                                 </div>
@@ -1480,7 +1522,208 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
             </div>
           )
         })}
+
+        {/* Stock Général — le reliquat qui n'a pas encore quitté l'entrepôt central. Même
+            gabarit que les pays pour que la lecture soit immédiate, mais bordure pointillée
+            et pas de chevron : il n'y a pas de villes à déplier en dessous. */}
+        {block !== 'ca' && (
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-4 h-4 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-shrink-0 z-10" />
+              <button
+                onClick={() => onNavigate({ type: 'stock-general' })}
+                className="flex-1 flex items-center justify-between px-5 py-3.5 bg-slate-50 dark:bg-slate-900/40 border border-dashed border-slate-300 dark:border-slate-600 rounded-2xl hover:shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-all"
+              >
+                <span className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2.5">
+                  {/* Icône de trait plutôt qu'un emoji : les drapeaux des pays au-dessus sont
+                      des emojis parce qu'ils identifient un pays, l'entrepôt central non. */}
+                  {ic.warehouse('w-6 h-6 text-slate-400 dark:text-slate-500 flex-shrink-0')}
+                  <span>Stock Général</span>
+                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-black text-slate-900 dark:text-white tabular-nums">
+                    {stockGeneralFrames.toLocaleString('fr-FR')}
+                  </span>
+                  <span className="text-slate-400">{ic.chevRight()}</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+      )}
+    </div>
+  )
+}
+
+// ── Stock général screen ──────────────────────────────────────────────────────
+// Même tableau que la page Expédition, sans les paniers de demande ni le sélecteur
+// d'action : ici on consulte le contenu de l'entrepôt central, on n'y prépare pas d'envoi.
+const STOCK_GENERAL_PAGE_SIZE = 20
+
+function StockGeneralScreen() {
+  const [glasses, setGlasses] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [rayonFilter, setRayonFilter] = useState('all')
+  const [etagereFilter, setEtagereFilter] = useState('all')
+  const [bacFilter, setBacFilter] = useState('all')
+  const [page, setPage] = useState(1)
+
+  // Changer de filtre remet en première page : rester en page 4 d'une liste qui vient d'être
+  // réduite à deux pages donnerait un tableau vide sans explication.
+  useEffect(() => { setPage(1) }, [rayonFilter, etagereFilter, bacFilter])
+
+  useEffect(() => {
+    const token = window.localStorage.getItem('token')
+    if (!token) { setIsLoading(false); return }
+
+    setIsLoading(true)
+    fetch(`${API_URL}/inventory/glasses?status=EN_STOCK_GENERAL`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async response => {
+        if (!response.ok) throw new Error('general stock unavailable')
+        const payload = await response.json().catch(() => ({}))
+        return payload?.data?.glasses || []
+      })
+      // Le serveur pourrait élargir le filtre un jour : on revérifie le statut côté client
+      // pour que cet écran ne montre jamais autre chose que du stock général.
+      .then((rows: any[]) => setGlasses(rows.filter((g: any) => isGeneralStockStatus(g.status))))
+      .catch(() => setGlasses([]))
+      .finally(() => setIsLoading(false))
+  }, [])
+
+  const optionsFor = (pick: (parsed: { rayon: string; etagere: string; bac: string }) => string) =>
+    Array.from(new Set(
+      glasses
+        .map((g: any) => parseStockLocationCode(g.location_code || ''))
+        .filter(Boolean)
+        .map((parsed: any) => pick(parsed))
+    )).sort((a, b) => a.localeCompare(b))
+
+  const rayonOptions = optionsFor(p => p.rayon)
+  const etagereOptions = optionsFor(p => p.etagere)
+  const bacOptions = optionsFor(p => p.bac)
+
+  const filtered = glasses.filter(g => matchesLocationFilters(g, rayonFilter, etagereFilter, bacFilter))
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / STOCK_GENERAL_PAGE_SIZE))
+  // Page bornée à l'affichage : si la liste rétrécit entre deux rendus, on retombe sur la
+  // dernière page existante au lieu d'afficher une tranche vide.
+  const currentPage = Math.min(page, totalPages)
+  const start = (currentPage - 1) * STOCK_GENERAL_PAGE_SIZE
+  const pageRows = filtered.slice(start, start + STOCK_GENERAL_PAGE_SIZE)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Stock général</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Liste des lunettes enregistrées en base.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-800/60">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Rayon</label>
+          <select value={rayonFilter} onChange={e => setRayonFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            <option value="all">Tous</option>
+            {rayonOptions.map(option => <option key={option} value={option}>{option}</option>)}
+          </select>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Étagère</label>
+          <select value={etagereFilter} onChange={e => setEtagereFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            <option value="all">Toutes</option>
+            {etagereOptions.map(option => <option key={option} value={option}>{option}</option>)}
+          </select>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Bac</label>
+          <select value={bacFilter} onChange={e => setBacFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            <option value="all">Tous</option>
+            {bacOptions.map(option => <option key={option} value={option}>{option}</option>)}
+          </select>
+          <button
+            onClick={() => { setRayonFilter('all'); setEtagereFilter('all'); setBacFilter('all') }}
+            className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
+        {filtered.length.toLocaleString('fr-FR')} monture{filtered.length > 1 ? 's' : ''}
+        {filtered.length !== glasses.length && ` sur ${glasses.length.toLocaleString('fr-FR')}`}
+      </p>
+
+      <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
+        <div className="min-w-[720px]">
+          <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
+            <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
+              <tr>
+                <th className="px-2 py-2 text-left font-semibold">Photo</th>
+                <th className="px-2 py-2 text-left font-semibold">Réf</th>
+                <th className="px-2 py-2 text-left font-semibold">Marque</th>
+                <th className="px-2 py-2 text-left font-semibold">Forme</th>
+                <th className="px-2 py-2 text-left font-semibold">Genre</th>
+                <th className="px-2 py-2 text-left font-semibold">Statut</th>
+                <th className="px-2 py-2 text-left font-semibold">Date</th>
+                <th className="px-2 py-2 text-left font-semibold">Emplacement</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-green-200 dark:divide-green-700 bg-white dark:bg-slate-900">
+              {isLoading ? (
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-green-700">Chargement...</td></tr>
+              ) : pageRows.length === 0 ? (
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-green-700">Aucune lunette trouvée.</td></tr>
+              ) : (
+                pageRows.map((g: any, idx: number) => (
+                  <tr key={`stock-general-${g.id || idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <td className="px-2 py-2">
+                      {g.photo_monture_url ? (
+                        <img src={g.photo_monture_url} alt={g.reference || g.barcode || ''} className="h-12 w-12 rounded-md object-cover" />
+                      ) : (
+                        <span className="inline-block rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-500">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 font-mono text-slate-900 dark:text-white">{g.reference || g.barcode || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.brand || g.marque || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.shape || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.gender || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.status || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.created_at ? String(g.created_at).slice(0, 10) : '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.location_code || g.station_name || '—'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Masquée tant qu'une seule page suffit : une barre « Page 1 / 1 » n'apprend rien. */}
+      {totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
+            {(start + 1).toLocaleString('fr-FR')}–{Math.min(start + STOCK_GENERAL_PAGE_SIZE, filtered.length).toLocaleString('fr-FR')} sur {filtered.length.toLocaleString('fr-FR')}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Précédent
+            </button>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-200 tabular-nums">
+              Page {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Suivant
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -2686,29 +2929,8 @@ function ReceptionView() {
     setExcludedDemandIds([])
   }
 
-  function parseStockLocationCode(locationCode: string): { rayon: string; etagere: string; bac: string } | null {
-    const normalized = String(locationCode || '').trim().toUpperCase()
-    if (!normalized) return null
-    const match = normalized.match(/^RAYON-([A-Z])-ETA-([0-9]+)-BAC-([A-Z]+)/i)
-    if (!match) return null
-    return {
-      rayon: String(match[1]).toUpperCase(),
-      etagere: String(match[2]).toUpperCase(),
-      bac: String(match[3]).toUpperCase(),
-    }
-  }
-
   function matchesStockFilters(glass: any) {
-    const locationCode = String(glass?.location_code || glass?.station_name || '')
-    const parsed = parseStockLocationCode(locationCode)
-    if (!parsed && (stockRayonFilter !== 'all' || stockEtagereFilter !== 'all' || stockBacFilter !== 'all')) {
-      return false
-    }
-    if (!parsed) return true
-    if (stockRayonFilter !== 'all' && parsed.rayon !== stockRayonFilter) return false
-    if (stockEtagereFilter !== 'all' && parsed.etagere !== stockEtagereFilter) return false
-    if (stockBacFilter !== 'all' && parsed.bac !== stockBacFilter) return false
-    return true
+    return matchesLocationFilters(glass, stockRayonFilter, stockEtagereFilter, stockBacFilter)
   }
 
   function renderStockPage() {
@@ -4461,6 +4683,7 @@ function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose
       case 'pays': return `pays:${screen.block}`
       case 'city': return `ville:${screen.pays}/${screen.city}`
       case 'suivi-detail': return `suivi:${screen.section}`
+      case 'stock-general': return 'stock-general'
       case 'frame': return `ref:${screen.ref}`
       case 'module': return `module:${screen.id}`
       default: return 'dashboard'
@@ -4677,6 +4900,7 @@ function TopBar({ navStack, onBack, dark, onToggleDark, onOpenChat }: {
     if (s.type === 'pays') return s.block === 'total' ? 'Total lunette' : s.block === 'ca' ? "Chiffre d'affaire" : 'Suivie lunette'
     if (s.type === 'city') return s.city
     if (s.type === 'suivi-detail') return SUIVI_SECTION_LABEL[s.section]
+    if (s.type === 'stock-general') return 'Stock général'
     if (s.type === 'frame') return `Réf: ${s.ref}`
     if (s.type === 'module') return SIDEBAR_MODULES.find(m => m.id === s.id)?.label || s.id
     return ''
@@ -4886,6 +5110,7 @@ export default function App() {
       case 'pays': return <PaysScreen block={current.block} onNavigate={navigate} cityStockCounts={cityStockCounts} stationCities={stationCities} stockSummary={stockSummary} />
       case 'city': return <CityDetailScreen block={current.block} pays={current.pays} city={current.city} onNavigate={navigate} cityStockCounts={cityStockCounts} framesByCity={framesByCity} />
       case 'suivi-detail': return <SuiviDetailScreen pays={current.pays} city={current.city} section={current.section} cityStockCounts={cityStockCounts} framesByCity={framesByCity} />
+      case 'stock-general': return <StockGeneralScreen />
       case 'frame': return <FrameDetailScreen frameRef={current.ref} city={current.city} framesByCity={framesByCity} />
       case 'module': return renderModuleView(current.id)
     }
