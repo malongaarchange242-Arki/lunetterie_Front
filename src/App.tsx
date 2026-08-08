@@ -279,6 +279,9 @@ interface ReceptionSessionResult {
   targetCount: number
   registeredCount?: number
   status: string
+  // Posé au scan du code-barres de session au poste de scan : c'est lui qui coche
+  // "Reçu", avant même la première monture enregistrée.
+  activatedAt?: string | null
   compareText?: string
 }
 
@@ -293,6 +296,16 @@ function fmt(n: number) {
   return String(n)
 }
 function fmtFCFA(n: number) { return `${fmt(n)} FCFA` }
+
+// Une décimale sous 10 % seulement : une monture sur 32, c'est 3,1 % et pas 3 %, alors qu'au
+// dessus la décimale n'apprend plus rien et alourdit la lecture. Espace insécable avant le
+// signe, comme le veut la typographie française.
+function fmtPct(part: number, total: number) {
+  if (!total || !Number.isFinite(part / total)) return '—'
+  const value = (part / total) * 100
+  const digits = value > 0 && value < 10 ? 1 : 0
+  return `${value.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`
+}
 
 function normalizeStationCityName(station: { id?: number; name?: string; city?: string }) {
   const raw = String(station.city || station.name || '').trim()
@@ -1143,21 +1156,34 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
 
       <div className="grid grid-cols-2 gap-3">
         {[
-          { label: 'Stock général', value: summary.hasData ? summary.generalUnits : '—', color: '#2563eb' },
-          { label: 'Stock local', value: summary.hasData ? summary.localUnits : '—', color: '#0891b2' },
-          { label: 'Présentoir', value: summary.hasData ? summary.presentoirUnits : '—', color: '#7c3aed' },
-          { label: 'Références critiques', value: summary.hasData ? summary.criticalReferences : '—', color: '#059669' },
-        ].map(item => (
-          <div key={item.label} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4">
-            <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">{item.label}</p>
-            <p className="text-3xl font-black mt-1 tabular-nums" style={{ color: item.color }}>{item.value}</p>
-            {summary.hasData && (
-              <div className="mt-2.5 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, (Number(item.value) / Math.max(1, summary.totalUnits)) * 100)}%`, backgroundColor: item.color }} />
+          { label: 'Stock général', value: summary.generalUnits, total: summary.totalUnits, of: 'du parc', color: '#2563eb' },
+          { label: 'Stock local', value: summary.localUnits, total: summary.totalUnits, of: 'du parc', color: '#0891b2' },
+          { label: 'Présentoir', value: summary.presentoirUnits, total: summary.totalUnits, of: 'du parc', color: '#7c3aed' },
+          // Rapportées au nombre de références, pas au parc : une référence critique n'est pas
+          // une monture, et le pourcentage n'aurait aucun sens sur l'autre dénominateur.
+          { label: 'Références critiques', value: summary.criticalReferences, total: summary.totalReferences, of: 'des références', color: '#059669' },
+        ].map(item => {
+          const ratio = item.total > 0 ? item.value / item.total : 0
+          return (
+            <div key={item.label} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4">
+              <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">{item.label}</p>
+              <div className="flex items-baseline gap-1.5 mt-1">
+                <p className="text-3xl font-black tabular-nums" style={{ color: item.color }}>{summary.hasData ? item.value : '—'}</p>
+                {summary.hasData && (
+                  <span className="text-sm font-bold tabular-nums text-slate-400 dark:text-slate-500">{fmtPct(item.value, item.total)}</span>
+                )}
               </div>
-            )}
-          </div>
-        ))}
+              {summary.hasData && (
+                <>
+                  <div className="mt-2.5 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                    <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, ratio * 100)}%`, backgroundColor: item.color }} />
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">{item.of}</p>
+                </>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -1169,6 +1195,7 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
   const [expandedCountries, setExpandedCountries] = useState<string[]>([])
   const [isLoadingCountries, setIsLoadingCountries] = useState(false)
   const [expandedCities, setExpandedCities] = useState<string[]>([])
+  const [stockGeneralExpanded, setStockGeneralExpanded] = useState(false)
 
   useEffect(() => {
     const token = window.localStorage.getItem('token')
@@ -1524,14 +1551,18 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
         })}
 
         {/* Stock Général — le reliquat qui n'a pas encore quitté l'entrepôt central. Même
-            gabarit que les pays pour que la lecture soit immédiate, mais bordure pointillée
-            et pas de chevron : il n'y a pas de villes à déplier en dessous. */}
+            gabarit que les pays pour que la lecture soit immédiate, avec une bordure
+            pointillée : ce n'est pas un pays, c'est ce qui n'est encore parti nulle part.
+            En « Total lunette » le clic ouvre l'inventaire ; en « Suivi » il déplie les deux
+            flux de l'entrepôt, puisque le suivi parle de mouvements et non de quantités. */}
         {block !== 'ca' && (
           <div className="relative">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-4 h-4 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-shrink-0 z-10" />
               <button
-                onClick={() => onNavigate({ type: 'stock-general' })}
+                onClick={() => block === 'suivi'
+                  ? setStockGeneralExpanded(open => !open)
+                  : onNavigate({ type: 'stock-general' })}
                 className="flex-1 flex items-center justify-between px-5 py-3.5 bg-slate-50 dark:bg-slate-900/40 border border-dashed border-slate-300 dark:border-slate-600 rounded-2xl hover:shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-all"
               >
                 <span className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2.5">
@@ -1544,10 +1575,33 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
                   <span className="text-sm font-black text-slate-900 dark:text-white tabular-nums">
                     {stockGeneralFrames.toLocaleString('fr-FR')}
                   </span>
-                  <span className="text-slate-400">{ic.chevRight()}</span>
+                  <span className="text-slate-400">
+                    {block === 'suivi' && stockGeneralExpanded ? ic.chevDown() : ic.chevRight()}
+                  </span>
                 </div>
               </button>
             </div>
+
+            {/* L'entrepôt central n'a pas de villes sous lui, mais deux flux : ce qui y entre
+                depuis le fournisseur, ce qui en sort vers les magasins. */}
+            {block === 'suivi' && stockGeneralExpanded && (
+              <div className="ml-6 border-l border-dashed border-slate-200 dark:border-slate-700 pl-4 space-y-2">
+                {[
+                  { label: 'Arrivage fournisseur', color: '#2563eb' },
+                  { label: 'Expédition vers le stock magasin', color: '#0891b2' },
+                ].map(flow => (
+                  <div key={flow.label} className="relative">
+                    <div className="absolute -left-4 top-4 w-4 h-px bg-slate-200 dark:bg-slate-700" />
+                    <div className="flex items-center gap-2">
+                      <div className="w-3.5 h-3.5 rounded-full border-2 bg-white dark:bg-slate-900 flex-shrink-0 z-10" style={{ borderColor: flow.color }} />
+                      <div className="flex-1 flex items-center px-4 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">{flow.label}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2727,8 +2781,6 @@ function ReceptionView() {
           quantity,
           order_date: supplierForm.date,
           note: supplierForm.note.trim(),
-          country: supplierForm.country,
-          city: supplierForm.city,
         }),
       })
 
@@ -2769,6 +2821,7 @@ function ReceptionView() {
         targetCount: Number(command.target_count || 0),
         registeredCount: Number(command.registered_count || 0),
         status: String(command.status || ''),
+        activatedAt: command.activated_at || null,
       })).filter((cmd: ReceptionSessionResult) => cmd.orderId > 0 && cmd.code)
       setReceptionCommands(loaded)
       return loaded
@@ -3410,6 +3463,7 @@ function ReceptionView() {
         targetCount: Number(command.target_count || targetCount),
         registeredCount: Number(command.registered_count || 0),
         status: String(command.status || 'pending'),
+        activatedAt: command.activated_at || null,
         compareText: `Commande ${supplier} · ${targetCount} monture(s)`,
       }
       setReceptionSession(newCommand)
@@ -3423,43 +3477,60 @@ function ReceptionView() {
   }
 
   async function downloadDataUrl(dataUrl: string, filename: string) {
+    // Passage par un Blob plutôt que par le data: URL posé directement en href : Safari
+    // ignore l'attribut download sur un href data: et se contente d'ouvrir l'image.
+    const blob = await fetch(dataUrl).then(response => response.blob())
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    link.href = dataUrl
+    link.href = url
     link.download = filename
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    // Révocation différée : révoquer dans la foulée annule le téléchargement en cours.
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }
 
   async function svgToPngDataUrl(svg: SVGSVGElement) {
-    const serializer = new XMLSerializer()
-    const svgString = serializer.serializeToString(svg)
-    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
+    // On sérialise une copie : le xmlns et les dimensions doivent être portés par la balise
+    // elle-même pour qu'une <img> sache la lire, et on ne va pas trafiquer le SVG affiché.
+    const clone = svg.cloneNode(true) as SVGSVGElement
+    const rect = svg.getBoundingClientRect()
+    // JsBarcode pose width/height en attributs : c'est la taille intrinsèque du code-barres,
+    // bien plus fiable que la taille écran, que Tailwind étire avec w-full.
+    const width = Number(svg.getAttribute('width')) || Math.round(rect.width) || 320
+    const height = Number(svg.getAttribute('height')) || Math.round(rect.height) || 120
 
-    try {
-      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const img = new Image()
-        img.crossOrigin = 'anonymous'
-        img.onload = () => resolve(img)
-        img.onerror = () => reject(new Error('Impossible de charger le SVG'))
-        img.src = url
-      })
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    clone.setAttribute('width', String(width))
+    clone.setAttribute('height', String(height))
+    // Les classes Tailwind ne veulent rien dire hors du document : sans feuille de style,
+    // elles n'alourdissent que la chaîne sérialisée.
+    clone.removeAttribute('class')
 
-      const width = image.naturalWidth || svg.clientWidth || 320
-      const height = image.naturalHeight || svg.clientHeight || 120
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('Canvas non supporté')
-      ctx.fillStyle = '#ffffff'
-      ctx.fillRect(0, 0, width, height)
-      ctx.drawImage(image, 0, 0, width, height)
-      return canvas.toDataURL('image/png')
-    } finally {
-      URL.revokeObjectURL(url)
-    }
+    const svgString = new XMLSerializer().serializeToString(clone)
+    // data: plutôt que blob: — une <img> qui charge un blob: déclenche selon les navigateurs
+    // un contrôle d'origine qui échoue, et l'image n'arrive jamais.
+    const source = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`
+
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error("Le code-barres n'a pas pu être converti en image."))
+      img.src = source
+    })
+
+    // Rendu à deux fois la taille : une étiquette part à l'imprimante, elle doit rester nette.
+    const scale = 2
+    const canvas = document.createElement('canvas')
+    canvas.width = width * scale
+    canvas.height = height * scale
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas non supporté par ce navigateur.')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/png')
   }
 
   async function downloadBarcodeImage() {
@@ -3470,17 +3541,29 @@ function ReceptionView() {
 
   async function downloadAndPrintBarcode() {
     if (!barcodeRef.current || !receptionSession) return
-    const dataUrl = await svgToPngDataUrl(barcodeRef.current)
-    await downloadDataUrl(dataUrl, `session-${receptionSession.code}.png`)
 
+    // La fenêtre s'ouvre avant tout await : passé un point d'attente, le navigateur ne
+    // rattache plus l'ouverture au clic et la bloque comme une popup non sollicitée.
     const popup = window.open('', '_blank', 'width=600,height=700')
-    if (!popup) {
-      window.alert('Autorisez les fenêtres surgissantes pour imprimer.');
-      return
+
+    try {
+      const dataUrl = await svgToPngDataUrl(barcodeRef.current)
+      await downloadDataUrl(dataUrl, `session-${receptionSession.code}.png`)
+
+      if (!popup) {
+        window.alert("Étiquette téléchargée. Autorisez les fenêtres surgissantes pour lancer l'impression.")
+        return
+      }
+      popup.document.write(`<html><head><title>Imprimer session ${receptionSession.code}</title><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;text-align:center;}img{max-width:100%;height:auto;}</style></head><body><h2>${receptionSession.code}</h2><img src="${dataUrl}" alt="Code-barres" /><script>window.onload=function(){window.print();};</script></body></html>`)
+      popup.document.close()
+      popup.focus()
+    } catch (error: any) {
+      // Sans ce message, un échec de conversion laissait le bouton parfaitement muet : la
+      // fonction est async et posée telle quelle sur onClick, donc son rejet partait nulle part.
+      popup?.close()
+      console.error('Erreur préparation étiquette', error)
+      window.alert(error?.message || "Impossible de préparer l'étiquette.")
     }
-    popup.document.write(`<html><head><title>Imprimer session ${receptionSession.code}</title><style>body{margin:0;padding:20px;font-family:Arial,Helvetica,sans-serif;text-align:center;}img{max-width:100%;height:auto;}</style></head><body><h2>${receptionSession.code}</h2><img src="${dataUrl}" alt="Code-barres" /><script>window.onload=function(){window.print();};</script></body></html>`)
-    popup.document.close()
-    popup.focus()
   }
 
   useEffect(() => {
@@ -3789,6 +3872,10 @@ function ReceptionView() {
         const isExpanded = expandedId === s.id
         const linkedCommand = receptionCommands.find(cmd => cmd.orderId === s.orderId)
         const receivedCount = linkedCommand ? Number(linkedCommand.registeredCount || 0) : 0
+        // "Reçu" se coche au scan du code-barres de session par le magasinier.
+        // Le repli sur receivedCount couvre les sessions entamées avant que le
+        // serveur n'horodate l'activation.
+        const isSessionActivated = Boolean(linkedCommand?.activatedAt) || receivedCount > 0
         const totalCount = Number(s.frames || 0)
         const receptionState = getReceptionCardState(linkedCommand, receivedCount, totalCount)
         const cardBgClass = getReceptionCardClass(receptionState)
@@ -3866,7 +3953,7 @@ function ReceptionView() {
               {isExpanded && (
                 <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50/90 p-3 dark:border-slate-700 dark:bg-slate-900/60">
                   <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" checked={receivedCount > 0} readOnly />
+                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" checked={isSessionActivated} readOnly />
                     <span>Reçu</span>
                   </label>
                   <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${receptionState === 'recording' ? 'bg-orange-50 text-orange-800 dark:bg-orange-900/20 dark:text-orange-200' : receptionState === 'complete' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200' : 'bg-white/80 text-slate-600 dark:bg-slate-800/70 dark:text-slate-300'}`}>
@@ -4086,7 +4173,7 @@ function ReceptionView() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Nouvelle expédition</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Enregistrez ici chaque commande envoyée au stock, en sélectionnant le pays de destination.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Enregistrez ici chaque commande envoyée au stock.</p>
               </div>
               <button onClick={() => setShowSupplierModal(false)} className="text-slate-400 hover:text-slate-600">{ic.x()}</button>
             </div>
@@ -4103,15 +4190,6 @@ function ReceptionView() {
                 <div>
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Date de commande</label>
                   <input type="date" value={supplierForm.date} onChange={e => setSupplierForm(f => ({ ...f, date: e.target.value }))} className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Pays de destination</label>
-                  <select value={supplierForm.country} onChange={e => setSupplierForm(f => ({ ...f, country: e.target.value }))} className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" disabled={isLoadingCountries}>
-                    <option value="">{isLoadingCountries ? 'Chargement...' : 'Sélectionner un pays'}</option>
-                    {countryOptions.map(country => (
-                      <option key={country.id} value={country.name}>{country.name}</option>
-                    ))}
-                  </select>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Note (optionnel)</label>

@@ -13,6 +13,8 @@ describe('summarizeStockSummary', () => {
     expect(summary.localUnits).toBe(3)
     expect(summary.presentoirUnits).toBe(3)
     expect(summary.criticalReferences).toBe(1)
+    // Le dénominateur des références critiques : 1 sur 2, pas 1 sur les 15 montures.
+    expect(summary.totalReferences).toBe(2)
     expect(summary.hasData).toBe(true)
   })
 

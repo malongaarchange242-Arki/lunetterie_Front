@@ -14,6 +14,9 @@ export interface DashboardSummary {
   localUnits: number
   presentoirUnits: number
   criticalReferences: number
+  // Le dénominateur des références critiques : elles se comptent en références, pas en
+  // montures, et les rapporter à totalUnits mélangerait deux unités.
+  totalReferences: number
   hasData: boolean
 }
 
@@ -30,6 +33,7 @@ export function summarizeStockSummary(rows: StockSummaryRow[] = []): DashboardSu
     localUnits,
     presentoirUnits,
     criticalReferences,
+    totalReferences: rows.length,
     hasData: rows.length > 0,
   }
 }
