@@ -15,6 +15,14 @@ export default defineConfig(({ mode }) => {
     build: {
       sourcemap: emitSourcemaps ? 'inline' : false,
       minify: !emitSourcemaps,
+      // Site multi-pages : sans ces entrées explicites, Vite ne construit que index.html
+      // et /login.html renvoie un 404 en production.
+      rollupOptions: {
+        input: {
+          index: path.resolve(__dirname, 'index.html'),
+          login: path.resolve(__dirname, 'login.html'),
+        },
+      },
     },
     plugins: [
       react(),

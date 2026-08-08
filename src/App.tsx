@@ -855,11 +855,11 @@ const STAGE_META: Record<MvtStage, { label: string; color: string; bg: string; i
 
 const ROLE_COLOR: Record<string, string> = {
   VENDEUR: '#2563eb', MAGASINIER: '#16a34a', LABORATOIRE: '#9333ea',
-  RESPONSABLE_STATION: '#d97706',
+  RESPONSABLE_STATION: '#d97706', CAISSIER: '#0891b2',
 }
 const ROLE_LABEL: Record<string, string> = {
   VENDEUR: 'Vendeur', MAGASINIER: 'Magasinier', LABORATOIRE: 'Labo',
-  RESPONSABLE_STATION: 'Resp. Station',
+  RESPONSABLE_STATION: 'Resp. Station', CAISSIER: 'Caissier',
 }
 
 // Gabarit du tableau de suivi, partagé par l'en-tête et les lignes : dupliqué, les deux
@@ -2086,6 +2086,9 @@ function ReceptionView() {
   // 'GENERAL' = liste du stock général ; sinon le nom du magasin dont on regarde les manquants.
   const [stockScope, setStockScope] = useState<string>('GENERAL')
   const [stockAction, setStockAction] = useState<StockAction>('')
+  const [stockRayonFilter, setStockRayonFilter] = useState<string>('all')
+  const [stockEtagereFilter, setStockEtagereFilter] = useState<string>('all')
+  const [stockBacFilter, setStockBacFilter] = useState<string>('all')
   const [excludedPreparationKeys, setExcludedPreparationKeys] = useState<string[]>([])
   const [basketCounts, setBasketCounts] = useState<Record<string, number>>({})
   const [basketItems, setBasketItems] = useState<BasketItem[]>([])
@@ -2683,6 +2686,31 @@ function ReceptionView() {
     setExcludedDemandIds([])
   }
 
+  function parseStockLocationCode(locationCode: string): { rayon: string; etagere: string; bac: string } | null {
+    const normalized = String(locationCode || '').trim().toUpperCase()
+    if (!normalized) return null
+    const match = normalized.match(/^RAYON-([A-Z])-ETA-([0-9]+)-BAC-([A-Z]+)/i)
+    if (!match) return null
+    return {
+      rayon: String(match[1]).toUpperCase(),
+      etagere: String(match[2]).toUpperCase(),
+      bac: String(match[3]).toUpperCase(),
+    }
+  }
+
+  function matchesStockFilters(glass: any) {
+    const locationCode = String(glass?.location_code || glass?.station_name || '')
+    const parsed = parseStockLocationCode(locationCode)
+    if (!parsed && (stockRayonFilter !== 'all' || stockEtagereFilter !== 'all' || stockBacFilter !== 'all')) {
+      return false
+    }
+    if (!parsed) return true
+    if (stockRayonFilter !== 'all' && parsed.rayon !== stockRayonFilter) return false
+    if (stockEtagereFilter !== 'all' && parsed.etagere !== stockEtagereFilter) return false
+    if (stockBacFilter !== 'all' && parsed.bac !== stockBacFilter) return false
+    return true
+  }
+
   function renderStockPage() {
     const generalGlasses = (stockGlasses || []).filter((g: any) => isGeneralStockStatus(g.status))
     const magasinGlasses = (stockGlasses || []).filter((g: any) => isLocalStockStatus(g.status))
@@ -2696,6 +2724,28 @@ function ReceptionView() {
     const magasins = Array.from(new Set([...fixedMagasins, ...discoveredMagasins, ...Object.keys(basketCounts)]))
 
     const selectedMagasin = stockScope === 'GENERAL' ? '' : stockScope
+    const filteredGeneralGlasses = generalGlasses.filter(matchesStockFilters)
+
+    const stockRayonOptions = Array.from(new Set(
+      generalGlasses
+        .map((g: any) => parseStockLocationCode(g.location_code || ''))
+        .filter(Boolean)
+        .map((parsed: any) => parsed.rayon)
+    )).sort((a, b) => a.localeCompare(b))
+
+    const stockEtagereOptions = Array.from(new Set(
+      generalGlasses
+        .map((g: any) => parseStockLocationCode(g.location_code || ''))
+        .filter(Boolean)
+        .map((parsed: any) => parsed.etagere)
+    )).sort((a, b) => a.localeCompare(b))
+
+    const stockBacOptions = Array.from(new Set(
+      generalGlasses
+        .map((g: any) => parseStockLocationCode(g.location_code || ''))
+        .filter(Boolean)
+        .map((parsed: any) => parsed.bac)
+    )).sort((a, b) => a.localeCompare(b))
 
     const header = selectedMagasin
       ? {
@@ -2747,15 +2797,33 @@ function ReceptionView() {
               <option value="PANIER">Voir le panier</option>
               <option value="ENVOI">Envoyer le stock</option>
             </select>
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-800/60">
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Rayon</label>
+              <select value={stockRayonFilter} onChange={e => setStockRayonFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                <option value="all">Tous</option>
+                {stockRayonOptions.map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Étagère</label>
+              <select value={stockEtagereFilter} onChange={e => setStockEtagereFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                <option value="all">Toutes</option>
+                {stockEtagereOptions.map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Bac</label>
+              <select value={stockBacFilter} onChange={e => setStockBacFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                <option value="all">Tous</option>
+                {stockBacOptions.map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
+              <button onClick={() => { setStockRayonFilter('all'); setStockEtagereFilter('all'); setStockBacFilter('all') }} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700">Reset</button>
+            </div>
           </div>
         </div>
 
         {renderBasketRow(magasins, selectedMagasin)}
 
-        {!selectedMagasin && renderGeneralStockTable(generalGlasses)}
+        {!selectedMagasin && renderGeneralStockTable(filteredGeneralGlasses)}
         {selectedMagasin && !stockAction && renderStockActionChooser(selectedMagasin)}
-        {selectedMagasin && stockAction === 'PANIER' && renderBasketAnalysis(selectedMagasin, generalGlasses)}
-        {selectedMagasin && stockAction === 'ENVOI' && renderStockPreparation(selectedMagasin, generalGlasses)}
+        {selectedMagasin && stockAction === 'PANIER' && renderBasketAnalysis(selectedMagasin, filteredGeneralGlasses)}
+        {selectedMagasin && stockAction === 'ENVOI' && renderStockPreparation(selectedMagasin, filteredGeneralGlasses)}
       </div>
     )
   }
@@ -3238,10 +3306,11 @@ function ReceptionView() {
       const createdAt = glass.created_at ? String(glass.created_at) : ''
       const date = createdAt ? createdAt.slice(0, 10) : detailSession.date
       const heure = createdAt.includes('T') ? createdAt.slice(11, 16) : ''
+      const gamme = resolveFrameGamme(glass.material, glass.price)
       return {
         reference: String(glass.reference || glass.barcode || '—'),
         photo: String(glass.photo_monture_url || glass.photo_branche_url || '—'),
-        gamme: String(glass.brand || '—'),
+        gamme,
         genre: String(glass.gender || '—'),
         enregistréPar: String(glass.station_name || glass.location_code || '—'),
         heure: heure || '—',
@@ -3266,11 +3335,20 @@ function ReceptionView() {
     }] : []
 
     const allRows = [...rows, ...fallbackRows]
+    const detailShapeOptions = ['all', ...Array.from(new Set(
+      allRows.map(row => normalizeShapeName(row.forme)).filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, 'fr'))]
+    const detailGenreOptions = ['all', ...Array.from(new Set(
+      allRows.map(row => String(row.genre || '').trim()).filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, 'fr'))]
+    const detailGammeOptions = ['all', ...Array.from(new Set(
+      allRows.map(row => normalizeGammeName(row.gamme)).filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, 'fr'))]
     const filteredRows = allRows.filter(row => {
       const matchesSearch = `${row.reference} ${row.photo} ${row.gamme} ${row.genre} ${row.forme}`.toLowerCase().includes(detailSearch.toLowerCase())
       const matchesStatus = detailStatusFilter === 'all' || row.status === detailStatusFilter
       const matchesForme = detailFormeFilter === 'all' || normalizeShapeName(row.forme) === normalizeShapeName(detailFormeFilter)
-      const matchesGenre = detailGenreFilter === 'all' || row.genre === detailGenreFilter
+      const matchesGenre = detailGenreFilter === 'all' || normalizeGenderName(row.genre) === normalizeGenderName(detailGenreFilter)
       const matchesGamme = detailGammeFilter === 'all' || normalizeGammeName(row.gamme) === normalizeGammeName(detailGammeFilter)
       return matchesSearch && matchesStatus && matchesForme && matchesGenre && matchesGamme
     })
@@ -3299,19 +3377,17 @@ function ReceptionView() {
               <option value="En attente">En attente</option>
             </select>
             <select value={detailFormeFilter} onChange={e => setDetailFormeFilter(e.target.value as ShapeFilterValue)} className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
-              {SHAPE_FILTER_OPTIONS.map(option => (
+              {detailShapeOptions.map(option => (
                 <option key={option} value={option}>{option === 'all' ? 'Toutes formes' : option}</option>
               ))}
             </select>
             <select value={detailGenreFilter} onChange={e => setDetailGenreFilter(e.target.value as GenreFilterValue)} className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
-              <option value="all">Tous genres</option>
-              <option value="Homme">Homme</option>
-              <option value="Femme">Femme</option>
-              <option value="Enfant">Enfant</option>
-              <option value="Unisexe">Unisexe</option>
+              {detailGenreOptions.map(option => (
+                <option key={option} value={option}>{option === 'all' ? 'Tous genres' : option}</option>
+              ))}
             </select>
             <select value={detailGammeFilter} onChange={e => setDetailGammeFilter(e.target.value as GammeFilterValue)} className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
-              {GAMME_FILTER_OPTIONS.map(option => (
+              {detailGammeOptions.map(option => (
                 <option key={option} value={option}>{option === 'all' ? 'Toutes gammes' : option}</option>
               ))}
             </select>
@@ -3992,6 +4068,8 @@ const ROLE_OPTIONS = [
   { id: 4, label: 'Vendeur', value: 'VENDEUR' },
   { id: 5, label: 'Laboratoire', value: 'LABORATOIRE' },
   { id: 6, label: 'Responsable de station', value: 'RESPONSABLE_STATION' },
+  // id 9 : fixé par la migration 025_caisse (7 = DIRECTION, 8 = SUPER_DIRECTEUR).
+  { id: 9, label: 'Caissier', value: 'CAISSIER' },
 ]
 
 const EMPLOYEE_GROUP_META: Record<string, { color: string; icon: (c?: string) => React.ReactElement }> = {
@@ -4006,13 +4084,14 @@ function EmployeesView() {
   const [isLoading, setIsLoading] = useState(false)
   const [hasError, setHasError] = useState(false)
   const [stations, setStations] = useState<Array<{ id: number; name: string }>>([])
+  const [cities, setCities] = useState<Array<{ id: number; name: string }>>([])
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [employeeForm, setEmployeeForm] = useState({
     fullName: '',
     gender: '',
     phone: '',
     email: '',
-    password: '',
+    city: '',
     roleId: '',
     stationId: '',
   })
@@ -4032,17 +4111,26 @@ function EmployeesView() {
     Promise.all([
       fetch(`${API_URL}/auth/users`, { headers: { Authorization: `Bearer ${token}` } }),
       fetch(`${API_URL}/auth/stations`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/inventory/cities?country_id=1`, { headers: { Authorization: `Bearer ${token}` } }),
     ])
-      .then(async ([usersResponse, stationsResponse]) => {
+      .then(async ([usersResponse, stationsResponse, citiesResponse]) => {
         if (!usersResponse.ok) throw new Error('users unavailable')
         if (!stationsResponse.ok) throw new Error('stations unavailable')
+        if (!citiesResponse.ok) throw new Error('cities unavailable')
 
         const usersPayload = await usersResponse.json().catch(() => ({}))
         const stationsPayload = await stationsResponse.json().catch(() => ({}))
+        const citiesPayload = await citiesResponse.json().catch(() => ({}))
         const users = Array.isArray(usersPayload?.data?.users) ? usersPayload.data.users : []
         const stations = Array.isArray(stationsPayload?.data?.stations) ? stationsPayload.data.stations : []
+        const citiesData = Array.isArray(citiesPayload?.data?.cities)
+          ? citiesPayload.data.cities
+          : Array.isArray(citiesPayload?.cities)
+            ? citiesPayload.cities
+            : []
 
         setStations(stations.map((station: any) => ({ id: Number(station.id) || 0, name: String(station.name || 'Non assigné') })))
+        setCities(citiesData.map((city: any) => ({ id: Number(city.id) || 0, name: String(city.nom || city.name || 'Sans nom') })))
         return users
       })
       .then((users: any[]) => {
@@ -4080,8 +4168,8 @@ function EmployeesView() {
     const token = window.localStorage.getItem('token')
     if (!token) return
 
-    if (!employeeForm.fullName.trim() || !employeeForm.gender || !employeeForm.phone.trim() || !employeeForm.roleId) {
-      setEmployeeFormError('Veuillez remplir au moins le nom, le genre, le téléphone et le rôle.')
+    if (!employeeForm.fullName.trim() || !employeeForm.gender || !employeeForm.phone.trim() || !employeeForm.city.trim() || !employeeForm.roleId) {
+      setEmployeeFormError('Veuillez remplir au moins le nom, le genre, le téléphone, la ville et le rôle.')
       return
     }
 
@@ -4099,9 +4187,9 @@ function EmployeesView() {
           first_name: firstName,
           last_name: lastName,
           email: employeeForm.email.trim(),
-          password: employeeForm.password.trim(),
           phone: employeeForm.phone.trim(),
           gender: employeeForm.gender,
+          city: employeeForm.city.trim(),
           role_id: Number(employeeForm.roleId),
           station_id: employeeForm.stationId ? Number(employeeForm.stationId) : null,
         }),
@@ -4130,7 +4218,7 @@ function EmployeesView() {
       }
 
       setShowAddEmployee(false)
-      setEmployeeForm({ fullName: '', gender: '', phone: '', email: '', password: '', roleId: '', stationId: '' })
+      setEmployeeForm({ fullName: '', gender: '', phone: '', email: '', city: '', roleId: '', stationId: '' })
     } catch (error: any) {
       setEmployeeFormError(error?.message || 'Erreur lors de la création de l’employé.')
     } finally {
@@ -4192,8 +4280,13 @@ function EmployeesView() {
                   <input type="email" value={employeeForm.email} onChange={e => setEmployeeForm(f => ({ ...f, email: e.target.value }))} placeholder="jean.dupont@lunetterie.com" className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Mot de passe</label>
-                  <input type="password" value={employeeForm.password} onChange={e => setEmployeeForm(f => ({ ...f, password: e.target.value }))} placeholder="Laisser vide pour création simple" className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Ville *</label>
+                  <select value={employeeForm.city} onChange={e => setEmployeeForm(f => ({ ...f, city: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                    <option value="">Sélectionner</option>
+                    {cities.map(city => (
+                      <option key={city.id} value={city.name}>{city.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Rôle *</label>
@@ -4208,9 +4301,10 @@ function EmployeesView() {
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Station</label>
                   <select value={employeeForm.stationId} onChange={e => setEmployeeForm(f => ({ ...f, stationId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
                     <option value="">Aucune station</option>
-                    {stations.map(station => (
-                      <option key={station.id} value={station.id}>{station.name}</option>
-                    ))}
+                    {stations.map(station => {
+                      const label = station.name === 'Station Pointe-Noire' ? 'Stock magasin' : station.name === 'Stock Principal' ? 'Stock principal' : station.name
+                      return <option key={station.id} value={station.id}>{label}</option>
+                    })}
                   </select>
                 </div>
               </div>
