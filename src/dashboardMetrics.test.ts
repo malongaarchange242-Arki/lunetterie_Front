@@ -16,6 +16,8 @@ describe('summarizeStockSummary', () => {
     expect(summary.hasData).toBe(true)
   })
 
+  
+
   it('returns an empty state when there is no stock-summary data', () => {
     const summary = summarizeStockSummary([])
 
