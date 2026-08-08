@@ -1814,7 +1814,7 @@ function ReceptionView() {
 
     setIsDeletingSessionId(orderId)
     try {
-      const response = await fetch(`${API_URL}/inventory/supplier-orders/${encodeURIComponent(orderId)}`, {
+      const response = await fetch(`${API_URL}/inventory/supplier-orders/${encodeURIComponent(String(orderId))}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
