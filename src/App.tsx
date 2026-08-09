@@ -4201,33 +4201,35 @@ function ReceptionView() {
               </button>
             </div>
 
-            <div className="mt-4 overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    <th className="pb-2 pr-3">Référence</th>
-                    <th className="pb-2 pr-3">Total</th>
-                    <th className="pb-2 pr-3">Stock général</th>
-                    <th className="pb-2">Stock local</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoadingStockSummary ? (
-                    <tr><td colSpan={4} className="py-3 text-sm text-slate-500 dark:text-slate-400">Chargement…</td></tr>
-                  ) : stockSummary.length === 0 ? (
-                    <tr><td colSpan={4} className="py-3 text-sm text-slate-500 dark:text-slate-400">Aucune donnée disponible pour le moment.</td></tr>
-                  ) : (
-                    stockSummary.slice(0, 5).map((item: any, index: number) => (
-                      <tr key={`${item.reference || 'ref'}-${index}`} className="border-t border-slate-100 dark:border-slate-800">
-                        <td className="py-2 pr-3 font-medium text-slate-900 dark:text-white">{item.reference || '—'}</td>
-                        <td className="py-2 pr-3 text-slate-700 dark:text-slate-300">{Number(item.qty_total || 0).toLocaleString('fr-FR')}</td>
-                        <td className="py-2 pr-3 text-slate-700 dark:text-slate-300">{Number(item.qty_general || 0).toLocaleString('fr-FR')}</td>
-                        <td className="py-2 text-slate-700 dark:text-slate-300">{Number(item.qty_local || 0).toLocaleString('fr-FR')}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-emerald-200 dark:border-emerald-700">
+              <div className="min-w-[620px]">
+                <table className="w-full min-w-full divide-y divide-emerald-200 dark:divide-emerald-700 text-xs sm:text-sm">
+                  <thead className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-200">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left font-semibold">Référence</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Total</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Stock général</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Stock local</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-100 bg-white dark:divide-emerald-800 dark:bg-slate-900">
+                    {isLoadingStockSummary ? (
+                      <tr><td colSpan={4} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Chargement…</td></tr>
+                    ) : stockSummary.length === 0 ? (
+                      <tr><td colSpan={4} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Aucune donnée disponible pour le moment.</td></tr>
+                    ) : (
+                      stockSummary.slice(0, 5).map((item: any, index: number) => (
+                        <tr key={`${item.reference || 'ref'}-${index}`} className="transition-colors hover:bg-emerald-50/70 dark:hover:bg-emerald-900/10">
+                          <td className="px-3 py-2.5 font-medium text-slate-900 dark:text-white">{item.reference || '—'}</td>
+                          <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_total || 0).toLocaleString('fr-FR')}</td>
+                          <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_general || 0).toLocaleString('fr-FR')}</td>
+                          <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_local || 0).toLocaleString('fr-FR')}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
