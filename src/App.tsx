@@ -2464,7 +2464,9 @@ function ReceptionView() {
   // finissait poussée hors de vue.
   const [showHistoryPage, setShowHistoryPage] = useState(false)
   const [stockGlasses, setStockGlasses] = useState<any[]>([])
+  const [stockSummary, setStockSummary] = useState<any[]>([])
   const [isLoadingStock, setIsLoadingStock] = useState(false)
+  const [isLoadingStockSummary, setIsLoadingStockSummary] = useState(false)
   // 'GENERAL' = liste du stock général ; sinon le nom du magasin dont on regarde les manquants.
   const [stockScope, setStockScope] = useState<string>('GENERAL')
   const [stockAction, setStockAction] = useState<StockAction>('')
@@ -2541,6 +2543,7 @@ function ReceptionView() {
     void loadSessions()
     void loadReceptionCommands()
     void loadSentLists()
+    void loadStockSummary()
 
     const handleWindowFocus = () => {
       void loadReceptionCommands()
@@ -3056,6 +3059,28 @@ function ReceptionView() {
       window.alert('Impossible de clôturer ces demandes pour le moment.')
     } finally {
       setIsSendingDemand(false)
+    }
+  }
+
+  async function loadStockSummary() {
+    const token = window.localStorage.getItem('token')
+    if (!token) {
+      setStockSummary([])
+      return
+    }
+
+    setIsLoadingStockSummary(true)
+    try {
+      const response = await fetch(`${API_URL}/inventory/stock-summary`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) throw new Error('stock summary unavailable')
+      const payload = await response.json().catch(() => ({}))
+      setStockSummary(payload?.data?.items || [])
+    } catch {
+      setStockSummary([])
+    } finally {
+      setIsLoadingStockSummary(false)
     }
   }
 
@@ -4159,17 +4184,65 @@ function ReceptionView() {
       {/* Écran d'accueil de l'Expédition : ce qu'on vient y faire, pas ce qu'on y a fait.
           Sans ça la page serait vide tant qu'aucune session n'est en cours. */}
       {!showHistoryPage && !receptionSession && (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-6 text-center dark:border-slate-700 dark:bg-slate-800/70">
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Aucune session en cours</p>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Créez une expédition avec « Nouvelle », ou consultez les sessions déjà enregistrées.
-          </p>
-          <button
-            onClick={() => setShowHistoryPage(true)}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3.5 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
-            {ic.hist('w-4 h-4')} Voir l&apos;historique
-          </button>
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">Aperçu du stock général</p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Vue rapide des références encore présentes dans l’entrepôt central.
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowStockPage(true); void loadStockGlasses() }}
+                className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+              >
+                Voir le stock
+              </button>
+            </div>
+
+            <div className="mt-4 overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <th className="pb-2 pr-3">Référence</th>
+                    <th className="pb-2 pr-3">Total</th>
+                    <th className="pb-2 pr-3">Stock général</th>
+                    <th className="pb-2">Stock local</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoadingStockSummary ? (
+                    <tr><td colSpan={4} className="py-3 text-sm text-slate-500 dark:text-slate-400">Chargement…</td></tr>
+                  ) : stockSummary.length === 0 ? (
+                    <tr><td colSpan={4} className="py-3 text-sm text-slate-500 dark:text-slate-400">Aucune donnée disponible pour le moment.</td></tr>
+                  ) : (
+                    stockSummary.slice(0, 5).map((item: any, index: number) => (
+                      <tr key={`${item.reference || 'ref'}-${index}`} className="border-t border-slate-100 dark:border-slate-800">
+                        <td className="py-2 pr-3 font-medium text-slate-900 dark:text-white">{item.reference || '—'}</td>
+                        <td className="py-2 pr-3 text-slate-700 dark:text-slate-300">{Number(item.qty_total || 0).toLocaleString('fr-FR')}</td>
+                        <td className="py-2 pr-3 text-slate-700 dark:text-slate-300">{Number(item.qty_general || 0).toLocaleString('fr-FR')}</td>
+                        <td className="py-2 text-slate-700 dark:text-slate-300">{Number(item.qty_local || 0).toLocaleString('fr-FR')}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-6 text-center dark:border-slate-700 dark:bg-slate-800/70">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Aucune session en cours</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Créez une expédition avec « Nouvelle », ou consultez les sessions déjà enregistrées.
+            </p>
+            <button
+              onClick={() => setShowHistoryPage(true)}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3.5 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              {ic.hist('w-4 h-4')} Voir l&apos;historique
+            </button>
+          </div>
         </div>
       )}
 
