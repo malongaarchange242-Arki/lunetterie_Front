@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion Laboratoire Optique</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { background: white; padding: 30px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .header h1 { color: #333; font-size: 28px; margin-bottom: 5px; }
+        .header p { color: #666; font-size: 14px; }
+        .tabs { display: flex; background: white; border-radius: 10px 10px 0 0; overflow-x: auto; border-bottom: 2px solid #e0e0e0; }
+        .tab-btn { background: none; border: none; padding: 16px 20px; cursor: pointer; font-size: 14px; color: #666; border-bottom: 3px solid transparent; transition: all 0.3s; }
+        .tab-btn.active { color: #667eea; border-bottom-color: #667eea; }
+        .tab-badge { display: inline-block; background: #667eea; color: white; border-radius: 12px; padding: 2px 8px; margin-left: 6px; font-size: 11px; font-weight: 600; }
+        .content { background: white; border-radius: 0 10px 10px 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); padding: 30px; min-height: 400px; }
+        .panel { display: none; }
+        .panel.active { display: block; }
+        h2 { color: #1f2937; margin-bottom: 20px; font-size: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th { background: #f3f4f6; color: #374151; padding: 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #e5e7eb; font-size: 14px; }
+        td { padding: 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+        tr:hover { background: #f9fafb; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+        .badge-ready { background: #dbeafe; color: #1e40af; }
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.3s; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        input { width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #374151; }
+        .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #667eea; background: #eff6ff; color: #1e40af; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-glasses"></i> Gestion Laboratoire Optique</h1>
+            <p>Suivi complet en temps réel</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('arrivees')">Arrivées <span class="tab-badge" id="c1">5</span></button>
+            <button class="tab-btn" onclick="showTab('stock')">📦 Stock Labo <span class="tab-badge" id="cstock">10</span></button>
+            <button class="tab-btn" onclick="showTab('afaire')">À faire <span class="tab-badge" id="c2">5</span></button>
+            <button class="tab-btn" onclick="showTab('prete')">Montures prêtes <span class="tab-badge" id="c3">0</span></button>
+            <button class="tab-btn" onclick="showTab('magasin')">📦 Magasin <span class="tab-badge" id="c6">0</span></button>
+        </div>
+
+        <div class="content">
+            <div id="arrivees" class="panel active">
+                <h2>Arrivées au laboratoire</h2>
+                <table id="arriveesTable"><thead><tr><th>Client</th><th>Modèle</th><th>Code</th><th>À livrer</th></tr></thead><tbody></tbody></table>
+            </div>
+
+            <div id="stock" class="panel">
+                <h2>📦 Stock Laboratoire</h2>
+                <div class="alert">💡 Codes : RB3447, TF5145, RX5157, HC6094, DG5027, CH3369, HB1256, VE3307, AR7165, CL001</div>
+                <div style="background: #f0f4ff; border: 2px solid #667eea; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                    <div class="form-group">
+                        <label><i class="fas fa-barcode"></i> Scanner ou code</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="scanInput" placeholder="Ex: RB3447" style="flex: 1;">
+                            <button class="btn btn-success" onclick="marquerPrete()" style="padding: 12px 24px;"><i class="fas fa-check"></i> Prête</button>
+                        </div>
+                    </div>
+                </div>
+                <h3 style="margin: 20px 0 16px;">En fabrication</h3>
+                <table id="stockTable"><thead><tr><th>#</th><th>Client</th><th>Modèle</th><th>Code</th><th>À livrer</th></tr></thead><tbody></tbody></table>
+            </div>
+
+            <div id="afaire" class="panel">
+                <h2>À fabriquer</h2>
+                <table id="afaireTable"><thead><tr><th>#</th><th>Client</th><th>Modèle</th><th>Code</th><th>À livrer</th></tr></thead><tbody></tbody></table>
+            </div>
+
+            <div id="prete" class="panel">
+                <h2>Montures prêtes</h2>
+                <table id="preteTable"><thead><tr><th>Client</th><th>Modèle</th><th>Code</th><th>À livrer</th><th>Action</th></tr></thead><tbody></tbody></table>
+            </div>
+
+            <div id="magasin" class="panel">
+                <h2>📦 Envoyées au magasin</h2>
+                <table id="magasinTable"><thead><tr><th>#</th><th>Client</th><th>Modèle</th><th>Code</th><th>Statut</th></tr></thead><tbody></tbody></table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const today = new Date();
+        const addDays = (days) => {
+            const d = new Date(today);
+            d.setDate(d.getDate() + days);
+            return d.toISOString().split('T')[0];
+        };
+
+        let data = [
+            { id: 1001, client: 'Martin Dupont', model: 'Ray-Ban RB3447', code: 'RB3447', livrer: addDays(1), status: 'ready', inStock: true, envoyeMagasin: false },
+            { id: 1002, client: 'Claire Leclerc', model: 'Tom Ford TF5145', code: 'TF5145', livrer: addDays(2), status: 'ready', inStock: true, envoyeMagasin: false },
+            { id: 1003, client: 'Michel Dupuis', model: 'Rolex RX5157', code: 'RX5157', livrer: addDays(3), status: 'ready', inStock: true, envoyeMagasin: false },
+            { id: 1004, client: 'Catherine Renaud', model: 'Coach HC6094', code: 'HC6094', livrer: addDays(5), status: 'ready', inStock: true, envoyeMagasin: false },
+            { id: 1005, client: 'Thomas Bernard', model: 'Dolce & Gabbana', code: 'DG5027', livrer: addDays(6), status: 'ready', inStock: true, envoyeMagasin: false },
+            { id: 1006, client: 'Anne-Marie Petit', model: 'Chanel CH3369', code: 'CH3369', livrer: addDays(7), status: 'ready', inStock: true, envoyeMagasin: false },
+            { id: 1007, client: 'Robert Gagnon', model: 'Hugo Boss 1256', code: 'HB1256', livrer: addDays(8), status: 'ready', inStock: true, envoyeMagasin: false },
+            { id: 1008, client: 'Valérie Lefèvre', model: 'Versace VE3307', code: 'VE3307', livrer: addDays(10), status: 'ready', inStock: true, envoyeMagasin: false },
+            { id: 1009, client: 'Philippe Mercier', model: 'Armani AR7165', code: 'AR7165', livrer: addDays(12), status: 'ready', inStock: true, envoyeMagasin: false },
+            { id: 1010, client: 'Nadine Boucher', model: 'Côté Lumière', code: 'CL001', livrer: addDays(14), status: 'ready', inStock: true, envoyeMagasin: false },
+            { id: 2001, client: 'Sophie Martin', model: 'Prada VPR54T', code: 'VPR54T', livrer: addDays(8), status: 'arrived', inStock: false, envoyeMagasin: false },
+            { id: 2002, client: 'Jean-Pierre Moreau', model: 'Oakley OX8156', code: 'OX8156', livrer: addDays(9), status: 'arrived', inStock: false, envoyeMagasin: false },
+            { id: 2003, client: 'Marie Dubois', model: 'Gucci GG0714S', code: 'GG0714S', livrer: addDays(7), status: 'arrived', inStock: false, envoyeMagasin: false },
+            { id: 2004, client: 'Pierre Leconte', model: 'Persol PO3019S', code: 'PO3019S', livrer: addDays(10), status: 'arrived', inStock: false, envoyeMagasin: false },
+            { id: 2005, client: 'Isabelle Laurent', model: 'Burberry BE2242', code: 'BE2242', livrer: addDays(11), status: 'arrived', inStock: false, envoyeMagasin: false }
+        ];
+
+        function showTab(tab) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tab).classList.add('active');
+            event.target.classList.add('active');
+            render();
+        }
+
+        function render() {
+            renderArrivees();
+            renderStock();
+            renderAfaire();
+            renderPrete();
+            renderMagasin();
+        }
+
+        function renderArrivees() {
+            const arrivees = data.filter(d => d.status === 'arrived');
+            const html = arrivees.map(d => `<tr><td>${d.client}</td><td>${d.model}</td><td><strong>${d.code}</strong></td><td>${d.livrer}</td></tr>`).join('');
+            document.querySelector('#arriveesTable tbody').innerHTML = html || '<tr><td colspan="4" style="text-align:center; padding: 20px;">Aucune</td></tr>';
+            document.getElementById('c1').textContent = arrivees.length;
+        }
+
+        function renderStock() {
+            const stock = data.filter(d => d.status === 'ready' && d.inStock);
+            const html = stock.map((d, i) => `<tr><td>${i + 1}</td><td>${d.client}</td><td>${d.model}</td><td><strong>${d.code}</strong></td><td>${d.livrer}</td></tr>`).join('');
+            document.querySelector('#stockTable tbody').innerHTML = html || '<tr><td colspan="5" style="text-align:center; padding: 20px;">Vide</td></tr>';
+            document.getElementById('cstock').textContent = stock.length;
+        }
+
+        function renderAfaire() {
+            const afaire = data.filter(d => d.status === 'arrived').sort((a, b) => new Date(a.livrer) - new Date(b.livrer));
+            const html = afaire.map((d, i) => `<tr><td>${i + 1}</td><td>${d.client}</td><td>${d.model}</td><td><strong>${d.code}</strong></td><td>${d.livrer}</td></tr>`).join('');
+            document.querySelector('#afaireTable tbody').innerHTML = html || '<tr><td colspan="5" style="text-align:center; padding: 20px;">Aucune</td></tr>';
+            document.getElementById('c2').textContent = afaire.length;
+        }
+
+        function renderPrete() {
+            const prete = data.filter(d => d.status === 'ready' && !d.inStock && !d.envoyeMagasin);
+            const html = prete.map(d => `<tr><td>${d.client}</td><td>${d.model}</td><td><strong>${d.code}</strong></td><td>${d.livrer}</td><td><button class="btn btn-success" onclick="envoyerAuMagasin(${d.id})">Envoyer</button></td></tr>`).join('');
+            document.querySelector('#preteTable tbody').innerHTML = html || '<tr><td colspan="5" style="text-align:center; padding: 20px;">Aucune</td></tr>';
+            document.getElementById('c3').textContent = prete.length;
+        }
+
+        function renderMagasin() {
+            const magasin = data.filter(d => d.envoyeMagasin);
+            const html = magasin.map((d, i) => `<tr><td>${i + 1}</td><td>${d.client}</td><td>${d.model}</td><td><strong style="background: #667eea; color: white; padding: 2px 6px; border-radius: 3px;">${d.code}</strong></td><td><span class="badge badge-ready">En magasin</span></td></tr>`).join('');
+            document.querySelector('#magasinTable tbody').innerHTML = html || '<tr><td colspan="5" style="text-align:center; padding: 20px;">Aucune</td></tr>';
+            document.getElementById('c6').textContent = magasin.length;
+        }
+
+        function marquerPrete() {
+            const code = document.getElementById('scanInput').value.trim().toUpperCase();
+            if (!code) {
+                alert('Entrez un code');
+                return;
+            }
+            const item = data.find(d => d.code.toUpperCase() === code && d.inStock);
+            if (!item) {
+                alert('Code non trouvé: ' + code);
+                document.getElementById('scanInput').value = '';
+                document.getElementById('scanInput').focus();
+                return;
+            }
+            item.inStock = false;
+            render();
+            document.getElementById('scanInput').value = '';
+            document.getElementById('scanInput').focus();
+            alert('✓ ' + item.client + ' prête');
+            showTab('prete');
+        }
+
+        function envoyerAuMagasin(id) {
+            const item = data.find(d => d.id === id);
+            item.envoyeMagasin = true;
+            render();
+            alert('✓ Envoyée au magasin');
+        }
+
+        document.getElementById('scanInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                marquerPrete();
+            }
+        });
+
+        render();
+    </script>
+</body>
+</html>

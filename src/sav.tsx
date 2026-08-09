@@ -287,6 +287,9 @@ const ic = {
   moon: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>,
   x: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s} strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>,
   alert: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></svg>,
+  clock: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><path d="M12 7v5.2l3.2 1.9" /></svg>,
+  target: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.4" /></svg>,
+  info: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><path d="M12 11.5v4.5M12 8h.01" /></svg>,
 }
 
 type Screen = 'clients' | 'proformas' | 'labo' | 'retraits' | 'suivi' | 'calendrier'
@@ -296,7 +299,7 @@ const NAV: { id: Screen; label: string; short: string; icon: (c?: string) => Rea
   { id: 'proformas', label: 'Proformas à relancer', short: 'Proformas', icon: ic.doc },
   { id: 'labo', label: 'Prêtes au labo', short: 'Labo', icon: ic.flask },
   { id: 'retraits', label: 'Récupérées', short: 'Retraits', icon: ic.bag },
-  { id: 'suivi', label: 'Suivi des relances', short: 'Suivi', icon: ic.chart },
+  { id: 'suivi', label: 'KPI', short: 'KPI', icon: ic.chart },
   { id: 'calendrier', label: 'Calendrier', short: 'Agenda', icon: ic.calendar },
 ]
 
@@ -378,12 +381,13 @@ function statusTone(status?: string): 'slate' | 'amber' | 'green' {
 }
 
 // ── Fiche client ───────────────────────────────────────────────────────────────
-function ClientCard({ client, color, onToggleCalled, onToggleNoAnswer, onObservations, onRetrieved }: {
+function ClientCard({ client, color, onToggleCalled, onToggleNoAnswer, onObservations, onMessage, onRetrieved }: {
   client: Client
   color: string
   onToggleCalled: () => void
   onToggleNoAnswer: () => void
   onObservations: (value: string) => void
+  onMessage?: (value: string) => void
   onRetrieved?: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -428,17 +432,19 @@ function ClientCard({ client, color, onToggleCalled, onToggleNoAnswer, onObserva
           <span>{client.called ? 'Appelé' : 'Marquer appelé'}</span>
         </button>
 
-        <button
-          onClick={onToggleNoAnswer}
-          className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-all active:scale-95 ${
-            client.noAnswer
-              ? 'bg-amber-600 text-white'
-              : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
-          }`}
-        >
-          {ic.muted('w-3.5 h-3.5')}
-          <span>Sans réponse</span>
-        </button>
+        {client.type === 'proformat' && (
+          <button
+            onClick={onToggleNoAnswer}
+            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-all active:scale-95 ${
+              client.noAnswer
+                ? 'bg-amber-600 text-white'
+                : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+            }`}
+          >
+            {ic.muted('w-3.5 h-3.5')}
+            <span>Sans réponse</span>
+          </button>
+        )}
 
         {onRetrieved && client.labStatus !== 'enlevée' && (
           <button
@@ -457,6 +463,16 @@ function ClientCard({ client, color, onToggleCalled, onToggleNoAnswer, onObserva
           {open ? 'Masquer' : 'Observations'}
         </button>
       </div>
+
+      {client.type === 'proformat' && client.noAnswer && onMessage && (
+        <textarea
+          value={client.message || ''}
+          onChange={e => onMessage(e.target.value)}
+          rows={2}
+          placeholder="Message à laisser…"
+          className={`${INPUT} resize-none`}
+        />
+      )}
 
       {open && (
         <textarea
@@ -583,8 +599,152 @@ function CalendrierScreen({ clients }: { clients: Client[] }) {
   )
 }
 
-// ── Suivi ──────────────────────────────────────────────────────────────────────
+// ── Suivi (KPI) ─────────────────────────────────────────────────────────────────
+const GAUGE_R = 66
+const GAUGE_C = 2 * Math.PI * GAUGE_R
+/** 2 px de fond entre la part et la piste, comme les anneaux du poste Vendeuse : c'est
+ *  le vide qui sépare, pas un contour. */
+const GAUGE_GAP = 2
+
+/** Jauge de conversion, même géométrie que le `Donut` de vendeuse.tsx : départ à midi,
+ *  bouts francs (un `strokeLinecap` rond déborderait de 10 px sur un trait de 20 et
+ *  gonflerait les petits pourcentages), piste `slate-100/700` qui suit le thème.
+ *
+ *  Le chiffre du centre reste en encre neutre : un vert de 26 px sur fond blanc se lit
+ *  mal, l'identité de la part est portée par la légende à côté. */
+function Gauge({ percent, caption }: { percent: number; caption: string }) {
+  const value = Math.max(0, Math.min(100, percent))
+  const drawn = Math.max((value / 100) * GAUGE_C - GAUGE_GAP, 0)
+
+  return (
+    <svg
+      viewBox="0 0 168 168"
+      className="w-40 h-40 flex-shrink-0"
+      role="img"
+      aria-label={`${caption} : ${value} %`}
+    >
+      <circle cx="84" cy="84" r={GAUGE_R} fill="none" strokeWidth={20} className="stroke-slate-100 dark:stroke-slate-700" />
+      {drawn > 0 && (
+        <circle
+          cx="84"
+          cy="84"
+          r={GAUGE_R}
+          fill="none"
+          strokeWidth={20}
+          strokeDasharray={`${drawn} ${GAUGE_C}`}
+          transform="rotate(-90 84 84)"
+          className="stroke-[#16a34a] transition-all duration-700"
+        />
+      )}
+      <text x="84" y="82" textAnchor="middle" className="fill-slate-900 dark:fill-white text-[26px] font-black tabular-nums">
+        {value} %
+      </text>
+      <text x="84" y="100" textAnchor="middle" className="fill-slate-400 text-[11px]">{caption}</text>
+    </svg>
+  )
+}
+
+/** Titre de carte : l'icône en couleur d'accent, sans pastille. La pastille `w-10` de la
+ *  charte appartient au chiffre clé ; la reprendre ici mettrait deux aplats de couleur
+ *  dans la même carte. */
+function CardTitle({ icon, color, children }: {
+  icon: (c?: string) => React.ReactElement; color: string; children: React.ReactNode
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <span className="flex-shrink-0" style={{ color }}>{icon('w-4 h-4')}</span>
+      <h2 className="text-sm font-bold text-slate-900 dark:text-white">{children}</h2>
+    </div>
+  )
+}
+
+type Tone = 'good' | 'warn' | 'bad' | 'idle'
+
+const TONES: Record<Tone, { color: string; icon: (c?: string) => React.ReactElement }> = {
+  good: { color: '#16a34a', icon: ic.checkCircle },
+  warn: { color: '#d97706', icon: ic.alert },
+  bad: { color: '#dc2626', icon: ic.alert },
+  idle: { color: '#94a3b8', icon: ic.info },
+}
+
+/** L'analyse porte une icône **et** une phrase : la couleur seule ne dit rien à qui ne
+ *  la distingue pas, et ce poste se consulte au téléphone, souvent en plein soleil.
+ *  Remplace les émojis ✅/⚠️/❌, qui rendaient différemment d'un appareil à l'autre. */
+function Insight({ tone, title, children }: { tone: Tone; title: string; children: React.ReactNode }) {
+  const { color, icon } = TONES[tone]
+  return (
+    <div className="mt-4 flex items-start gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-900/40">
+      <span className="mt-0.5 flex-shrink-0" style={{ color }}>{icon('w-5 h-5')}</span>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">{title}</p>
+        <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">{children}</p>
+      </div>
+    </div>
+  )
+}
+
+/** Trois parts d'un même dénominateur, en longueurs : l'œil compare des barres, pas des
+ *  fractions écrites. Les classes sont écrites en toutes lettres — le scanner de
+ *  Tailwind v4 lit le source, une classe assemblée à l'exécution ne serait pas générée —
+ *  et portent leur variante sombre quand le 600 ne tient pas 3:1 sur `slate-800`. */
+function Meter({ label, value, total, bar }: {
+  label: string; value: number; total: number; bar: string
+}) {
+  const percent = total === 0 ? 0 : Math.round((value / total) * 100)
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="truncate text-sm text-slate-700 dark:text-slate-200">{label}</span>
+        <span className="flex-shrink-0 text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+          {fmt(value)}
+          <span className="font-medium text-slate-400"> / {fmt(total)}</span>
+          <span className="ml-2 inline-block w-9 text-right text-xs font-medium text-slate-400">{percent} %</span>
+        </span>
+      </div>
+      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+        <div className={`h-full rounded-full transition-all duration-700 ${bar}`} style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  )
+}
+
+/** Étendue des délais observés, avec la moyenne posée dessus. Trois chiffres côte à côte
+ *  ne disent pas si la moyenne penche vers le bas ou vers le haut de la fourchette —
+ *  c'est pourtant ça qui indique si un client typique paie vite ou traîne. */
+function RangeStrip({ min, mean, max }: { min: number; mean: number; max: number }) {
+  const span = max - min
+  const at = span <= 0 ? 50 : ((mean - min) / span) * 100
+
+  return (
+    <div className="mt-4" role="img" aria-label={`Délais de ${fmt(min)} à ${fmt(max)} jours, moyenne ${fmt(mean)} jours`}>
+      <div className="relative h-2 rounded-full bg-slate-100 dark:bg-slate-700">
+        <span
+          className="absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2563eb] dark:bg-[#3b82f6]"
+          style={{ left: `${at}%` }}
+        />
+      </div>
+      {/* Seules les bornes sont écrites. Une mention « moyenne » centrée en dur
+          mentirait dès que le repère penche d'un côté ; sa valeur est déjà dans la
+          tuile au-dessus, ici c'est sa position qui informe. */}
+      <div className="mt-1.5 flex justify-between text-[11px] tabular-nums text-slate-400">
+        <span>{fmt(min)} j</span>
+        <span>{fmt(max)} j</span>
+      </div>
+    </div>
+  )
+}
+
+/** Mêmes seuils que l'analyse de timing : ce qui est dit en toutes lettres sous le
+ *  graphique doit se retrouver dans la couleur des fiches, sinon les deux se contredisent. */
+function delaiColor(days: number | null) {
+  if (days === null) return '#94a3b8'
+  if (days <= 7) return '#16a34a'
+  if (days <= 14) return '#d97706'
+  return '#dc2626'
+}
+
 function SuiviScreen({ clients }: { clients: Client[] }) {
+  const totalProformats = clients.filter(c => c.type === 'proformat')
   const relances = clients.filter(c => c.type === 'proformat' && c.relanceDate)
   const payees = relances.filter(c => c.paymentDate)
 
@@ -593,30 +753,159 @@ function SuiviScreen({ clients }: { clients: Client[] }) {
     .filter((n): n is number => n !== null)
 
   const moyenne = delais.length ? Math.round(delais.reduce((a, b) => a + b, 0) / delais.length) : 0
+  const minDelai = delais.length ? Math.min(...delais) : 0
+  const maxDelai = delais.length ? Math.max(...delais) : 0
   const conversion = relances.length ? Math.round((payees.length / relances.length) * 100) : 0
+  const appeles = relances.filter(c => c.called).length
+  const sansReponse = relances.filter(c => c.noAnswer).length
+
+  const aRelancer = relances.length - appeles
+
+  // Le cas « aucune relance » se teste sur le nombre de relances, pas sur un taux à 0 :
+  // zéro paiement sur trente relances donnait « Commencez les relances ! » alors que
+  // c'est exactement le contraire qu'il fallait lire.
+  const conversionInsight: { tone: Tone; text: string } = relances.length === 0
+    ? { tone: 'idle', text: "Aucune relance lancée : le taux se calculera dès la première." }
+    : conversion >= 70
+      ? { tone: 'good', text: 'Excellent taux : les relances aboutissent, gardez ce rythme.' }
+      : conversion >= 50
+        ? { tone: 'warn', text: "Bon taux, avec de la marge — reprenez plus tôt les fiches restées sans réponse." }
+        : { tone: 'bad', text: "Taux faible : intensifiez les relances et variez l'heure des appels." }
+
+  const timingInsight: { tone: Tone; text: string } = delais.length === 0
+    ? { tone: 'idle', text: "Aucun paiement après relance : pas encore de délai à mesurer." }
+    : moyenne <= 7
+      ? { tone: 'good', text: 'Les clients décident vite. Le rythme de relance actuel fonctionne.' }
+      : moyenne <= 14
+        ? { tone: 'warn', text: 'Délai normal. Une relance à J+3 puis J+7 accélère la décision.' }
+        : { tone: 'bad', text: "Délai long : les clients hésitent. Proposez un paiement échelonné ou un essai." }
+
+  const appelInsight: { tone: Tone; text: string } = relances.length === 0
+    ? { tone: 'idle', text: 'Aucune fiche en attente de relance.' }
+    : aRelancer === 0
+      ? { tone: 'good', text: 'Toutes les fiches en attente ont été appelées.' }
+      : { tone: 'warn', text: `${fmt(aRelancer)} fiche${aRelancer > 1 ? 's' : ''} reste${aRelancer > 1 ? 'nt' : ''} à appeler.` }
+
+  // Les plus récents d'abord : un journal de relances se lit par le haut.
+  const payeesRecentes = [...payees].sort((a, b) =>
+    String(b.paymentDate || '').localeCompare(String(a.paymentDate || '')),
+  )
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile label="Relances passées" value={fmt(relances.length)} color="#d97706" icon={ic.phone} />
-        <StatTile label="Payées après relance" value={fmt(payees.length)} color="#16a34a" icon={ic.checkCircle} />
-        <StatTile label="Taux de conversion" value={`${conversion} %`} color="#2563eb" icon={ic.chart} />
+    <div className="space-y-4">
+      {/* L'entonnoir dans l'ordre où il se parcourt : le fichier, ce qu'on a relancé, ce
+          qui a payé, et le taux qui en sort.
+
+          Bleu → ambre → vert → cyan : ordre vérifié au validateur de palette sur les deux
+          fonds de carte. La pire paire adjacente est vert/ambre à ΔE 6,2 en protanopie —
+          dans la bande basse, donc légale seulement parce que chaque tuile porte en clair
+          son libellé, son icône et sa note. Le rouge a été écarté : collé au vert il
+          tombait à ΔE 5,0 en deutéranopie, sous le plancher. */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
-          label="Délai moyen"
-          value={delais.length ? `${moyenne} j` : '—'}
-          color="#9333ea"
-          icon={ic.calendar}
-          note={delais.length ? `de ${Math.min(...delais)} à ${Math.max(...delais)} jours` : undefined}
+          label="Proformas en attente"
+          value={fmt(totalProformats.length)}
+          color="#2563eb"
+          icon={ic.doc}
+          note="le fichier à suivre"
+        />
+        <StatTile
+          label="Relancées"
+          value={fmt(relances.length)}
+          color="#d97706"
+          icon={ic.phone}
+          note={totalProformats.length ? `${Math.round((relances.length / totalProformats.length) * 100)} % du fichier` : '—'}
+        />
+        <StatTile
+          label="Payées après relance"
+          value={fmt(payees.length)}
+          color="#16a34a"
+          icon={ic.checkCircle}
+          note={`sur ${fmt(relances.length)} relancée${relances.length > 1 ? 's' : ''}`}
+        />
+        <StatTile
+          label="Taux de conversion"
+          value={`${conversion} %`}
+          color="#0891b2"
+          icon={ic.chart}
+          note="des relances aboutissent"
         />
       </div>
 
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardTitle icon={ic.chart} color="#16a34a">Conversion des relances</CardTitle>
+          <div className="flex flex-col items-center gap-5 sm:flex-row">
+            <Gauge percent={conversion} caption="converties" />
+
+            {/* La légende est le canal d'identité fiable : la couleur seule ne suffit
+                jamais, et la pastille grise dit « reliquat », pas « catégorie ». */}
+            <ul className="w-full min-w-0 space-y-1 sm:flex-1">
+              <li className="flex items-center gap-2.5 px-2 py-1.5">
+                <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-[#16a34a]" />
+                <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">Payées</span>
+                <span className="text-sm font-bold tabular-nums text-slate-900 dark:text-white">{fmt(payees.length)}</span>
+              </li>
+              <li className="flex items-center gap-2.5 px-2 py-1.5">
+                <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-[#94a3b8]" />
+                <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">Toujours en attente</span>
+                <span className="text-sm font-bold tabular-nums text-slate-900 dark:text-white">{fmt(relances.length - payees.length)}</span>
+              </li>
+            </ul>
+          </div>
+
+          <Insight tone={conversionInsight.tone} title="Analyse">{conversionInsight.text}</Insight>
+        </Card>
+
+        <Card>
+          <CardTitle icon={ic.target} color="#2563eb">Efficacité des relances</CardTitle>
+          {/* Trois parts du même dénominateur : elles se comparent en longueur, là où
+              les quatre lignes de chiffres d'avant obligeaient à diviser de tête. */}
+          <div className="space-y-3">
+            <Meter label="Clients appelés" value={appeles} total={relances.length} bar="bg-[#2563eb] dark:bg-[#3b82f6]" />
+            <Meter label="Paiements reçus" value={payees.length} total={relances.length} bar="bg-[#16a34a]" />
+            <Meter label="Restés sans réponse" value={sansReponse} total={relances.length} bar="bg-[#d97706]" />
+          </div>
+
+          <Insight tone={appelInsight.tone} title="À faire">{appelInsight.text}</Insight>
+        </Card>
+      </div>
+
+      <Card>
+        <CardTitle icon={ic.clock} color="#9333ea">Délai entre la relance et le paiement</CardTitle>
+        {/* Ordonnés du plus court au plus long : la ligne se lit comme l'échelle que la
+            barre reprend en dessous. */}
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            { label: 'Plus rapide', value: minDelai, color: '#16a34a' },
+            { label: 'Moyenne', value: moyenne, color: '#2563eb' },
+            { label: 'Plus long', value: maxDelai, color: '#d97706' },
+          ].map(item => (
+            <div key={item.label} className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900/40">
+              <p className="text-xs text-slate-400 dark:text-slate-500">{item.label}</p>
+              <p className="text-3xl font-black tabular-nums" style={{ color: delais.length ? item.color : '#94a3b8' }}>
+                {delais.length ? fmt(item.value) : '—'}
+                {delais.length > 0 && <span className="text-base font-bold text-slate-400"> j</span>}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {delais.length > 0 && <RangeStrip min={minDelai} mean={moyenne} max={maxDelai} />}
+
+        <Insight tone={timingInsight.tone} title="Timing">{timingInsight.text}</Insight>
+      </Card>
+
+      {/* Section "Relances payées" */}
       <div>
-        <SectionTitle>Relances payées</SectionTitle>
-        {payees.length === 0 ? (
+        <SectionTitle action={<span className="text-xs text-slate-500 dark:text-slate-400">{fmt(payees.length)} fiche{payees.length > 1 ? 's' : ''}</span>}>
+          Relances payées
+        </SectionTitle>
+        {payeesRecentes.length === 0 ? (
           <EmptyState>Aucune relance n'a encore abouti.</EmptyState>
         ) : (
           <div className="space-y-2">
-            {payees.map(client => {
+            {payeesRecentes.map(client => {
               const delai = daysBetween(client.relanceDate, client.paymentDate)
               return (
                 <Card key={client.id} className="flex items-center gap-3">
@@ -627,8 +916,14 @@ function SuiviScreen({ clients }: { clients: Client[] }) {
                       relancé le {fmtDate(client.relanceDate)} · payé le {fmtDate(client.paymentDate)}
                     </p>
                   </div>
-                  <span className="flex-shrink-0 text-sm font-bold tabular-nums" style={{ color: '#16a34a' }}>
-                    {delai !== null ? `${delai} j` : '—'}
+                  {/* Le délai porte la couleur de son seuil : la fiche qui a traîné se
+                      repère sans relire les dates. Le nombre reste écrit, la couleur
+                      n'est qu'un renfort. */}
+                  <span
+                    className="flex-shrink-0 text-sm font-bold tabular-nums"
+                    style={{ color: delaiColor(delai) }}
+                  >
+                    {delai !== null ? `${fmt(delai)} j` : '—'}
                   </span>
                 </Card>
               )
@@ -852,6 +1147,14 @@ function SavPage() {
     }, 600)
   }
 
+  function setMessage(client: Client, value: string) {
+    patchLocal(client.id, { message: value })
+    window.clearTimeout(observationTimers.current[client.id])
+    observationTimers.current[client.id] = window.setTimeout(() => {
+      void push(client.id, { message: value })
+    }, 600)
+  }
+
   const anciens = clients.filter(c => c.type === 'ancien')
   const proformas = clients.filter(c => c.type === 'proformat' && !c.paymentDate)
   const labo = clients.filter(c => c.labStatus === 'prêt')
@@ -928,6 +1231,7 @@ function SavPage() {
                         onToggleCalled={() => toggleCalled(client)}
                         onToggleNoAnswer={() => toggleNoAnswer(client)}
                         onObservations={value => setObservations(client, value)}
+                        onMessage={value => setMessage(client, value)}
                         onRetrieved={liste.retrievable ? () => markRetrieved(client) : undefined}
                       />
                     ))}

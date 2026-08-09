@@ -190,6 +190,10 @@ interface ProformaItem {
   color?: string
   unit_price?: number | string
   is_pending?: boolean
+  // La décision de la Caisse sur cette ligne : VENDUE ou RETOUR_PRESENTOIR. Absente tant
+  // que la ligne attend son arbitrage.
+  outcome?: string
+  settled_at?: string
 }
 
 interface Proforma {
@@ -200,6 +204,7 @@ interface Proforma {
   status?: string
   note?: string
   created_at?: string
+  settled_at?: string
   total_amount?: number | string
   items?: ProformaItem[]
 }
@@ -213,6 +218,20 @@ interface Movement {
   to_station_name?: string
   user_first_name?: string
   user_last_name?: string
+}
+
+/** Miroir de `models.Claim` côté serveur. `detail` et `barcode` sont `omitempty` en Go :
+ *  ils manquent purement du JSON quand ils sont vides, d'où l'optionnel partout. */
+interface Claim {
+  id: number
+  station_id?: number
+  client_name?: string
+  barcode?: string
+  motif?: string
+  detail?: string
+  status?: string
+  created_at?: string
+  updated_at?: string
 }
 
 type Screen = 'dashboard' | 'proforma' | 'ventes' | 'scan' | 'reclamation' | 'stats'
@@ -265,16 +284,6 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
   )
 }
 
-function StatTile({ label, value, color, note }: { label: string; value: React.ReactNode; color: string; note?: string }) {
-  return (
-    <Card>
-      <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">{label}</p>
-      <p className="text-3xl font-black tabular-nums mt-1 leading-tight" style={{ color }}>{value}</p>
-      {note && <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">{note}</p>}
-    </Card>
-  )
-}
-
 function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between mb-2.5">
@@ -303,37 +312,6 @@ interface Slice {
   stroke: string
   swatch: string
 }
-
-/** Ordre catégoriel figé : une teinte suit la catégorie, jamais son rang. Si un type
- *  de geste disparaît du filtre, les survivants gardent leur couleur.
- *
- *  L'ordre n'est pas décoratif — bleu → vert → violet → ambre → cyan éloigne le cyan
- *  du violet, la paire la plus fragile : la pire paire adjacente passe de ΔE 11,5 à
- *  19,0 en deutéranopie/protanopie. Vérifié au validateur sur les deux fonds de carte
- *  (blanc et `slate-800`).
- *
- *  Les variantes sombres existent parce que le 600 ne tient pas sur `slate-800` :
- *  bleu 2,83:1 et violet 2,72:1, sous le seuil de 3:1. Vert, ambre et cyan passent
- *  dans les deux modes, d'où l'absence de `dark:` sur eux. */
-const CATEGORICAL: { stroke: string; swatch: string }[] = [
-  { stroke: 'stroke-[#2563eb] dark:stroke-[#3b82f6]', swatch: 'bg-[#2563eb] dark:bg-[#3b82f6]' },
-  { stroke: 'stroke-[#16a34a]', swatch: 'bg-[#16a34a]' },
-  { stroke: 'stroke-[#9333ea] dark:stroke-[#a855f7]', swatch: 'bg-[#9333ea] dark:bg-[#a855f7]' },
-  { stroke: 'stroke-[#d97706]', swatch: 'bg-[#d97706]' },
-  { stroke: 'stroke-[#0891b2]', swatch: 'bg-[#0891b2]' },
-]
-
-/** Le reliquat, hors palette catégorielle : un gris de mise en retrait dit « ce n'est
- *  pas une catégorie de plus ». Il tombe sous le plancher de chroma du validateur —
- *  c'est voulu, et c'est pourquoi il ne sert qu'à « Autre », jamais à une vraie part. */
-const RESIDUAL_SLICE = { stroke: 'stroke-[#94a3b8]', swatch: 'bg-[#94a3b8]' }
-
-/** Au-delà, les parts deviennent des filets illisibles et les teintes se confondent
- *  au daltonisme : la queue part dans « Autre ». */
-const DONUT_MAX_SLICES = 5
-
-/** Pistes grises affichées à la place du graphique « Par jour » quand il n'y a rien. */
-const EMPTY_DAY_ROWS = [0, 1, 2, 3, 4, 5, 6]
 
 const DONUT_R = 66
 const DONUT_C = 2 * Math.PI * DONUT_R
@@ -690,14 +668,68 @@ interface StoreData {
   sold: Glass[]
   proformas: Proforma[]
   movements: Movement[]
+  claims: Claim[]
 }
 
-const EMPTY_DATA: StoreData = { presentoir: [], reserved: [], sold: [], proformas: [], movements: [] }
+const EMPTY_DATA: StoreData = { presentoir: [], reserved: [], sold: [], proformas: [], movements: [], claims: [] }
+
+/** Les ventes reconstituées depuis les proformas encaissées.
+ *
+ *  Une monture encaissée ne reste pas au statut VENDUE : la Caisse l'expédie dans la foulée
+ *  au Laboratoire (VENDUE → EN_TRANSIT → EN_LABORATOIRE, sales_and_reserves_service.go
+ *  CreateSale). `/inventory/glasses?status=VENDUE` ne la renvoie donc plus, et l'onglet
+ *  Ventes affichait « 0 » en face d'une proforma pourtant réglée. La vente, elle, est
+ *  gravée sur la ligne de proforma : `outcome = VENDUE`.
+ *
+ *  Une ligne rendue au client (`RETOUR_PRESENTOIR`) n'est pas une vente. Quand l'outcome
+ *  manque — vieille ligne tranchée avant la colonne — une proforma REGLEE à une seule
+ *  monture ne peut être qu'une vente : le serveur ne règle que si une monture au moins a
+ *  été encaissée, il annule sinon (CloseIfComplete).
+ */
+function soldFromProformas(proformas: Proforma[], fiches: Map<string, Glass>): Glass[] {
+  const ventes: Glass[] = []
+
+  for (const proforma of proformas) {
+    const items = proforma.items || []
+    const reglee = String(proforma.status || '').toUpperCase() === 'REGLEE'
+
+    for (const item of items) {
+      const outcome = String(item.outcome || '').toUpperCase()
+      const vendue = outcome === 'VENDUE'
+        || (!outcome && reglee && items.length === 1 && item.is_pending === false)
+      if (!vendue) continue
+
+      const barcode = item.barcode || ''
+      const fiche = barcode ? fiches.get(barcode) : undefined
+      ventes.push({
+        // La fiche monture porte la photo et les attributs que la ligne de proforma ne
+        // recopie pas. Ce que la ligne dit prime : c'est l'état du jour de la vente.
+        ...(fiche || {}),
+        barcode,
+        reference: item.reference || fiche?.reference,
+        brand: item.brand || fiche?.brand,
+        shape: item.shape || fiche?.shape,
+        color: item.color || fiche?.color,
+        // ?? et non || : une monture offerte est facturée 0, ce n'est pas un prix manquant.
+        price: item.unit_price ?? fiche?.price,
+        status: 'VENDUE',
+        sold_at: item.settled_at || proforma.settled_at || proforma.created_at,
+      })
+    }
+  }
+
+  return ventes
+}
 
 function useStoreData(stationId: number | null) {
   const [data, setData] = useState<StoreData>(EMPTY_DATA)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // Les réclamations ont leur propre erreur, à l'écart du bandeau global : le serveur
+  // n'expose que la création (`POST /inventory/claims`), la lecture n'a pas encore de
+  // route. Comptée avec les autres, son échec afficherait « 1 liste indisponible » en
+  // permanence sur tout le poste, pour une table que personne n'a ouverte.
+  const [claimsError, setClaimsError] = useState('')
 
   async function load() {
     setLoading(true)
@@ -732,12 +764,44 @@ function useStoreData(stationId: number | null) {
       return complete ? { ...proforma, ...complete } : proforma
     })
 
+    // Les fiches encore en rayon servent de source pour la photo et les attributs des
+    // ventes reconstituées : la ligne de proforma ne recopie pas tout.
+    const fiches = new Map<string, Glass>()
+    for (const glass of [...glasses(presentoirR), ...glasses(reservedR)]) {
+      if (glass.barcode) fiches.set(glass.barcode, glass)
+    }
+
+    // La liste VENDUE de l'API d'abord : c'est la fiche à jour. Les proformas encaissées
+    // complètent, sans jamais doubler une monture déjà comptée.
+    const vendues = glasses(soldR)
+    const comptees = new Set(vendues.map(glass => glass.barcode))
+    const encaissees = soldFromProformas(proformas, fiches).filter(vente => {
+      if (!vente.barcode || comptees.has(vente.barcode)) return false
+      comptees.add(vente.barcode)
+      return true
+    })
+
+    // Le serveur peut nommer la liste `claims` ou la rendre à la racine de `data` :
+    // on accepte les deux plutôt que d'afficher une table vide sur une clé mal devinée.
+    const [claimsR] = await Promise.allSettled([apiFetch('/inventory/claims')])
+    const claims: Claim[] = claimsR.status === 'fulfilled'
+      ? (claimsR.value?.data?.claims || claimsR.value?.data || [])
+      : []
+    // Le message du serveur est repris tel quel derrière la phrase : « Erreur 404 » dit
+    // au moins que la route manque, là où un « erreur » seul n'oriente personne.
+    setClaimsError(
+      claimsR.status === 'rejected'
+        ? `Le suivi des réclamations n'a pas pu être chargé. ${claimsR.reason?.message || ''}`.trim()
+        : '',
+    )
+
     setData({
       presentoir: glasses(presentoirR),
       reserved: glasses(reservedR),
-      sold: glasses(soldR),
+      sold: [...vendues, ...encaissees],
       proformas,
       movements: movementsR.status === 'fulfilled' ? (movementsR.value?.data?.movements || []) : [],
+      claims: Array.isArray(claims) ? claims : [],
     })
 
     const failed = results.filter(r => r.status === 'rejected').length
@@ -748,7 +812,7 @@ function useStoreData(stationId: number | null) {
 
   useEffect(() => { void load() }, [stationId])
 
-  return { data, loading, error, reload: load }
+  return { data, loading, error, claimsError, reload: load }
 }
 
 // ── Tableau de bord ────────────────────────────────────────────────────────────
@@ -869,6 +933,7 @@ function DashboardScreen({ data, user, onNavigate, onOpenTable }: {
   const pendingProformas = data.proformas.filter(p => String(p.status || '').toUpperCase() === 'EN_ATTENTE')
   const soldValue = data.sold.reduce((sum, g) => sum + (Number(g.price) || 0), 0)
   const clients = buildClients(data.proformas)
+  const openClaims = data.claims.filter(c => String(c.status || '').toUpperCase() === 'OUVERTE')
   const clientsPending = clients.filter(c => c.pending > 0).length
 
   return (
@@ -894,8 +959,8 @@ function DashboardScreen({ data, user, onNavigate, onOpenTable }: {
           label="Suivi de réclamation"
           color="#dc2626"
           icon={ic.alert}
-          primary="—"
-          note="En attente de l'API"
+          primary={fmt(data.claims.length)}
+          note={openClaims.length ? `${openClaims.length} ouverte${openClaims.length > 1 ? 's' : ''}` : 'Aucune ouverte'}
           onClick={() => onOpenTable('reclamations')}
         />
         <DashTile
@@ -968,6 +1033,29 @@ const SOLD_COLUMNS: Column<Glass>[] = [
   { key: 'soldAt', label: 'Vendue le', value: g => fmtDate(g.sold_at || g.updated_at || g.created_at) },
 ]
 
+/** Le serveur ne connaît que OUVERTE et TRAITEE (`models.Claim`). Un statut inconnu
+ *  ressort tel quel, souligné par le remplacement des tirets bas : mieux vaut un mot
+ *  brut à l'écran qu'une case vide si la liste s'enrichit côté serveur. */
+const CLAIM_STATUS: Record<string, string> = { OUVERTE: 'Ouverte', TRAITEE: 'Traitée' }
+
+const CLAIM_COLUMNS: Column<Claim>[] = [
+  { key: 'date', label: 'Date', value: c => fmtDate(c.created_at) },
+  { key: 'client', label: 'Client', value: c => c.client_name || '' },
+  { key: 'ref', label: 'Monture', value: c => c.barcode || '' },
+  { key: 'motif', label: 'Motif', value: c => c.motif || '' },
+  // Le détail est saisi en texte libre : il compte dans l'export, et la recherche du
+  // tableau porte dessus.
+  { key: 'detail', label: 'Détail', value: c => c.detail || '' },
+  {
+    key: 'status',
+    label: 'Statut',
+    value: c => {
+      const raw = String(c.status || '').toUpperCase()
+      return CLAIM_STATUS[raw] || raw.replace(/_/g, ' ')
+    },
+  },
+]
+
 // ── Lignes de proforma ─────────────────────────────────────────────────────────
 /** Une ligne par monture, pas par proforma : la colonne « Réf lunette » doit pouvoir
  *  ouvrir une monture précise, ce qui n'aurait pas de sens sur un devis qui en
@@ -982,9 +1070,19 @@ interface ProformaLine {
   status: string
 }
 
+/** Le sort d'une ligne de proforma, en un mot.
+ *
+ *  `outcome` tranche dès que la Caisse est passée. Le rattachement aux ventes reste utile
+ *  en second : une monture encaissée ne garde pas le statut VENDUE (elle part au
+ *  Laboratoire), et soldFromProformas la remet dans la liste des ventes. */
+function ligneStatut(item: ProformaItem, soldBarcodes: Set<string>) {
+  const outcome = String(item.outcome || '').toUpperCase()
+  if (outcome === 'RETOUR_PRESENTOIR') return 'Rendu'
+  if (outcome === 'VENDUE' || (item.barcode ? soldBarcodes.has(item.barcode) : false)) return 'Vendu'
+  return item.is_pending === false ? 'Soldé' : 'En attente'
+}
+
 function buildProformaLines(proformas: Proforma[], sold: Glass[]): ProformaLine[] {
-  // L'API n'a pas de champ « issue » par ligne : une ligne close est dite vendue si sa
-  // monture se retrouve parmi les montures au statut VENDUE, soldée sinon.
   const soldBarcodes = new Set(sold.map(glass => glass.barcode))
   const lines: ProformaLine[] = []
 
@@ -1005,7 +1103,7 @@ function buildProformaLines(proformas: Proforma[], sold: Glass[]): ProformaLine[
         ref: item.reference || barcode,
         barcode,
         amount: Number(item.unit_price) || 0,
-        status: soldBarcodes.has(barcode) ? 'Vendu' : item.is_pending === false ? 'Soldé' : 'En attente',
+        status: ligneStatut(item, soldBarcodes),
       })
     }
   }
@@ -1083,8 +1181,7 @@ function buildVenteLignes(data: StoreData): VenteLigne[] {
         proforma: code,
         client,
         montant: Number(item.unit_price) || 0,
-        // Même déduction que buildProformaLines() : l'API n'a pas d'issue par ligne.
-        statut: soldBarcodes.has(barcode) ? 'Vendu' : item.is_pending === false ? 'Soldé' : 'En attente',
+        statut: ligneStatut(item, soldBarcodes),
         faitPar: operateur.get(barcode) || '',
       })
     }
@@ -1326,11 +1423,12 @@ type Detail =
   | { kind: 'client'; name: string }
   | { kind: 'glass'; barcode: string }
 
-function TableScreen({ table, data, user, stationId, onBack }: {
+function TableScreen({ table, data, user, stationId, claimsError, onBack }: {
   table: TableId
   data: StoreData
   user: any
   stationId: number | null
+  claimsError: string
   onBack: () => void
 }) {
   const stamp = new Date().toISOString().slice(0, 10)
@@ -1412,25 +1510,17 @@ function TableScreen({ table, data, user, stationId, onBack }: {
 
       {table === 'reclamations' && (
         <>
-          <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 flex items-start gap-3">
-            <span className="text-amber-600 flex-shrink-0">{ic.alert('w-5 h-5')}</span>
-            <div>
-              <p className="text-sm font-semibold text-amber-900 dark:text-amber-300">Aucune donnée à afficher</p>
-              <p className="mt-1 text-xs text-amber-800 dark:text-amber-400 leading-relaxed">
-                L'API n'expose aucun endpoint de réclamation : il n'y a rien à lire, donc rien à exporter.
-                Le tableau se remplira dès que la route existera côté serveur.
-              </p>
+          {/* Une lecture qui échoue n'est pas « zéro réclamation » : sans ce mot, la table
+              vide laisserait croire que le magasin n'en a jamais reçu. */}
+          {claimsError && (
+            <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 flex items-start gap-3">
+              <span className="text-amber-600 flex-shrink-0">{ic.alert('w-5 h-5')}</span>
+              <p className="text-sm text-amber-900 dark:text-amber-300">{claimsError}</p>
             </div>
-          </div>
+          )}
           <DataTable
-            columns={[
-              { key: 'date', label: 'Date', value: () => '' },
-              { key: 'client', label: 'Client', value: () => '' },
-              { key: 'ref', label: 'Monture', value: () => '' },
-              { key: 'motif', label: 'Motif', value: () => '' },
-              { key: 'status', label: 'Statut', value: () => '' },
-            ]}
-            rows={[]}
+            columns={CLAIM_COLUMNS}
+            rows={data.claims}
             filename={`reclamations-${stamp}`}
             empty="Aucune réclamation enregistrée."
           />
@@ -2852,10 +2942,10 @@ function ScanScreen({ data, stationId }: { data: StoreData; stationId: number | 
 }
 
 // ── Réclamation ────────────────────────────────────────────────────────────────
-/** L'API n'expose aucun endpoint de réclamation : dans direction.js, « Réclamations »
- *  n'est qu'une entrée de menu. L'écran est donc construit, mais l'envoi ne peut pas
- *  partir — le dire vaut mieux qu'un bouton qui échoue en silence. */
-function ReclamationScreen({ stationId }: { stationId: number | null }) {
+/** L'envoi part sur `POST /inventory/claims`. La lecture, elle, n'a pas encore de route
+ *  côté serveur (`claims` n'enregistre que `Create`) : le tableau de bord la demande
+ *  quand même, pour se remplir tout seul le jour où elle existera. */
+function ReclamationScreen({ stationId, onDone }: { stationId: number | null; onDone: () => void }) {
   const [client, setClient] = useState('')
   const [barcode, setBarcode] = useState('')
   const [motif, setMotif] = useState('')
@@ -2889,6 +2979,9 @@ function ReclamationScreen({ stationId }: { stationId: number | null }) {
       setBarcode('')
       setMotif('')
       setDetail('')
+      // Le suivi doit compter celle qu'on vient de saisir, sans attendre un retour au
+      // tableau de bord.
+      onDone()
     } catch (err: any) {
       setError(err?.message || 'Impossible d’enregistrer la réclamation.')
     } finally {
@@ -2941,23 +3034,6 @@ function ReclamationScreen({ stationId }: { stationId: number | null }) {
 }
 
 // ── Mes stats ──────────────────────────────────────────────────────────────────
-/** Une monture vendue ou en réserve, à plat. L'API les sert en deux listes, mais
- *  elles se lisent ensemble : le donut les résume, la table les détaille. */
-interface EtatLigne {
-  glass: Glass
-  etat: string
-}
-
-const ETAT_COLUMNS: Column<EtatLigne>[] = [
-  { key: 'etat', label: 'État', value: r => r.etat },
-  { key: 'ref', label: 'Référence', value: r => glassRef(r.glass) },
-  { key: 'brand', label: 'Marque', value: r => r.glass.brand || '' },
-  { key: 'gamme', label: 'Gamme', value: r => getGamme(r.glass.price) },
-  { key: 'barcode', label: 'Code-barres', value: r => r.glass.barcode || '' },
-  { key: 'price', label: 'Prix', value: r => fmtFCFA(r.glass.price), numeric: true },
-  { key: 'date', label: 'Date', value: r => fmtDate(r.glass.sold_at || r.glass.updated_at || r.glass.created_at) },
-]
-
 /** Les montures vendues ne portent pas de vendeuse (pas de champ sold_by) : la seule
  *  attribution nominative de l'API est celle des mouvements. Ces chiffres comptent
  *  donc des gestes enregistrés, pas des ventes signées. */
@@ -2966,16 +3042,8 @@ function StatsScreen({ data, user }: { data: StoreData; user: any }) {
 
   const mine = useMemo(() => myMovements(data.movements, user), [data.movements, user])
 
-  // Le donut compte les montures, la table les détaille, les deux montants viennent
-  // des mêmes listes : ni le graphique ni l'export ne peuvent diverger de l'écran.
-  const etatLignes = useMemo<EtatLigne[]>(
-    () => [
-      ...data.sold.map(glass => ({ glass, etat: 'Vendue' })),
-      ...data.reserved.map(glass => ({ glass, etat: 'En réserve' })),
-    ],
-    [data.sold, data.reserved],
-  )
-
+  // Le donut compte les montures, la barre empilée en cumule les montants : les deux
+  // partent des mêmes listes, ils ne peuvent pas diverger.
   const etatSlices: Slice[] = [
     { label: 'Vendues', value: data.sold.length, stroke: 'stroke-[#16a34a]', swatch: 'bg-[#16a34a]' },
     {
@@ -2987,63 +3055,9 @@ function StatsScreen({ data, user }: { data: StoreData; user: any }) {
   ]
 
   const montant = (glasses: Glass[]) => glasses.reduce((sum, glass) => sum + (Number(glass.price) || 0), 0)
-  const stamp = new Date().toISOString().slice(0, 10)
-
-  const byAction = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const movement of mine) {
-      const key = String(movement.action || 'AUTRE').toUpperCase()
-      counts.set(key, (counts.get(key) || 0) + 1)
-    }
-    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])
-  }, [mine])
-
-  /** Les gestes composent un tout — le total des mouvements — d'où l'anneau plutôt
-   *  qu'un classement en barres. La queue au-delà de cinq est repliée dans « Autre »
-   *  pour que les parts restent lisibles ; le détail complet reste dans le tableau. */
-  const actionSlices = useMemo<Slice[]>(() => {
-    const head = byAction.slice(0, DONUT_MAX_SLICES)
-    const tail = byAction.slice(DONUT_MAX_SLICES)
-
-    const slices: Slice[] = head.map(([action, count], index) => ({
-      label: action.replace(/_/g, ' ').toLowerCase(),
-      value: count,
-      ...CATEGORICAL[index],
-    }))
-
-    if (tail.length > 0) {
-      slices.push({
-        label: `autres (${tail.length})`,
-        value: tail.reduce((sum, [, count]) => sum + count, 0),
-        ...RESIDUAL_SLICE,
-      })
-    }
-    return slices
-  }, [byAction])
-
-  const byDay = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const movement of mine) {
-      const key = dayKey(movement.created_at)
-      if (!key) continue
-      counts.set(key, (counts.get(key) || 0) + 1)
-    }
-    return Array.from(counts.entries()).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 14)
-  }, [mine])
-
-  const today = dayKey(new Date().toISOString())
-  const todayCount = mine.filter(m => dayKey(m.created_at) === today).length
-  const maxDay = byDay.reduce((max, [, count]) => Math.max(max, count), 0)
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile label="Mes mouvements" value={fmt(mine.length)} color="#2563eb" note="Sur les 300 derniers" />
-        <StatTile label="Aujourd'hui" value={fmt(todayCount)} color="#16a34a" />
-        <StatTile label="Jours actifs" value={fmt(byDay.length)} color="#9333ea" note="14 derniers jours" />
-        <StatTile label="Types de geste" value={fmt(byAction.length)} color="#0891b2" />
-      </div>
-
       {!me && (
         <EmptyState>Votre nom n'est pas renseigné sur la fiche employé : impossible de retrouver vos mouvements.</EmptyState>
       )}
@@ -3072,61 +3086,10 @@ function StatsScreen({ data, user }: { data: StoreData; user: any }) {
             format={fmtFCFA}
           />
         </div>
-
-        {/* Replié : l'écran s'ouvre en graphiques. Le tableau reste là parce qu'il est
-            le jumeau accessible des deux figures — c'est lui qui rend chaque valeur
-            lisible au lecteur d'écran et exportable, ce qu'aucune forme ne fait. */}
-        <details className="group mt-3">
-          <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700/50">
-            <span className="transition-transform group-open:rotate-90">{ic.chevRight('w-3.5 h-3.5')}</span>
-            Détail ({etatLignes.length})
-          </summary>
-          <div className="mt-3">
-            <DataTable
-              columns={ETAT_COLUMNS}
-              rows={etatLignes}
-              filename={`vendues-et-reserve-${stamp}`}
-              empty="Aucune monture vendue ni en réserve."
-            />
-          </div>
-        </details>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <div>
-          <SectionTitle>Par type de geste</SectionTitle>
-          <Donut slices={actionSlices} centerLabel="mouvements" />
-        </div>
-
-        <div>
-          <SectionTitle>Par jour</SectionTitle>
-          {/* Sans donnée, les pistes vides tiennent lieu de message : la forme du
-              graphique dit « rien à montrer » plus vite qu'une phrase à lire. Sept
-              jours suffisent à faire reconnaître le tracé sans meubler l'écran. */}
-          <Card className="space-y-2">
-            {byDay.length === 0
-              ? EMPTY_DAY_ROWS.map(index => (
-                <div key={index} className="flex items-center gap-3">
-                  <span className="h-2 w-20 flex-shrink-0 rounded-full bg-slate-100 dark:bg-slate-700" />
-                  <div className="h-2 flex-1 rounded-full bg-slate-100 dark:bg-slate-700" />
-                  <span className="w-6 flex-shrink-0 text-right text-xs tabular-nums text-slate-300 dark:text-slate-600">0</span>
-                </div>
-              ))
-              : byDay.map(([day, count]) => (
-                <div key={day} className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400 tabular-nums w-20 flex-shrink-0">{fmtDate(day)}</span>
-                  <div className="flex-1 bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-                    <div className="h-2 rounded-full" style={{ width: `${maxDay ? (count / maxDay) * 100 : 0}%`, backgroundColor: '#16a34a' }} />
-                  </div>
-                  <span className="text-xs font-bold tabular-nums text-slate-700 dark:text-slate-200 w-6 text-right flex-shrink-0">{count}</span>
-                </div>
-              ))}
-          </Card>
-        </div>
       </div>
 
       <div>
-        <SectionTitle>Derniers gestes</SectionTitle>
+        <SectionTitle>Mes actions</SectionTitle>
         {mine.length === 0 ? (
           <EmptyState>Aucun mouvement à votre nom.</EmptyState>
         ) : (
@@ -3304,7 +3267,7 @@ function VendeusePage() {
   }, [])
 
   const stationId = user?.station_id ? Number(user.station_id) : null
-  const { data, loading, error, reload } = useStoreData(ready ? stationId : null)
+  const { data, loading, error, claimsError, reload } = useStoreData(ready ? stationId : null)
 
   if (!ready) return null
 
@@ -3324,14 +3287,14 @@ function VendeusePage() {
             )}
 
             {table ? (
-              <TableScreen table={table} data={data} user={user} stationId={stationId} onBack={() => setTable(null)} />
+              <TableScreen table={table} data={data} user={user} stationId={stationId} claimsError={claimsError} onBack={() => setTable(null)} />
             ) : (
               <>
                 {screen === 'dashboard' && <DashboardScreen data={data} user={user} onNavigate={navigate} onOpenTable={setTable} />}
                 {screen === 'proforma' && <ProformaScreen stationId={stationId} user={user} onDone={() => void reload()} />}
                 {screen === 'ventes' && <VentesScreen data={data} user={user} />}
                 {screen === 'scan' && <ScanScreen data={data} stationId={stationId} />}
-                {screen === 'reclamation' && <ReclamationScreen stationId={stationId} />}
+                {screen === 'reclamation' && <ReclamationScreen stationId={stationId} onDone={() => void reload()} />}
                 {screen === 'stats' && <StatsScreen data={data} user={user} />}
               </>
             )}

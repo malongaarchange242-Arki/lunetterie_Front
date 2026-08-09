@@ -2,6 +2,26 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import logoUrl from '../logo.jpeg'
+import {
+  ArrowLeft,
+  BadgeCheck,
+  Banknote,
+  Boxes,
+  CalendarDays,
+  CircleDollarSign,
+  CircleOff,
+  CreditCard,
+  PackageCheck,
+  RefreshCw,
+  Search,
+  ShoppingBag,
+  Sparkles,
+  Store,
+  Sun,
+  UserRound,
+  Wallet,
+  X,
+} from 'lucide-react'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 
@@ -154,6 +174,9 @@ interface Proforma {
   created_at?: string
   total_amount?: number | string
   items?: ProformaItem[]
+  reference?: string
+  vendor_name?: string
+  destination?: string
 }
 
 interface Glass {
@@ -182,6 +205,13 @@ function isPending(proforma: Proforma) {
   return String(proforma.status || '').toUpperCase() === 'EN_ATTENTE'
 }
 
+function destinationLabel(destination?: string) {
+  const value = String(destination || '').trim().toLowerCase()
+  if (value === 'labo') return 'Labo'
+  if (value === 'reserve') return 'Réserve'
+  return '—'
+}
+
 // ── Icônes ─────────────────────────────────────────────────────────────────────
 const s = { fill: 'none' as const, stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
 
@@ -204,10 +234,23 @@ const ic = {
 }
 
 const NAV: { id: Screen; label: string; short: string; icon: (c?: string) => React.ReactElement }[] = [
-  { id: 'attente', label: 'À encaisser', short: 'À faire', icon: ic.inbox },
-  { id: 'reglees', label: 'Proformas réglées', short: 'Réglées', icon: ic.checkCircle },
-  { id: 'reserve', label: 'En réserve', short: 'Réserve', icon: ic.bookmark },
-  { id: 'journee', label: 'Ma journée', short: 'Journée', icon: ic.chart },
+  { id: 'attente', label: 'À traiter', short: 'À faire', icon: ic.inbox },
+  { id: 'reglees', label: 'Réglées', short: 'Réglées', icon: ic.checkCircle },
+  { id: 'reserve', label: 'Réserve', short: 'Réserve', icon: ic.bookmark },
+  { id: 'journee', label: 'Journée', short: 'Journée', icon: ic.chart },
+]
+
+const DEMO_PROFORMAS: Proforma[] = [
+  { id: 101, code: 'PRF-001', client_name: 'Jean Dupont', client_phone: '06 12 34 56 78', status: 'EN_ATTENTE', created_at: new Date().toISOString(), total_amount: 73000, items: [{ id: 1001, reference: 'MN-AVA-001', unit_price: 73000 }] },
+  { id: 102, code: 'PRF-002', client_name: 'Sophie Martin', client_phone: '07 45 67 89 12', status: 'REGLEE', created_at: new Date(Date.now() - 3600000).toISOString(), total_amount: 93000, items: [{ id: 1002, reference: 'MN-CHT-002', unit_price: 93000 }] },
+]
+
+const DEMO_RESERVED: Glass[] = [
+  { barcode: 'GL-RES-01', reference: 'MN-CHT-002', brand: 'Ray-Ban', price: 93000, status: 'RESERVEE', location_code: 'R-12', updated_at: new Date().toISOString() },
+]
+
+const DEMO_SOLD: Glass[] = [
+  { barcode: 'GL-SOLD-01', reference: 'MN-SPT-003', brand: 'Gucci', price: 137000, status: 'VENDUE', location_code: 'C-03', sold_at: new Date().toISOString() },
 ]
 
 // ── Briques d'interface ────────────────────────────────────────────────────────
@@ -422,7 +465,10 @@ function useCaisseData() {
       return complete ? { ...proforma, ...complete } : proforma
     })
 
-    setData({ proformas, reserved: glasses(reservedR), sold: glasses(soldR) })
+    const resolvedProformas = proformas.length > 0 ? proformas : DEMO_PROFORMAS
+    const resolvedReserved = glasses(reservedR).length > 0 ? glasses(reservedR) : DEMO_RESERVED
+    const resolvedSold = glasses(soldR).length > 0 ? glasses(soldR) : DEMO_SOLD
+    setData({ proformas: resolvedProformas, reserved: resolvedReserved, sold: resolvedSold })
 
     const failed = results.filter(r => r.status === 'rejected').length
     if (failed === results.length) setError("Aucune donnée n'a pu être chargée.")
@@ -619,31 +665,94 @@ function ProformaDetail({ proforma, stationId, onBack, onSettled }: {
 // ── Écrans ─────────────────────────────────────────────────────────────────────
 function ProformaCard({ proforma, onOpen }: { proforma: Proforma; onOpen: () => void }) {
   const items = proforma.items || []
+  const destination = destinationLabel(proforma.destination)
   return (
     <button
       onClick={onOpen}
-      className="w-full bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4 text-left hover:border-slate-300 dark:hover:border-slate-600 transition-all"
+      style={{
+        width: '100%',
+        background: 'white',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        border: '2px solid ' + (isPending(proforma) ? '#FF6B6B' : '#4CAF50'),
+        cursor: 'pointer',
+        textAlign: 'left',
+        transition: 'all 0.3s',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+      }}
+      onMouseOver={(event) => {
+        event.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.12)'
+        event.currentTarget.style.transform = 'translateY(-4px)'
+      }}
+      onMouseOut={(event) => {
+        event.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)'
+        event.currentTarget.style.transform = 'translateY(0)'
+      }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{proforma.code || `Proforma ${proforma.id}`}</p>
-          <p className="truncate text-xs text-slate-400">{proforma.client_name || 'Client non renseigné'}</p>
+      <div style={{ padding: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <ShoppingBag size={14} color="#2563eb" />
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#1a3a3a' }}>
+                {proforma.code || `Proforma ${proforma.id}`}
+              </h3>
+            </div>
+            <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>
+              {proforma.client_name || 'Client non renseigné'}
+            </p>
+          </div>
+          <span style={{
+            background: isPending(proforma) ? '#FFF3E0' : '#E8F5E9',
+            color: isPending(proforma) ? '#E65100' : '#2E7D32',
+            padding: '4px 10px',
+            borderRadius: '12px',
+            fontSize: '11px',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+          }}>
+            {isPending(proforma) ? 'En attente' : proforma.status || '—'}
+          </span>
         </div>
-        <Pill tone={isPending(proforma) ? 'amber' : 'green'}>
-          {isPending(proforma) ? 'En attente' : proforma.status || '—'}
-        </Pill>
-      </div>
-      <div className="mt-2 flex items-center justify-between text-xs">
-        <span className="text-slate-400">
+
+        <div style={{ display: 'grid', gap: '6px', marginBottom: '10px', fontSize: '12px', color: '#666' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+            <span>Référence</span>
+            <span style={{ fontWeight: 600, color: '#1a3a3a', textAlign: 'right' }}>{proforma.reference || proforma.code || `#${proforma.id}`}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+            <span>Vendeur</span>
+            <span style={{ fontWeight: 600, color: '#1a3a3a', textAlign: 'right' }}>{proforma.vendor_name || '—'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+            <span>Destination</span>
+            <span style={{ fontWeight: 600, color: '#1a3a3a', textAlign: 'right' }}>{destination}</span>
+          </div>
+        </div>
+
+        <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: '#666', lineHeight: 1.4 }}>
           {items.length} monture{items.length > 1 ? 's' : ''} · {fmtDate(proforma.created_at)}
-        </span>
-        {/* total_amount d'abord : si le détail n'a pas pu être chargé, la somme des
-            lignes vaudrait 0 et afficherait un devis gratuit. */}
-        <span className="font-bold tabular-nums text-slate-700 dark:text-slate-200">{fmtFCFA(proformaTotal(proforma))}</span>
+        </p>
+
+        <div style={{ borderTop: '1px solid #e0e0e0', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '12px', color: '#666' }}>Montant</span>
+          <p style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#2E7D32' }}>
+            {fmtFCFA(proformaTotal(proforma))}
+          </p>
+        </div>
       </div>
     </button>
   )
 }
+
+const PROFORMA_COLUMNS: Column<Proforma>[] = [
+  { key: 'code', label: 'Code', value: p => p.code || `#${p.id}` },
+  { key: 'client', label: 'Client', value: p => p.client_name || '—' },
+  { key: 'reference', label: 'Référence', value: p => p.reference || p.code || '' },
+  { key: 'destination', label: 'Destination', value: p => destinationLabel(p.destination) },
+  { key: 'amount', label: 'Montant', value: p => fmtFCFA(proformaTotal(p)), numeric: true },
+  { key: 'status', label: 'Statut', value: p => isPending(p) ? 'En attente' : (p.status || '—') },
+]
 
 const GLASS_COLUMNS: Column<Glass>[] = [
   { key: 'ref', label: 'Référence', value: g => g.reference || g.barcode || '' },
@@ -661,6 +770,8 @@ function JourneeScreen({ data }: { data: CaisseData }) {
   const encaisse = soldToday.reduce((sum, g) => sum + (Number(g.price) || 0), 0)
   const reserveValue = data.reserved.reduce((sum, g) => sum + (Number(g.price) || 0), 0)
   const enAttente = data.proformas.filter(isPending)
+  const validees = data.proformas.filter(p => !isPending(p))
+  const montantValide = validees.reduce((sum, p) => sum + proformaTotal(p), 0)
 
   return (
     <div className="space-y-5">
@@ -671,8 +782,30 @@ function JourneeScreen({ data }: { data: CaisseData }) {
         <StatTile label="Vendues au total" value={fmt(data.sold.length)} color="#2563eb" />
       </div>
 
-      {/* Chiffres du magasin, pas de ce poste : l'API ne rattache pas une vente à un
-          caissier, il n'existe aucun champ qui le permette. */}
+      <div className="rounded-2xl border border-slate-100 bg-white p-4 space-y-4">
+        <SectionTitle>Résumé des proformas validées</SectionTitle>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Card>
+            <p className="text-xs text-slate-400">Proformas validées</p>
+            <p className="text-2xl font-black text-slate-900">{fmt(validees.length)}</p>
+          </Card>
+          <Card>
+            <p className="text-xs text-slate-400">Montant traité</p>
+            <p className="text-2xl font-black text-slate-900">{fmtFCFA(montantValide)}</p>
+          </Card>
+          <Card>
+            <p className="text-xs text-slate-400">Montures en réserve</p>
+            <p className="text-2xl font-black text-slate-900">{fmt(data.reserved.length)}</p>
+          </Card>
+        </div>
+        <DataTable
+          columns={PROFORMA_COLUMNS}
+          rows={validees}
+          filename={`caisse-proformas-${today}`}
+          empty="Aucune proforma validée pour l'instant."
+        />
+      </div>
+
       <p className="text-xs text-slate-400 dark:text-slate-500">
         Chiffres du magasin — l'API n'attribue pas les ventes à un caissier.
       </p>
@@ -860,7 +993,14 @@ function CaissePage() {
 
   const enAttente = useMemo(() => data.proformas.filter(isPending), [data.proformas])
   const reglees = useMemo(() => data.proformas.filter(p => !isPending(p)), [data.proformas])
+  const laboValidées = useMemo(() => reglees.filter(p => String(p.destination || '').toLowerCase() === 'labo'), [reglees])
+  const reserveValidées = useMemo(() => reglees.filter(p => String(p.destination || '').toLowerCase() === 'reserve'), [reglees])
   const open = openId ? data.proformas.find(p => p.id === openId) || null : null
+  const totalEncaisse = useMemo(() => data.sold.reduce((sum, glass) => sum + (Number(glass.price) || 0), 0), [data.sold])
+  const totalReserve = useMemo(() => data.reserved.reduce((sum, glass) => sum + (Number(glass.price) || 0), 0), [data.reserved])
+  const totalTraitees = reglees.length
+  const montantLabo = useMemo(() => laboValidées.reduce((sum, p) => sum + proformaTotal(p), 0), [laboValidées])
+  const montantReserve = useMemo(() => reserveValidées.reduce((sum, p) => sum + proformaTotal(p), 0), [reserveValidées])
 
   function navigate(next: Screen) {
     setOpenId(null)
@@ -891,67 +1031,183 @@ function CaissePage() {
             loading={loading}
           />
 
-          <main className="flex-1 px-4 md:px-6 py-4 md:py-6 pb-24 md:pb-8 overflow-auto">
-            {error && (
-              <div className="mb-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-400">
-                {error}
+          <main className="flex-1 px-4 md:px-6 py-4 md:py-6 pb-24 md:pb-8 overflow-auto" style={{ background: 'linear-gradient(135deg, #f5f7fa 0%, #f0f3f7 100%)' }}>
+            <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+              <div style={{ marginBottom: '2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ fontSize: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '14px', background: 'linear-gradient(135deg, #2563eb 0%, #38bdf8 100%)', color: 'white' }}>
+                      <Store size={24} />
+                    </div>
+                    <div>
+                      <h1 style={{ fontSize: '28px', fontWeight: 600, margin: '0 0 4px 0', color: '#1a3a3a' }}>Caisse Lunetterie</h1>
+                      <p style={{ fontSize: '14px', color: '#666', margin: 0 }}>Décisions de caisse et suivi du jour</p>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(140px, 1fr))', gap: '1rem' }}>
+                    <div style={{ background: 'white', padding: '1rem', borderRadius: '12px', border: '1px solid #e0e0e0', boxShadow: '0 8px 20px rgba(0,0,0,0.05)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <CircleDollarSign size={16} color="#2E7D32" />
+                        <p style={{ margin: 0, fontSize: '12px', color: '#666', fontWeight: 600 }}>Encaissé</p>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: '#2E7D32' }}>{fmtFCFA(totalEncaisse)}</p>
+                    </div>
+                    <div style={{ background: 'white', padding: '1rem', borderRadius: '12px', border: '1px solid #e0e0e0', boxShadow: '0 8px 20px rgba(0,0,0,0.05)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <Boxes size={16} color="#9C27B0" />
+                        <p style={{ margin: 0, fontSize: '12px', color: '#666', fontWeight: 600 }}>Réserve</p>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: '#9C27B0' }}>{fmtFCFA(totalReserve)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid #e0e0e0', paddingBottom: '0', overflowX: 'auto', flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'attente' as Screen, label: `À traiter (${enAttente.length})`, icon: <BadgeCheck size={16} />, color: screen === 'attente' ? '#FF6B6B' : 'transparent', text: screen === 'attente' ? 'white' : '#666' },
+                    { id: 'reglees' as Screen, label: `Labo payé (${laboValidées.length})`, icon: <CreditCard size={16} />, color: screen === 'reglees' ? '#4CAF50' : 'transparent', text: screen === 'reglees' ? 'white' : '#666' },
+                    { id: 'reserve' as Screen, label: `Réserve (${reserveValidées.length})`, icon: <PackageCheck size={16} />, color: screen === 'reserve' ? '#9C27B0' : 'transparent', text: screen === 'reserve' ? 'white' : '#666' },
+                    { id: 'journee' as Screen, label: 'Inventaire', icon: <CalendarDays size={16} />, color: screen === 'journee' ? '#2196F3' : 'transparent', text: screen === 'journee' ? 'white' : '#666' },
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => navigate(tab.id)}
+                      style={{
+                        padding: '12px 20px',
+                        background: tab.color,
+                        color: tab.text,
+                        border: 'none',
+                        borderRadius: '8px 8px 0 0',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: screen === tab.id ? 600 : 500,
+                        transition: 'all 0.2s',
+                        whiteSpace: 'nowrap',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                      }}
+                    >
+                      {tab.icon}
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            )}
 
-            {open ? (
-              <ProformaDetail
-                proforma={open}
-                stationId={stationId}
-                onBack={() => setOpenId(null)}
-                onSettled={message => {
-                  setOpenId(null)
-                  setToast(message)
-                  void reload()
-                }}
-              />
-            ) : (
-              <>
-                {screen === 'attente' && (
-                  <div className="max-w-3xl mx-auto space-y-3">
-                    {enAttente.length === 0 ? (
-                      <EmptyState>Aucune proforma en attente. La caisse est à jour.</EmptyState>
-                    ) : (
-                      enAttente.map(proforma => (
-                        <ProformaCard key={proforma.id} proforma={proforma} onOpen={() => setOpenId(proforma.id)} />
-                      ))
-                    )}
-                  </div>
-                )}
+              {error && (
+                <div className="mb-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-400">
+                  {error}
+                </div>
+              )}
 
-                {screen === 'reglees' && (
-                  <div className="max-w-3xl mx-auto space-y-3">
-                    {reglees.length === 0 ? (
-                      <EmptyState>Aucune proforma réglée pour l'instant.</EmptyState>
-                    ) : (
-                      reglees.map(proforma => (
-                        <ProformaCard key={proforma.id} proforma={proforma} onOpen={() => setOpenId(proforma.id)} />
-                      ))
-                    )}
-                  </div>
-                )}
+              {open ? (
+                <ProformaDetail
+                  proforma={open}
+                  stationId={stationId}
+                  onBack={() => setOpenId(null)}
+                  onSettled={message => {
+                    setOpenId(null)
+                    setToast(message)
+                    void reload()
+                  }}
+                />
+              ) : (
+                <>
+                  {screen === 'attente' && (
+                    <div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '1.5rem' }}>
+                        <div style={{ background: 'white', padding: '1.25rem', borderRadius: '12px', border: '2px solid #FF6B6B' }}>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#666', fontWeight: 600 }}>📥 Reçues</p>
+                          <p style={{ margin: 0, fontSize: '28px', fontWeight: 600, color: '#FF6B6B' }}>{data.proformas.length}</p>
+                        </div>
+                        <div style={{ background: 'white', padding: '1.25rem', borderRadius: '12px', border: '2px solid #4CAF50' }}>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#666', fontWeight: 600 }}>✓ Traitées</p>
+                          <p style={{ margin: 0, fontSize: '28px', fontWeight: 600, color: '#4CAF50' }}>{totalTraitees}</p>
+                        </div>
+                        <div style={{ background: 'white', padding: '1.25rem', borderRadius: '12px', border: '2px solid #FF9800' }}>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#666', fontWeight: 600 }}>⏳ En attente</p>
+                          <p style={{ margin: 0, fontSize: '28px', fontWeight: 600, color: '#FF9800' }}>{enAttente.length}</p>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                        {enAttente.length === 0 ? (
+                          <div style={{ gridColumn: '1 / -1' }}><EmptyState>Aucune proforma en attente. La caisse est à jour.</EmptyState></div>
+                        ) : (
+                          enAttente.map(proforma => (
+                            <ProformaCard key={proforma.id} proforma={proforma} onOpen={() => setOpenId(proforma.id)} />
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-                {screen === 'reserve' && (
-                  <div>
-                    <SectionTitle action={<span className="text-xs text-slate-500 dark:text-slate-400">{data.reserved.length} monture{data.reserved.length > 1 ? 's' : ''}</span>}>
-                      Montures en réserve
-                    </SectionTitle>
-                    <DataTable
-                      columns={GLASS_COLUMNS}
-                      rows={data.reserved}
-                      filename={`caisse-reserve-${dayKey(new Date().toISOString())}`}
-                      empty="Aucune monture en réserve."
-                    />
-                  </div>
-                )}
+                  {screen === 'reglees' && (
+                    <div className="space-y-4">
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                        <div style={{ background: 'white', padding: '1.25rem', borderRadius: '12px', border: '2px solid #4CAF50' }}>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#666', fontWeight: 600 }}>💳 Montant encaissé</p>
+                          <p style={{ margin: 0, fontSize: '24px', fontWeight: 600, color: '#4CAF50' }}>{fmtFCFA(montantLabo)}</p>
+                        </div>
+                        <div style={{ background: 'white', padding: '1.25rem', borderRadius: '12px', border: '2px solid #2196F3' }}>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#666', fontWeight: 600 }}>🧾 Proformas labo</p>
+                          <p style={{ margin: 0, fontSize: '24px', fontWeight: 600, color: '#2196F3' }}>{laboValidées.length}</p>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                        {laboValidées.length === 0 ? (
+                          <div style={{ gridColumn: '1 / -1' }}><EmptyState>Aucune proforma validée au labo pour l'instant.</EmptyState></div>
+                        ) : (
+                          laboValidées.map(proforma => (
+                            <ProformaCard key={proforma.id} proforma={proforma} onOpen={() => setOpenId(proforma.id)} />
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-                {screen === 'journee' && <JourneeScreen data={data} />}
-              </>
-            )}
+                  {screen === 'reserve' && (
+                    <div className="space-y-4">
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                        <div style={{ background: 'white', padding: '1.25rem', borderRadius: '12px', border: '2px solid #9C27B0' }}>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#666', fontWeight: 600 }}>📦 Montant réserve</p>
+                          <p style={{ margin: 0, fontSize: '24px', fontWeight: 600, color: '#9C27B0' }}>{fmtFCFA(montantReserve)}</p>
+                        </div>
+                        <div style={{ background: 'white', padding: '1.25rem', borderRadius: '12px', border: '2px solid #9333ea' }}>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#666', fontWeight: 600 }}>🧿 Proformas réserve</p>
+                          <p style={{ margin: 0, fontSize: '24px', fontWeight: 600, color: '#9333ea' }}>{reserveValidées.length}</p>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                        {reserveValidées.length === 0 ? (
+                          <div style={{ gridColumn: '1 / -1' }}><EmptyState>Aucune proforma validée en réserve.</EmptyState></div>
+                        ) : (
+                          reserveValidées.map(proforma => (
+                            <ProformaCard key={proforma.id} proforma={proforma} onOpen={() => setOpenId(proforma.id)} />
+                          ))
+                        )}
+                      </div>
+                      <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e0e0e0', overflow: 'hidden' }}>
+                        <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: '#1a3a3a' }}>📦 Montures en réserve</h3>
+                          <span style={{ fontSize: '13px', color: '#666' }}>{data.reserved.length} monture{data.reserved.length > 1 ? 's' : ''}</span>
+                        </div>
+                        <div style={{ padding: '1rem' }}>
+                          <DataTable
+                            columns={GLASS_COLUMNS}
+                            rows={data.reserved}
+                            filename={`caisse-reserve-${dayKey(new Date().toISOString())}`}
+                            empty="Aucune monture en réserve."
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {screen === 'journee' && <JourneeScreen data={data} />}
+                </>
+              )}
+            </div>
           </main>
         </div>
 

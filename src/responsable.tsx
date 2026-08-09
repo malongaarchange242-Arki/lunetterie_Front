@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 // Importé plutôt que référencé par URL : sans dossier public/, un chemin littéral ne
@@ -96,8 +96,15 @@ interface ProformaItem {
   id: number
   barcode?: string
   reference?: string
+  brand?: string
+  shape?: string
+  color?: string
   unit_price?: number | string
   is_pending?: boolean
+  // La décision de la Caisse sur cette ligne : VENDUE ou RETOUR_PRESENTOIR. Absente tant
+  // que la ligne attend son arbitrage.
+  outcome?: string
+  settled_at?: string
 }
 
 interface Proforma {
@@ -108,8 +115,18 @@ interface Proforma {
   status?: string
   note?: string
   created_at?: string
+  settled_at?: string
   total_amount?: number | string
   items?: ProformaItem[]
+}
+
+interface Movement {
+  created_at?: string
+  action?: string
+  barcode?: string
+  reference?: string
+  from_station_name?: string
+  to_station_name?: string
 }
 
 // ── Format ────────────────────────────────────────────────────────────────────
@@ -251,6 +268,14 @@ const RESERVE_LIMITE_JOURS = 10
 /** Même seuil que le is_critical de ../Frontend/admin.js:626. */
 const REFERENCE_CRITIQUE = 2
 
+// Les actions du journal de mouvements (table ACTION_LABELS de ../Frontend/historique.js:10).
+const ACTION_LIVRAISON = 'LIVRAISON'
+const ACTION_RESERVATION = 'RESERVATION'
+const ACTION_LABORATOIRE = 'LABORATOIRE'
+/** Ce qui ramène une paire dans le magasin après un passage en réserve. Le backend ne
+ *  journalise pas « fin de réserve » : c'est le mouvement suivant qui la trahit. */
+const ACTIONS_RETOUR_STOCK = ['RETOUR', 'RANGEMENT', 'PRESENTOIR', 'RETRAIT_PRESENTOIR']
+
 // ── Chargement ────────────────────────────────────────────────────────────────
 
 interface StoreData {
@@ -261,11 +286,63 @@ interface StoreData {
   pretes: Glass[]
   local: Glass[]
   proformas: Proforma[]
+  movements: Movement[]
 }
 
-const EMPTY_DATA: StoreData = { presentoir: [], reserved: [], sold: [], labo: [], pretes: [], local: [], proformas: [] }
+const EMPTY_DATA: StoreData = { presentoir: [], reserved: [], sold: [], labo: [], pretes: [], local: [], proformas: [], movements: [] }
 
-function useStoreData(stationId: number | null, enabled: boolean) {
+/** Les ventes reconstituées depuis les proformas encaissées.
+ *
+ *  Une monture encaissée ne reste pas au statut VENDUE : la Caisse l'expédie dans la foulée
+ *  au Laboratoire (AGENTS.md § « Une monture vendue ne reste pas VENDUE »).
+ *  `/inventory/glasses?status=VENDUE` ne la renvoie donc quasiment jamais, et le chiffre
+ *  d'affaires de ce poste affichait 0 face à des proformas pourtant réglées. La vente, elle,
+ *  est gravée sur la ligne de proforma : `outcome = VENDUE`.
+ *
+ *  Une ligne rendue au client (`RETOUR_PRESENTOIR`) n'est pas une vente. Quand l'outcome
+ *  manque — vieille ligne tranchée avant la colonne — une proforma REGLEE à une seule
+ *  monture ne peut être qu'une vente : le serveur ne règle que si une monture au moins a
+ *  été encaissée, il annule sinon.
+ *
+ *  Même reconstruction que soldFromProformas() de src/vendeuse.tsx : les deux postes
+ *  doivent compter les mêmes ventes.
+ */
+function soldFromProformas(proformas: Proforma[], fiches: Map<string, Glass>): Glass[] {
+  const ventes: Glass[] = []
+
+  for (const proforma of proformas) {
+    const items = proforma.items || []
+    const reglee = String(proforma.status || '').toUpperCase() === 'REGLEE'
+
+    for (const item of items) {
+      const outcome = String(item.outcome || '').toUpperCase()
+      const vendue = outcome === 'VENDUE'
+        || (!outcome && reglee && items.length === 1 && item.is_pending === false)
+      if (!vendue) continue
+
+      const barcode = item.barcode || ''
+      const fiche = barcode ? fiches.get(barcode) : undefined
+      ventes.push({
+        // La fiche monture porte les attributs que la ligne de proforma ne recopie pas.
+        // Ce que la ligne dit prime : c'est l'état du jour de la vente.
+        ...(fiche || {}),
+        barcode,
+        reference: item.reference || fiche?.reference,
+        brand: item.brand || fiche?.brand,
+        shape: item.shape || fiche?.shape,
+        color: item.color || fiche?.color,
+        // ?? et non || : une monture offerte est facturée 0, ce n'est pas un prix manquant.
+        price: item.unit_price ?? fiche?.price,
+        status: 'VENDUE',
+        sold_at: item.settled_at || proforma.settled_at || proforma.created_at,
+      })
+    }
+  }
+
+  return ventes
+}
+
+function useStoreData(stationId: number | null, stationName: string, enabled: boolean) {
   const [data, setData] = useState<StoreData>(EMPTY_DATA)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -286,9 +363,10 @@ function useStoreData(stationId: number | null, enabled: boolean) {
       apiFetch(`/inventory/glasses?${scope}status=PRETE_A_LIVRER`),
       apiFetch(`/inventory/glasses?${scope}status=EN_STOCK_SOUS_STATION`),
       apiFetch('/inventory/proformas'),
+      apiFetch('/inventory/movements?limit=300&offset=0'),
     ])
 
-    const [presentoirR, reservedR, soldR, laboR, pretesR, localR, proformasR] = results
+    const [presentoirR, reservedR, soldR, laboR, pretesR, localR, proformasR, movementsR] = results
     // Le filtre station_id n'est pas garanti sur tous les statuts : on refiltre ici,
     // sinon le responsable verrait le stock des autres magasins dans ses chiffres.
     const glasses = (r: PromiseSettledResult<any>): Glass[] => {
@@ -311,14 +389,51 @@ function useStoreData(stationId: number | null, enabled: boolean) {
       return complete ? { ...proforma, ...complete } : proforma
     })
 
+    const presentoir = glasses(presentoirR)
+    const reserved = glasses(reservedR)
+    const labo = glasses(laboR)
+    const pretes = glasses(pretesR)
+    const local = glasses(localR)
+
+    // Les fiches encore en magasin servent de source pour les attributs des ventes
+    // reconstituées : la ligne de proforma ne recopie ni la matière ni le genre.
+    const fiches = new Map<string, Glass>()
+    for (const glass of [...presentoir, ...reserved, ...labo, ...pretes, ...local]) {
+      if (glass.barcode) fiches.set(glass.barcode, glass)
+    }
+
+    // La liste VENDUE de l'API d'abord : c'est la fiche à jour. Les proformas encaissées
+    // complètent, sans jamais doubler une monture déjà comptée.
+    const vendues = glasses(soldR)
+    const comptees = new Set(vendues.map(glass => glass.barcode))
+    const encaissees = soldFromProformas(proformas, fiches).filter(vente => {
+      if (!vente.barcode || comptees.has(vente.barcode)) return false
+      comptees.add(vente.barcode)
+      return true
+    })
+
+    // Le journal n'accepte pas de filtre station : on le restreint sur le nom, en gardant
+    // les mouvements sans station renseignée plutôt que de vider la liste sur un libellé
+    // qui ne correspondrait pas.
+    const station = String(stationName || '').trim().toLowerCase()
+    const journal: Movement[] = movementsR.status === 'fulfilled' ? (movementsR.value?.data?.movements || []) : []
+    const movements = station
+      ? journal.filter(m => {
+        const from = String(m.from_station_name || '').trim().toLowerCase()
+        const to = String(m.to_station_name || '').trim().toLowerCase()
+        return (!from && !to) || from === station || to === station
+      })
+      : journal
+
     setData({
-      presentoir: glasses(presentoirR),
-      reserved: glasses(reservedR),
-      sold: glasses(soldR),
-      labo: glasses(laboR),
-      pretes: glasses(pretesR),
-      local: glasses(localR),
+      presentoir,
+      reserved,
+      sold: [...vendues, ...encaissees],
+      labo,
+      pretes,
+      local,
       proformas,
+      movements,
     })
 
     const failed = results.filter(r => r.status === 'rejected').length
@@ -327,9 +442,44 @@ function useStoreData(stationId: number | null, enabled: boolean) {
     setLoading(false)
   }
 
-  useEffect(() => { void load() }, [stationId, enabled])
+  useEffect(() => { void load() }, [stationId, stationName, enabled])
 
   return { data, loading, error, reload: load }
+}
+
+/** Le parcours de chaque monture dans le journal, du plus ancien au plus récent. Il n'y a
+ *  pas d'autre façon de savoir d'où une monture arrive : le mouvement dit où elle va, le
+ *  précédent dit d'où elle vient. */
+function buildHistoryIndex(movements: Movement[]) {
+  const parBarcode = new Map<string, Movement[]>()
+  for (const movement of movements) {
+    const key = String(movement.barcode || '').trim().toUpperCase()
+    if (!key) continue
+    const liste = parBarcode.get(key)
+    if (liste) liste.push(movement)
+    else parBarcode.set(key, [movement])
+  }
+  for (const liste of parBarcode.values()) {
+    liste.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+  }
+  return parBarcode
+}
+
+/** Les mouvements du jour dont le précédent était une mise en réserve : c'est ce couple,
+ *  et lui seul, qui distingue une sortie de réserve d'un mouvement ordinaire. */
+function sortiesDeReserve(history: Map<string, Movement[]>, jour: string, actions: string[]) {
+  const sorties: { movement: Movement; joursReserve: number }[] = []
+  for (const liste of history.values()) {
+    for (let i = 1; i < liste.length; i++) {
+      const precedent = liste[i - 1]
+      const courant = liste[i]
+      if (dayKey(courant.created_at) !== jour) continue
+      if (String(precedent.action || '').toUpperCase() !== ACTION_RESERVATION) continue
+      if (!actions.includes(String(courant.action || '').toUpperCase())) continue
+      sorties.push({ movement: courant, joursReserve: daysSince(precedent.created_at) })
+    }
+  }
+  return sorties
 }
 
 /** Rattache chaque monture à la proforma qui la porte : c'est la seule façon de
@@ -351,7 +501,9 @@ function buildClientIndex(proformas: Proforma[]) {
 
 interface DetailLine { name: string; meta: string; badge?: { text: string; tone: Tone } }
 interface DetailStat { label: string; value: string | number }
-interface DetailRowData { title: string; subtitle: string; cells: { label: string; value: string | number; color?: string }[]; badge?: ReactNode }
+/** `id` et non le titre comme clé : deux montures partagent souvent la même référence, et
+ *  React fusionnerait leurs lignes. */
+interface DetailRowData { id: string; title: string; subtitle: string; cells: { label: string; value: string | number; color?: string }[]; badge?: ReactNode }
 
 interface Detail {
   title: string
@@ -381,6 +533,51 @@ function Badge({ tone = 'slate', children }: { tone?: Tone; children: ReactNode 
       {children}
     </span>
   )
+}
+
+/** Le CODE128 d'un code-barres de monture, dessiné sur place.
+ *
+ *  La maquette passait par api.qrserver.com : une requête réseau par ligne de liste, et le
+ *  code-barres du magasin envoyé à un tiers. jsbarcode est déjà une dépendance du projet
+ *  (src/vendeuse.tsx, src/App.tsx) et les montures sont suivies en CODE128, pas en QR. */
+function Code128({ value, height = 40, showValue = true }: { value: string; height?: number; showValue?: boolean }) {
+  const ref = useRef<SVGSVGElement>(null)
+
+  useEffect(() => {
+    const target = ref.current
+    if (!target) return
+    // Un champ vide ou un code refusé par la norme ferait jeter jsbarcode : on nettoie le
+    // dessin précédent et on s'arrête là plutôt que d'afficher des barres périmées.
+    target.replaceChildren()
+    if (!value) return
+    void import('jsbarcode').then(module => {
+      const JsBarcode = (module.default || module) as any
+      if (typeof JsBarcode !== 'function') return
+      JsBarcode(target, value, {
+        format: 'CODE128',
+        lineColor: '#0f172a',
+        background: '#ffffff',
+        width: 1.4,
+        height,
+        fontSize: 12,
+        margin: 4,
+        displayValue: showValue,
+        valid: (ok: boolean) => { if (!ok) target.replaceChildren() },
+      })
+      // JsBarcode pose width/height en pixels sans viewBox : sans elle, le code ne peut pas
+      // se réduire proportionnellement dans une carte étroite.
+      const w = target.getAttribute('width')
+      const h = target.getAttribute('height')
+      if (w && h) target.setAttribute('viewBox', `0 0 ${w} ${h}`)
+      target.removeAttribute('width')
+      target.removeAttribute('height')
+    }).catch(() => {
+      // Le code reste lisible en toutes lettres à côté : une ligne sans barres se saisit
+      // encore à la main.
+    })
+  }, [value, height, showValue])
+
+  return <svg ref={ref} className="w-full h-full" preserveAspectRatio="xMidYMid meet" />
 }
 
 function Bar({ percent, color }: { percent: number | string; color: string }) {
@@ -439,14 +636,27 @@ function GlassRow({ glass, client, meta, badge, tinted }: {
   )
 }
 
-function Repartition({ title, rows, color, total }: {
-  title: string; rows: { label: string; count: number }[]; color: string; total: number
+function Repartition({ title, subtitle, icon, rows, color, total, empty, onClick }: {
+  title: string
+  subtitle?: string
+  icon?: IconFn
+  rows: { label: string; count: number }[]
+  color: string
+  total: number
+  empty?: string
+  onClick?: () => void
 }) {
-  return (
-    <div className={CARD}>
-      <p className="text-sm font-bold text-slate-900 dark:text-white mb-4">{title}</p>
+  const corps = (
+    <>
+      <div className="flex items-center gap-2.5 mb-4">
+        {icon && <Pastille color={color}>{icon()}</Pastille>}
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{title}</p>
+          {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
+        </div>
+      </div>
       {rows.length === 0 ? (
-        <p className="text-xs text-slate-400">Aucune valeur renseignée sur ce stock.</p>
+        <p className="text-xs text-slate-400">{empty || 'Aucune valeur renseignée sur ce stock.'}</p>
       ) : (
         <div className="space-y-3">
           {rows.map(row => {
@@ -463,8 +673,11 @@ function Repartition({ title, rows, color, total }: {
           })}
         </div>
       )}
-    </div>
+    </>
   )
+
+  if (!onClick) return <div className={CARD}>{corps}</div>
+  return <button onClick={onClick} className={CARD_LINK}>{corps}</button>
 }
 
 // ── Écran ─────────────────────────────────────────────────────────────────────
@@ -515,7 +728,8 @@ function ResponsableMagasinPage() {
   }, [])
 
   const stationId = user?.station_id ? Number(user.station_id) : null
-  const { data, loading, error, reload } = useStoreData(stationId, ready)
+  const stationName = String(user?.station_name || '')
+  const { data, loading, error, reload } = useStoreData(stationId, stationName, ready)
 
   const clientIndex = useMemo(() => buildClientIndex(data.proformas), [data.proformas])
   const clientOf = (glass: Glass) => {
@@ -535,18 +749,44 @@ function ResponsableMagasinPage() {
     const year = iso.slice(0, 4)
     const lastYear = String(Number(year) - 1)
     const weekFloor = new Date(now.getTime() - 6 * 86400000).toISOString().slice(0, 10)
+    const prevWeekFloor = new Date(now.getTime() - 13 * 86400000).toISOString().slice(0, 10)
 
     const soldToday = data.sold.filter(g => soldDay(g) === today)
     const soldYesterday = data.sold.filter(g => soldDay(g) === yesterday)
     const soldWeek = data.sold.filter(g => soldDay(g) >= weekFloor)
+    // La semaine d'avant s'arrête là où celle-ci commence, sinon les deux se chevauchent
+    // d'un jour et la comparaison se compare en partie à elle-même.
+    const soldPrevWeek = data.sold.filter(g => soldDay(g) >= prevWeekFloor && soldDay(g) < weekFloor)
     const soldMonth = data.sold.filter(g => soldDay(g).startsWith(month))
     const soldLastMonth = data.sold.filter(g => soldDay(g).startsWith(lastMonth))
     const soldYear = data.sold.filter(g => soldDay(g).startsWith(year))
     const soldLastYear = data.sold.filter(g => soldDay(g).startsWith(lastYear))
 
     const proformasToday = data.proformas.filter(p => dayKey(p.created_at) === today)
-    // « Soldée » se déduit ligne par ligne : is_pending === false (AGENTS.md).
-    const soldeesToday = proformasToday.filter(p => (p.items || []).length > 0 && (p.items || []).every(i => i.is_pending === false))
+    // « Soldée » se lit sur l'outcome des lignes depuis que la colonne existe (AGENTS.md) :
+    // la Caisse a tranché partout, en vente ou en retour. is_pending reste le repli pour
+    // les lignes tranchées avant l'arrivée de la colonne.
+    const soldeesToday = proformasToday.filter(p => {
+      const items = p.items || []
+      return items.length > 0 && items.every(i => Boolean(i.outcome) || i.is_pending === false)
+    })
+
+    // Ce que la Caisse a encaissé aujourd'hui, monture par monture : une proforma soldée
+    // peut en porter plusieurs.
+    const payeesToday = soldToday
+
+    const history = buildHistoryIndex(data.movements)
+    const livreesToday = data.movements.filter(m =>
+      String(m.action || '').toUpperCase() === ACTION_LIVRAISON && dayKey(m.created_at) === today)
+    const livreesBarcodes = new Set(
+      data.movements
+        .filter(m => String(m.action || '').toUpperCase() === ACTION_LIVRAISON)
+        .map(m => String(m.barcode || '').trim().toUpperCase()),
+    )
+
+    // Les deux sorties de réserve du jour, distinguées par leur destination.
+    const reserveVersLabo = sortiesDeReserve(history, today, [ACTION_LABORATOIRE])
+    const reserveVersStock = sortiesDeReserve(history, today, ACTIONS_RETOUR_STOCK)
 
     const reserveProche = data.reserved.filter(g => daysSince(g.updated_at || g.created_at) >= RESERVE_LIMITE_JOURS - 1)
 
@@ -563,11 +803,17 @@ function ResponsableMagasinPage() {
     return {
       today, yesterday,
       caToday: sumPrice(soldToday), caYesterday: sumPrice(soldYesterday),
-      caWeek: sumPrice(soldWeek), caMonth: sumPrice(soldMonth), caLastMonth: sumPrice(soldLastMonth),
+      caWeek: sumPrice(soldWeek), caPrevWeek: sumPrice(soldPrevWeek),
+      caMonth: sumPrice(soldMonth), caLastMonth: sumPrice(soldLastMonth),
       caYear: sumPrice(soldYear), caLastYear: sumPrice(soldLastYear),
-      soldToday, soldWeek,
+      soldToday, soldWeek, soldPrevWeek,
       ticketMoyen: soldWeek.length > 0 ? Math.round(sumPrice(soldWeek) / soldWeek.length) : 0,
+      ticketMoyenPrev: soldPrevWeek.length > 0 ? Math.round(sumPrice(soldPrevWeek) / soldPrevWeek.length) : 0,
       proformasToday, soldeesToday,
+      montantSoldeesToday: soldeesToday.reduce((total, p) => total + (Number(p.total_amount) || 0), 0),
+      payeesToday,
+      livreesToday, livreesBarcodes,
+      reserveVersLabo, reserveVersStock,
       reserveProche,
       stockTotal,
       critiques,
@@ -586,7 +832,8 @@ function ResponsableMagasinPage() {
   const nomAffiche = fullName(user) || 'Responsable'
 
   const glassRows = (list: Glass[], meta: (g: Glass) => string): DetailRowData[] =>
-    list.map(glass => ({
+    list.map((glass, index) => ({
+      id: glass.barcode || `${glassRef(glass)}-${index}`,
       title: glassRef(glass),
       subtitle: clientOf(glass),
       cells: [
@@ -594,6 +841,42 @@ function ResponsableMagasinPage() {
         { label: 'Prix', value: fmtFCFA(glass.price) },
       ],
     }))
+
+  // Le journal ne porte que le code-barres : la fiche complète se retrouve dans les listes
+  // déjà chargées. Une monture partie du magasin depuis n'y est plus, d'où les replis.
+  const ficheIndex = useMemo(() => {
+    const index = new Map<string, Glass>()
+    for (const glass of [...data.local, ...data.presentoir, ...data.labo, ...data.reserved, ...data.pretes, ...data.sold]) {
+      if (glass.barcode) index.set(String(glass.barcode).toUpperCase(), glass)
+    }
+    return index
+  }, [data])
+
+  const movementRows = (
+    list: { movement: Movement; joursReserve?: number }[],
+    label: string,
+    badge?: (entree: { movement: Movement; joursReserve?: number }) => ReactNode,
+  ): DetailRowData[] =>
+    list.map((entree, index) => {
+      const { movement, joursReserve } = entree
+      const fiche = ficheIndex.get(String(movement.barcode || '').toUpperCase())
+      return {
+        id: `${movement.barcode || 'mvt'}-${movement.created_at || index}`,
+        title: fiche ? glassRef(fiche) : (movement.reference || movement.barcode || '—'),
+        subtitle: fiche ? clientOf(fiche) : (movement.barcode || 'Monture non retrouvée'),
+        cells: [
+          {
+            label,
+            value: joursReserve != null
+              ? `${joursReserve} jour${joursReserve > 1 ? 's' : ''}`
+              : fmtDate(movement.created_at),
+            color: joursReserve != null && joursReserve >= RESERVE_LIMITE_JOURS ? C.amber : undefined,
+          },
+          { label: 'Prix', value: fiche ? fmtFCFA(fiche.price) : '—' },
+        ],
+        badge: badge?.(entree),
+      }
+    })
 
   // Les 8 tuiles du résumé du jour, toutes calculées sur les listes chargées.
   const resumeDuJour: { label: string; value: number; color: string; icon: IconFn; desc: string; detail: Omit<Detail, 'title'> }[] = [
@@ -626,16 +909,32 @@ function ResponsableMagasinPage() {
       },
     },
     {
+      label: "Lunettes payées aujourd'hui",
+      value: metrics.payeesToday.length,
+      color: C.primary,
+      icon: ic.cash,
+      desc: 'Paiement reçu aujourd’hui',
+      detail: {
+        icon: ic.cash,
+        description: "Montures encaissées par la Caisse aujourd'hui. Une proforma peut en porter plusieurs. Payer n'est pas retirer : la monture part ensuite au laboratoire.",
+        table: {
+          title: "Montures encaissées aujourd'hui",
+          rows: glassRows(metrics.payeesToday, g => `Encaissée le ${fmtDate(g.sold_at || g.updated_at)}`),
+        },
+      },
+    },
+    {
       label: "Remises aujourd'hui",
-      value: metrics.soldToday.length,
+      value: metrics.livreesToday.length,
       color: C.success,
       icon: ic.cart,
       desc: 'Sorties du magasin',
       detail: {
         icon: ic.cart,
+        description: "Montures livrées au client aujourd'hui, relevées sur les mouvements LIVRAISON. Ces clients avaient payé avant : c'est la sortie du magasin, pas l'encaissement.",
         table: {
           title: "Montures remises aujourd'hui",
-          rows: glassRows(metrics.soldToday, g => `Remise le ${fmtDate(g.sold_at || g.updated_at)}`),
+          rows: movementRows(metrics.livreesToday.map(movement => ({ movement })), 'Remise le'),
         },
       },
     },
@@ -1340,7 +1639,7 @@ function DetailModal({ detail, onClose }: { detail: Detail; onClose: () => void 
                   <Empty>Aucune ligne.</Empty>
                 ) : (
                   detail.table.rows.map(row => (
-                    <div key={row.title} className="grid gap-2 px-3 py-3 sm:grid-cols-[minmax(0,1.4fr)_repeat(2,minmax(0,1fr))_auto] sm:items-center">
+                    <div key={row.id} className="grid gap-2 px-3 py-3 sm:grid-cols-[minmax(0,1.4fr)_repeat(2,minmax(0,1fr))_auto] sm:items-center">
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{row.title}</p>
                         <p className="text-xs text-slate-400 truncate">{row.subtitle}</p>

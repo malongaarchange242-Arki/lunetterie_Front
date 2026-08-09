@@ -187,7 +187,7 @@ const TONE = {
 }
 
 type Tone = keyof typeof TONE
-type TabId = 'monter' | 'marquer' | 'pretes'
+type TabId = 'arrivees' | 'stock' | 'afaire' | 'prete' | 'magasin'
 
 /** Au-delà, la monture traîne au labo : seul repère d'urgence disponible, le backend
  *  ne porte aucune date de livraison promise au client. */
@@ -364,7 +364,7 @@ function GlassRow({ glass, client, badge, selected, onToggle }: {
 
 function LaboPage() {
   const [dark, setDark] = useState(false)
-  const [tab, setTab] = useState<TabId>('monter')
+  const [tab, setTab] = useState<TabId>('arrivees')
   const [user, setUser] = useState<any>(null)
   const [ready, setReady] = useState(false)
 
@@ -423,10 +423,17 @@ function LaboPage() {
   )
   const enRetard = aMonter.filter(g => daysSince(g.updated_at || g.created_at) >= RETARD_JOURS)
 
+  const aFaire = useMemo(
+    () => [...data.aMonter].sort((a, b) => (daysSince(a.updated_at || a.created_at) - daysSince(b.updated_at || b.created_at))),
+    [data.aMonter],
+  )
+
   const TABS: { id: TabId; label: string; short: string; icon: IconFn; count?: number }[] = [
-    { id: 'monter', label: 'À monter', short: 'À monter', icon: ic.flask, count: aMonter.length },
-    { id: 'marquer', label: 'Marquer prête', short: 'Marquer', icon: ic.scan },
-    { id: 'pretes', label: 'Prêtes à livrer', short: 'Prêtes', icon: ic.hand, count: data.pretes.length },
+    { id: 'arrivees', label: 'Arrivées', short: 'Arrivées', icon: ic.flask, count: aMonter.length },
+    { id: 'stock', label: 'Stock Labo', short: 'Stock', icon: ic.scan, count: aMonter.length },
+    { id: 'afaire', label: 'À faire', short: 'À faire', icon: ic.clock, count: aMonter.length },
+    { id: 'prete', label: 'Montures prêtes', short: 'Prêtes', icon: ic.hand, count: data.pretes.length },
+    { id: 'magasin', label: 'Magasin', short: 'Magasin', icon: ic.glasses, count: data.pretes.length },
   ]
 
   function toggle(barcode: string) {
@@ -577,79 +584,80 @@ function LaboPage() {
               </div>
             )}
 
-            {/* ── À MONTER ─────────────────────────────────────────────────── */}
-            {tab === 'monter' && (
-              <div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <StatTile label="Au laboratoire" value={aMonter.length} color={C.cyan} note="Montures à monter" />
-                  <StatTile label={`Depuis ${RETARD_JOURS} jours ou plus`} value={enRetard.length} color={C.amber} note="À traiter en priorité" />
-                  <StatTile label="Prêtes à livrer" value={data.pretes.length} color={C.success} note="Montage terminé" />
+            {/* ── ARRIVÉES ───────────────────────────────────────────────────── */}
+            {tab === 'arrivees' && (
+              <div className={`${CARD} overflow-x-auto`}>
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">Arrivées au laboratoire</p>
                 </div>
-
-                <SectionTitle>Plan de charge</SectionTitle>
-                <div className={`${CARD} p-0 overflow-hidden`}>
-                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between gap-3">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">
-                      Du plus ancien au plus récent
-                    </p>
-                    {selection.length > 0 && (
-                      <Badge tone="blue">{selection.length} sélectionnée{selection.length > 1 ? 's' : ''}</Badge>
-                    )}
-                  </div>
-                  <div className="divide-y divide-slate-50 dark:divide-slate-700/60">
-                    {loading && aMonter.length === 0 ? (
-                      <Empty>Chargement…</Empty>
-                    ) : aMonter.length === 0 ? (
-                      <Empty>Aucune monture au laboratoire.</Empty>
-                    ) : (
-                      aMonter.map(glass => {
-                        const jours = daysSince(glass.updated_at || glass.created_at)
-                        return (
-                          <GlassRow
-                            key={glass.barcode}
-                            glass={glass}
-                            client={clientOf(glass)}
-                            selected={selection.includes(glass.barcode)}
-                            onToggle={() => toggle(glass.barcode)}
-                            badge={<Badge tone={jours >= RETARD_JOURS ? 'amber' : 'cyan'}>
-                              {jours >= RETARD_JOURS ? 'En retard' : 'En cours'}
-                            </Badge>}
-                          />
-                        )
-                      })
-                    )}
-                  </div>
-                </div>
-
-                {selection.length > 0 && (
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <button
-                      onClick={() => void marquerPretes()}
-                      disabled={busy || !stationId}
-                      className="flex-1 rounded-xl bg-green-600 hover:bg-green-700 px-4 py-3 text-sm font-semibold text-white transition-colors disabled:opacity-50"
-                    >
-                      {busy ? 'Enregistrement…' : `Marquer ${selection.length} monture${selection.length > 1 ? 's' : ''} prête${selection.length > 1 ? 's' : ''}`}
-                    </button>
-                    <button
-                      onClick={() => setSelection([])}
-                      className="rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200 transition-colors"
-                    >
-                      Annuler
-                    </button>
-                  </div>
+                {loading && aMonter.length === 0 ? (
+                  <Empty>Chargement…</Empty>
+                ) : aMonter.length === 0 ? (
+                  <Empty>Aucune monture arrivée.</Empty>
+                ) : (
+                  <table className="w-full text-sm min-w-[560px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-700">
+                        <th className="text-left py-2 pr-3 text-xs font-semibold text-slate-400">Client</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Modèle</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Code</th>
+                        <th className="text-right py-2 pl-3 text-xs font-semibold text-slate-400">Arrivée</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aMonter.map(glass => (
+                        <tr key={glass.barcode} className="border-b border-slate-50 dark:border-slate-700/60 last:border-0">
+                          <td className="py-3 pr-3 font-medium text-slate-900 dark:text-white truncate max-w-[160px]">{clientOf(glass)}</td>
+                          <td className="py-3 px-3 text-slate-400">{glassModel(glass)}</td>
+                          <td className="py-3 px-3 font-mono text-xs text-slate-500 dark:text-slate-300">{glass.barcode}</td>
+                          <td className="py-3 pl-3 text-right text-xs text-slate-400">{fmtDate(glass.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
-
-                <div className="mt-3">
-                  <Note>
-                    L'ancienneté est comptée depuis l'arrivée au laboratoire. Le backend ne porte pas de date de
-                    livraison promise au client : le « à livrer le » de la maquette n'a pas d'équivalent en base.
-                  </Note>
-                </div>
               </div>
             )}
 
-            {/* ── MARQUER PRÊTE ────────────────────────────────────────────── */}
-            {tab === 'marquer' && (
+            {/* ── À FAIRE ─────────────────────────────────────────────────────── */}
+            {tab === 'afaire' && (
+              <div className={`${CARD} overflow-x-auto`}>
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">À fabriquer</p>
+                </div>
+                {loading && aMonter.length === 0 ? (
+                  <Empty>Chargement…</Empty>
+                ) : aMonter.length === 0 ? (
+                  <Empty>Aucune monture à fabriquer.</Empty>
+                ) : (
+                  <table className="w-full text-sm min-w-[560px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-700">
+                        <th className="text-left py-2 pr-3 text-xs font-semibold text-slate-400">#</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Client</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Modèle</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Code</th>
+                        <th className="text-right py-2 pl-3 text-xs font-semibold text-slate-400">À livrer</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aMonter.map((glass, index) => (
+                        <tr key={glass.barcode} className="border-b border-slate-50 dark:border-slate-700/60 last:border-0">
+                          <td className="py-3 pr-3 font-medium text-slate-900 dark:text-white">{index + 1}</td>
+                          <td className="py-3 px-3 text-slate-400 truncate max-w-[160px]">{clientOf(glass)}</td>
+                          <td className="py-3 px-3 text-slate-400">{glassModel(glass)}</td>
+                          <td className="py-3 px-3 font-mono text-xs text-slate-500 dark:text-slate-300">{glass.barcode}</td>
+                          <td className="py-3 pl-3 text-right text-xs text-slate-400">{fmtDate(glass.updated_at || glass.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {/* ── STOCK LABO ──────────────────────────────────────────────── */}
+            {tab === 'stock' && (
               <div className="space-y-3">
                 <div className={CARD}>
                   <div className="flex items-center gap-2.5">
@@ -792,6 +800,33 @@ function LaboPage() {
                       </tbody>
                     </table>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* ── MAGASIN ────────────────────────────────────────────────────── */}
+            {tab === 'magasin' && (
+              <div>
+                <div className={`${CARD} p-0 overflow-hidden`}>
+                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">Envoyées au magasin</p>
+                  </div>
+                  <div className="divide-y divide-slate-50 dark:divide-slate-700/60">
+                    {loading && data.pretes.length === 0 ? (
+                      <Empty>Chargement…</Empty>
+                    ) : data.pretes.length === 0 ? (
+                      <Empty>Aucune monture envoyée au magasin.</Empty>
+                    ) : (
+                      data.pretes.map(glass => (
+                        <GlassRow
+                          key={glass.barcode}
+                          glass={glass}
+                          client={clientOf(glass)}
+                          badge={<Badge tone="blue">En magasin</Badge>}
+                        />
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
             )}

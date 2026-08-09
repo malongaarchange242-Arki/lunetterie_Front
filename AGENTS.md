@@ -111,6 +111,18 @@ Un transfert se fait en **trois appels** : `POST /transfers` → `POST /transfer
 **Gamme**, dérivée du prix : ≤ 50 000 FCFA = Classique, ≤ 100 000 = Moyenne gamme,
 au-delà = Luxe.
 
+### ⚠️ Une monture vendue ne reste pas `VENDUE`
+
+L'encaissement (`POST /proformas/:id/settle`, décision `VENDUE`) passe la monture en
+`VENDUE` **puis l'expédie aussitôt au Laboratoire** : `EN_TRANSIT`, puis `EN_LABORATOIRE`
+au scan là-bas. `/inventory/glasses?status=VENDUE` ne renvoie donc quasiment jamais les
+ventes — compter dessus affiche « 0 vente » face à des proformas réglées.
+
+**La vente est sur la proforma, pas sur la monture** : ligne à `outcome = VENDUE`, en-tête
+à `REGLEE` (le serveur ne règle que si une monture au moins a été encaissée, il annule
+sinon). `soldFromProformas()` dans `src/vendeuse.tsx` reconstruit les ventes à partir de
+là et les fusionne avec la liste `VENDUE` de l'API.
+
 ## API
 
 Base : `import.meta.env.VITE_API_URL` ou `https://api-lunetterie.universearch.com/api/v1`
@@ -119,7 +131,7 @@ Utilisées ici : `/auth/me` · `/auth/login` · `/auth/check-user` · `/auth/set
 `/auth/stations` · `/auth/webauthn/*` · `/inventory/glasses[/:barcode]` ·
 `/inventory/proformas[/:id/settle]` · `/inventory/reserves` · `/inventory/sales` ·
 `/inventory/movements` · `/inventory/stock-summary` · `/inventory/transfers` ·
-`/inventory/deliveries` · `/ai/chat`
+`/inventory/deliveries` · `/inventory/claims` · `/inventory/sav/followups` · `/ai/chat`
 
 Réponses : `{ success, data: { … } }`. Les erreurs portent un `error` ou `message`
 **utile** — remonte-le à l'écran plutôt qu'un « erreur » générique. Le serveur nomme
@@ -137,9 +149,9 @@ de bâtir dessus.**
 |---|---|
 | pas de `sold_by` sur une monture vendue | impossible d'attribuer une vente à une vendeuse ; « Mes stats » compte des **mouvements**, rapprochés par comparaison de chaînes sur `user_first_name + user_last_name` |
 | pas de `created_by` sur une proforma | « Suivi de mes clients » liste les clients **du magasin**, pas ceux du compte connecté |
-| pas d'issue par ligne de proforma | le statut Vendu / Soldé / En attente est **déduit** : vendu si le code-barres figure parmi les montures `VENDUE`, soldé si `is_pending === false`, en attente sinon |
+| ~~pas d'issue par ligne de proforma~~ **comblé** | `proforma.items[].outcome` vaut `VENDUE` ou `RETOUR_PRESENTOIR` dès que la Caisse a tranché (`null` tant qu'elle attend), avec `settled_at`. C'est lui qui donne le statut d'une ligne, plus la déduction par code-barres |
 | aucun champ d'ordonnance | foyer, teinte, sphère, cylindre, axe, addition, prix des verres, accessoires, montage, remise **transitent dans `proforma.note`** |
-| aucun endpoint réclamation | l'écran Réclamation existe, son bouton d'envoi est désactivé |
+| réclamations : **écriture seule** | `POST /inventory/claims` existe et l'écran Réclamation l'utilise. Il n'y a **pas de route de lecture** — `claims` n'enregistre que `Create` (`cmd/api/main.go`), et le dépôt Go n'a pas de `List`. « Suivi de réclamation » demande quand même `GET /inventory/claims` : la table se remplira seule le jour où la route existera. En attendant, son erreur est tenue **à l'écart du bandeau global**, sinon tout le poste afficherait « 1 liste indisponible » en permanence |
 
 ### La `note` porte l'ordonnance
 

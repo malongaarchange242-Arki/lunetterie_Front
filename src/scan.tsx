@@ -875,9 +875,11 @@ const SELECT = 'rounded-xl border border-slate-200 dark:border-slate-700 bg-whit
 
 /** Liste unique et filtrable de tout ce qui a été enregistré. Pas de blocs par date :
  *  ils imposaient un détour alors que la recherche fait le même travail sans clic. */
-function HistoriqueScreen({ movements, onPrint }: {
+function HistoriqueScreen({ movements, onPrint, onReturn, hasSession }: {
   movements: Movement[]
   onPrint: (record: Movement) => void
+  onReturn: () => void
+  hasSession: boolean
 }) {
   const [query, setQuery] = useState('')
   const [forme, setForme] = useState('')
@@ -905,6 +907,11 @@ function HistoriqueScreen({ movements, onPrint }: {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
+      {!hasSession && (
+        <div className="flex justify-start">
+          <Btn variant="outline" onClick={onReturn}>{ic.arrowLeft()} Retour</Btn>
+        </div>
+      )}
       <div className={`${CARD} p-4`}>
         <div className="flex flex-col gap-2 sm:flex-row">
           <div className="relative flex-1">
@@ -1099,10 +1106,12 @@ function dispatchMessage(dispatch: Dispatch) {
 
 const LISTE_PAGE_SIZE = 10
 
-function ListesScreen({ lists, loading, onReload }: {
+function ListesScreen({ lists, loading, onReload, onReturn, hasSession }: {
   lists: SendList[]
   loading: boolean
   onReload: () => void
+  onReturn: () => void
+  hasSession: boolean
 }) {
   const [open, setOpen] = useState<SendList | null>(null)
   const [items, setItems] = useState<SendListItem[]>([])
@@ -1254,6 +1263,11 @@ function ListesScreen({ lists, loading, onReload }: {
 
     return (
       <div className="mx-auto max-w-4xl space-y-4">
+        {!hasSession && (
+          <div className="flex justify-start">
+            <Btn variant="outline" onClick={onReturn}>{ic.arrowLeft()} Retour</Btn>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <Btn onClick={() => { setOpen(null); setDispatch(null) }}>{ic.arrowLeft()} Listes</Btn>
           <div className="min-w-0">
@@ -1377,6 +1391,11 @@ function ListesScreen({ lists, loading, onReload }: {
   // ── Choix de la liste ────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-4xl space-y-4">
+      {!hasSession && (
+        <div className="flex justify-start">
+          <Btn variant="outline" onClick={onReturn}>{ic.arrowLeft()} Retour</Btn>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-slate-400">
           {loading ? 'Chargement…' : `${lists.length} liste${lists.length > 1 ? 's' : ''} reçue${lists.length > 1 ? 's' : ''}`}
@@ -2141,11 +2160,30 @@ function ScanPage() {
           )}
 
           {screen === 'historique' && (
-            <HistoriqueScreen movements={movements} onPrint={record => void printMontureLabel(recordToLabel(record))} />
+            <HistoriqueScreen
+              movements={movements}
+              onPrint={record => void printMontureLabel(recordToLabel(record))}
+              onReturn={() => {
+                setActivationError(false)
+                setActivationStatus('La session est terminée. Scannez une nouvelle étiquette pour continuer.')
+                setScreen('activation')
+              }}
+              hasSession={Boolean(session)}
+            />
           )}
 
           {screen === 'listes' && (
-            <ListesScreen lists={lists} loading={loadingLists} onReload={() => void loadLists()} />
+            <ListesScreen
+              lists={lists}
+              loading={loadingLists}
+              onReload={() => void loadLists()}
+              onReturn={() => {
+                setActivationError(false)
+                setActivationStatus('La session est terminée. Scannez une nouvelle étiquette pour continuer.')
+                setScreen('activation')
+              }}
+              hasSession={Boolean(session)}
+            />
           )}
 
           {screen === 'wizard' && (

@@ -4201,34 +4201,81 @@ function ReceptionView() {
               </button>
             </div>
 
-            <div className="mt-4 overflow-x-auto rounded-2xl border border-emerald-200 dark:border-emerald-700">
-              <div className="min-w-[620px]">
-                <table className="w-full min-w-full divide-y divide-emerald-200 dark:divide-emerald-700 text-xs sm:text-sm">
-                  <thead className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-200">
-                    <tr>
-                      <th className="px-3 py-2.5 text-left font-semibold">Référence</th>
-                      <th className="px-3 py-2.5 text-left font-semibold">Total</th>
-                      <th className="px-3 py-2.5 text-left font-semibold">Stock général</th>
-                      <th className="px-3 py-2.5 text-left font-semibold">Stock local</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-emerald-100 bg-white dark:divide-emerald-800 dark:bg-slate-900">
-                    {isLoadingStockSummary ? (
-                      <tr><td colSpan={4} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Chargement…</td></tr>
-                    ) : stockSummary.length === 0 ? (
-                      <tr><td colSpan={4} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Aucune donnée disponible pour le moment.</td></tr>
-                    ) : (
-                      stockSummary.slice(0, 5).map((item: any, index: number) => (
-                        <tr key={`${item.reference || 'ref'}-${index}`} className="transition-colors hover:bg-emerald-50/70 dark:hover:bg-emerald-900/10">
-                          <td className="px-3 py-2.5 font-medium text-slate-900 dark:text-white">{item.reference || '—'}</td>
-                          <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_total || 0).toLocaleString('fr-FR')}</td>
-                          <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_general || 0).toLocaleString('fr-FR')}</td>
-                          <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_local || 0).toLocaleString('fr-FR')}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+            <div className="mt-4 space-y-3">
+              <div className="overflow-x-auto rounded-2xl border border-emerald-200 dark:border-emerald-700">
+                <div className="min-w-[620px]">
+                  <table className="w-full min-w-full divide-y divide-emerald-200 dark:divide-emerald-700 text-xs sm:text-sm">
+                    <thead className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-200">
+                      <tr>
+                        <th className="px-3 py-2.5 text-left font-semibold">Référence</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Total</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Stock général</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Stock local</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-emerald-100 bg-white dark:divide-emerald-800 dark:bg-slate-900">
+                      {isLoadingStockSummary ? (
+                        <tr><td colSpan={4} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Chargement…</td></tr>
+                      ) : stockSummary.length === 0 ? (
+                        <tr><td colSpan={4} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Aucune donnée disponible pour le moment.</td></tr>
+                      ) : (
+                        stockSummary.slice(0, 5).map((item: any, index: number) => (
+                          <tr key={`${item.reference || 'ref'}-${index}`} className="transition-colors hover:bg-emerald-50/70 dark:hover:bg-emerald-900/10">
+                            <td className="px-3 py-2.5 font-medium text-slate-900 dark:text-white">{item.reference || '—'}</td>
+                            <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_total || 0).toLocaleString('fr-FR')}</td>
+                            <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_general || 0).toLocaleString('fr-FR')}</td>
+                            <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_local || 0).toLocaleString('fr-FR')}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {Object.entries(restockByCity).length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-400">
+                    Aucune ville avec réapprovisionnement pour le moment.
+                  </div>
+                ) : (
+                  Object.entries(restockByCity)
+                    .map(([cityKey, suggestion]) => {
+                      const cityName = suggestion.city || cityKey
+                      const toSend = Number(suggestion.to_send || 0)
+                      const createdAt = suggestion.last_box_at ? new Date(suggestion.last_box_at) : null
+                      const createdLabel = createdAt && !Number.isNaN(createdAt.getTime())
+                        ? createdAt.toLocaleDateString('fr-FR')
+                        : '—'
+                      return (
+                        <div key={cityKey} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-white">{cityName}</p>
+                              <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Réapprovisionnement</p>
+                            </div>
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${toSend > 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'}`}>
+                              {toSend > 0 ? `${toSend} à envoyer` : 'À jour'}
+                            </span>
+                          </div>
+                          <div className="mt-4 grid gap-2 text-sm text-slate-600 dark:text-slate-300">
+                            <div className="flex items-center justify-between">
+                              <span>Dernier carton</span>
+                              <span className="font-semibold">{Number(suggestion.last_box_qty || 0).toLocaleString('fr-FR')}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span>Stock actuel</span>
+                              <span className="font-semibold">{Number(suggestion.current_stock || 0).toLocaleString('fr-FR')}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span>Création</span>
+                              <span className="font-semibold">{createdLabel}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                )}
               </div>
             </div>
           </div>
