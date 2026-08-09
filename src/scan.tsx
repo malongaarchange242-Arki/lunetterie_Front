@@ -1,0 +1,2398 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ReactDOM from 'react-dom/client'
+import './index.css'
+// Importé plutôt que référencé par URL : sans dossier public/, un chemin littéral ne
+// serait pas copié dans dist/ au build.
+import logoUrl from '../logo.jpeg'
+import { cameraUnavailableReason, createScanner, humanCameraError, openCamera, type Scanner } from './barcodeScanner'
+
+const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
+// Aucun sélecteur de station sur cet écran : on réceptionne toujours au Stock Général.
+const DEFAULT_STATION_ID = '1'
+
+// ── Session ────────────────────────────────────────────────────────────────────
+function getToken() {
+  return window.localStorage.getItem('token')
+}
+
+function clearSession() {
+  window.localStorage.removeItem('token')
+  window.localStorage.removeItem('user')
+  window.localStorage.removeItem('poste')
+}
+
+function logoutToLogin() {
+  clearSession()
+  window.location.replace('/magasin.html')
+}
+
+const ROLE_ID_TO_NAME: Record<number, string> = {
+  1: 'SUPER_ADMIN', 2: 'ADMIN', 3: 'MAGASINIER', 4: 'VENDEUR',
+  5: 'LABORATOIRE', 6: 'RESPONSABLE_STATION', 7: 'DIRECTION', 8: 'SUPER_DIRECTEUR',
+  // 9 et 10 sont fixés à la main par les migrations 025_caisse et 028_sav : la
+  // séquence aurait fait dépendre leur id de l'ordre d'exécution des migrations.
+  9: 'CAISSIER', 10: 'SAV',
+}
+const ROLE_ALIASES: Record<string, string> = { DIRECTION: 'ADMIN', SUPER_DIRECTEUR: 'SUPER_ADMIN' }
+
+function getRoleName(user: any): string | null {
+  const raw = user?.role_name || user?.role
+  if (raw) {
+    const name = String(raw).trim().toUpperCase().replace(/\s+/g, '_')
+    return ROLE_ALIASES[name] || name
+  }
+  const byId = user?.role_id != null ? ROLE_ID_TO_NAME[Number(user.role_id)] : null
+  return byId ? (ROLE_ALIASES[byId] || byId) : null
+}
+
+/** Les seuls rôles admis ici, comme protectPage(['MAGASINIER','SUPER_ADMIN']) de scan.html. */
+const ALLOWED_ROLES = ['MAGASINIER', 'SUPER_ADMIN']
+
+/** Le statut voyage avec l'erreur : un code de session inconnu (404) doit dire
+ *  « ce code est invalide », pas « le serveur est injoignable ». */
+class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
+// Toute réponse 401/403 signifie que le jeton ne vaut plus rien : on ne laisse pas
+// l'écran afficher des listes vides en donnant l'illusion d'un stock à zéro.
+async function apiFetch(path: string, init?: RequestInit) {
+  const token = getToken()
+  const isForm = init?.body instanceof FormData
+  const response = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.headers || {}),
+      // Surtout pas de Content-Type sur un FormData : le navigateur doit poser
+      // lui-même la frontière multipart, sinon le serveur ne trouve aucun fichier.
+      ...(init?.body && !isForm ? { 'Content-Type': 'application/json' } : {}),
+      Authorization: `Bearer ${token}`,
+    },
+  })
+  if (response.status === 401 || response.status === 403) {
+    logoutToLogin()
+    throw new Error('Session expirée')
+  }
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok || payload?.success === false) {
+    throw new ApiError(payload?.error || payload?.message || `Erreur ${response.status}`, response.status)
+  }
+  return payload
+}
+
+// ── Format ─────────────────────────────────────────────────────────────────────
+function fmtFCFA(value: unknown) {
+  const n = Number(value)
+  if (!value || Number.isNaN(n)) return '—'
+  return `${n.toLocaleString('fr-FR')} FCFA`
+}
+
+function dayKey(value?: string) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString().slice(0, 10)
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function formatDayLabel(key: string) {
+  return new Date(`${key}T12:00:00`).toLocaleDateString('fr-FR', {
+    weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric',
+  })
+}
+
+/** `dayKey` rend null sur une date absente ou illisible. Sans ce garde-fou, la date
+ *  partirait telle quelle dans `new Date('nullT12:00:00')` et sortirait « Invalid Date ». */
+function dayLabel(value?: string) {
+  const key = dayKey(value)
+  return key ? formatDayLabel(key) : 'Date inconnue'
+}
+
+function formatRecordTime(value?: string) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function dataURLtoBlob(dataUrl: string) {
+  const [header, base64] = dataUrl.split(',')
+  const mime = /:(.*?);/.exec(header)?.[1] || 'image/jpeg'
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+  return new Blob([bytes], { type: mime })
+}
+
+// ── Référentiels ───────────────────────────────────────────────────────────────
+const GENRES = ['Homme', 'Femme', 'Enfant', 'Unisexe']
+const MATIERES = ['Acétate', 'Métal', 'Plastique', 'Titane', 'Bois', 'Composite', 'Inox']
+
+const FORMES = [
+  'Aviateur', 'Rond', 'Ovale', 'Carré', 'Rectangulaire',
+  'Papillon', 'Oeil de chat', 'Sport', 'Wayfarer',
+] as const
+
+const COULEURS: { value: string; swatch: string }[] = [
+  { value: 'Noir', swatch: '#1c1c1c' },
+  { value: 'Marron', swatch: '#6b4226' },
+  { value: 'Bleu', swatch: '#2563eb' },
+  { value: 'Rouge', swatch: '#dc2626' },
+  { value: 'Vert', swatch: '#16a34a' },
+  { value: 'Gris', swatch: '#6b7280' },
+  { value: 'Blanc', swatch: '#f8fafc' },
+  { value: 'Doré', swatch: '#d4af37' },
+  { value: 'Argenté', swatch: '#c0c0c0' },
+  { value: 'Violet', swatch: '#7c3aed' },
+  { value: 'Jaune', swatch: '#eab308' },
+  { value: 'Orange', swatch: '#f97316' },
+  { value: 'Rose', swatch: '#ec4899' },
+  { value: 'Beige', swatch: '#d6c0a8' },
+  { value: 'Transparent', swatch: 'rgba(255,255,255,0.65)' },
+  { value: 'Écaille', swatch: '#a77445' },
+  { value: 'Multicolore', swatch: 'linear-gradient(135deg, #f97316, #2563eb, #16a34a)' },
+  { value: 'Bronze', swatch: '#a16207' },
+  { value: 'Cuivré', swatch: '#c2410c' },
+]
+
+/** L'IA répond tantôt en anglais, tantôt sans accent : sans ce repli, la couleur
+ *  détectée ne correspondrait à aucune pastille et le champ resterait vide. */
+const COLOR_ALIASES: Record<string, string> = {
+  noir: 'Noir', black: 'Noir',
+  marron: 'Marron', brown: 'Marron', brun: 'Marron',
+  bleu: 'Bleu', blue: 'Bleu',
+  rouge: 'Rouge', red: 'Rouge',
+  vert: 'Vert', green: 'Vert',
+  gris: 'Gris', gray: 'Gris', grey: 'Gris',
+  blanc: 'Blanc', white: 'Blanc',
+  'doré': 'Doré', dore: 'Doré', gold: 'Doré', or: 'Doré',
+  'argenté': 'Argenté', argente: 'Argenté', silver: 'Argenté', argent: 'Argenté',
+  violet: 'Violet', purple: 'Violet',
+  jaune: 'Jaune', yellow: 'Jaune',
+  orange: 'Orange',
+  rose: 'Rose', pink: 'Rose',
+  beige: 'Beige', cream: 'Beige',
+  transparent: 'Transparent',
+  'écaille': 'Écaille', ecaille: 'Écaille', tortoise: 'Écaille',
+  multicolore: 'Multicolore', multicolor: 'Multicolore', multicolored: 'Multicolore',
+  bronze: 'Bronze',
+  'cuivré': 'Cuivré', cuivre: 'Cuivré',
+}
+
+function normalizeColorValue(value: unknown) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  return COLOR_ALIASES[raw.toLowerCase()] || raw
+}
+
+/** Barème repris tel quel de scan.js. ⚠️ Il ne colle pas à getGamme() des autres écrans
+ *  (≤ 50 000 = Classique) : une monture saisie « Classique » repart à 70 000 et sera
+ *  relue « Moyenne gamme » ailleurs. Écart de la production, à trancher côté métier —
+ *  le changer ici modifierait le prix réellement enregistré en base. */
+const GAMME_PRICES: Record<string, number> = {
+  classique: 70000,
+  'moyenne gamme': 90000,
+}
+
+function normalizePriceValue(value: unknown) {
+  if (value === null || value === undefined) return 0
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const trimmed = String(value).trim()
+  if (!trimmed) return 0
+  const numeric = Number(trimmed)
+  if (Number.isFinite(numeric)) return numeric
+  const normalized = trimmed.toLowerCase()
+  // 'luxe' vaut 0 : son prix est saisi à la main dans le champ dédié.
+  return GAMME_PRICES[normalized] ?? 0
+}
+
+// ── Icônes ─────────────────────────────────────────────────────────────────────
+const s = { fill: 'none' as const, stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+
+const ic = {
+  glasses: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="6.5" cy="12.5" r="4" /><circle cx="17.5" cy="12.5" r="4" /><path d="M10.5 12.5h3M2.4 10.8l2.1-1M21.6 10.8l-2.1-1" /></svg>,
+  arrowLeft: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M19 12H5M11 6l-6 6 6 6" /></svg>,
+  refresh: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 4v5h-5" /></svg>,
+  camera: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" /><circle cx="12" cy="13" r="3.4" /></svg>,
+  play: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7-11-7z" /></svg>,
+  stop: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>,
+  check: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s} strokeWidth={2}><path d="M5 13l4 4L19 7" /></svg>,
+  check2: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M2 13l4 4L15 7" /><path d="M9.5 17l1.4 1.4L21 8" /></svg>,
+  checkCircle: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><path d="M8 12.4l2.5 2.5L16 9" /></svg>,
+  image: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.4" fill="currentColor" stroke="none" /><path d="M21 16.5l-5.6-5.6a1 1 0 0 0-1.4 0L6 19" /></svg>,
+  pencil: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M4 20l4.4-1L19.4 8a2.1 2.1 0 0 0-3-3L5.4 15.5 4 20z" /></svg>,
+  send: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4 20-7z" /></svg>,
+  search: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>,
+  tag: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M12.4 3H5a1 1 0 0 0-1 1v7.4a1 1 0 0 0 .3.7l9 9a1 1 0 0 0 1.4 0l7.4-7.4a1 1 0 0 0 0-1.4l-9-9a1 1 0 0 0-.7-.3z" /><circle cx="8.1" cy="8.1" r="1.2" fill="currentColor" stroke="none" /></svg>,
+  building: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><rect x="4" y="3" width="10" height="18" /><path d="M14 8h6v13h-6" /><path d="M7.5 7h1M10.5 7h1M7.5 11h1M10.5 11h1M7.5 15h1M10.5 15h1" /></svg>,
+  gender: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="9" cy="14.2" r="4" /><path d="M9 10.2V3.5M6.7 5.8h4.6" /><circle cx="15.2" cy="8.8" r="4" /><path d="M18 6l3-3M17.8 2.3H21v3.2" /></svg>,
+  shapes: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="8" cy="8" r="4.2" /><rect x="12.5" y="12.5" width="8" height="8" rx="1.5" /></svg>,
+  palette: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M12 3a9 9 0 1 0 0 18c1.2 0 2-.9 2-2 0-.5-.2-.9-.5-1.3-.3-.3-.5-.7-.5-1.2 0-.9.7-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.4-4-7-9-7z" /><circle cx="7.6" cy="10.6" r="1" fill="currentColor" stroke="none" /><circle cx="9.6" cy="7" r="1" fill="currentColor" stroke="none" /><circle cx="14.4" cy="7" r="1" fill="currentColor" stroke="none" /><circle cx="16.4" cy="10.6" r="1" fill="currentColor" stroke="none" /></svg>,
+  cube: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" /><path d="M4 7.5L12 12l8-4.5M12 12v9" /></svg>,
+  banknote: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="3" /><path d="M6 9v.01M18 15v.01" /></svg>,
+  save: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M5 3h11l3 3v15H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M8 3v6h8V3M8 21v-7h8v7" /></svg>,
+  printer: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="8" rx="1" /><path d="M6 17h12v5H6z" /></svg>,
+  plus: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M12 5v14M5 12h14" /></svg>,
+  sun: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" /></svg>,
+  moon: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z" /></svg>,
+  calendar: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><rect x="3.5" y="5" width="17" height="15.5" rx="2" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>,
+  signOut: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>,
+  alert: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></svg>,
+}
+
+// ── Dessins des formes de monture ──────────────────────────────────────────────
+// Aident à choisir la forme réelle plutôt qu'un mot dans une liste ; la correction
+// sert aussi de donnée d'entraînement au modèle de reconnaissance (detected_shape).
+const SHAPE_PATHS: Record<string, React.ReactNode> = {
+  Aviateur: <>
+    <path d="M2 7.5C2 4.5 5 2.5 9 2.5s7 2 7 5c0 5-3 10.5-7 10.5S2 12.5 2 7.5z" />
+    <g transform="translate(40,0) scale(-1,1)"><path d="M2 7.5C2 4.5 5 2.5 9 2.5s7 2 7 5c0 5-3 10.5-7 10.5S2 12.5 2 7.5z" /></g>
+    <path d="M17 8h6M1 8L.2 6.8M39 8l.8-1.2" />
+  </>,
+  Rond: <><circle cx="9" cy="10" r="7" /><circle cx="31" cy="10" r="7" /><path d="M16 10h8M2 7.6.5 6.5M38 7.6l1.5-1.1" /></>,
+  Ovale: <><ellipse cx="9" cy="10" rx="7.5" ry="6" /><ellipse cx="31" cy="10" rx="7.5" ry="6" /><path d="M16.5 10h7M1.5 8 0 6.8M38.5 8l1.5-1.2" /></>,
+  'Carré': <><rect x="2" y="3" width="14" height="14" rx="2" /><rect x="24" y="3" width="14" height="14" rx="2" /><path d="M16 10h8M2 6 .5 4.8M38 6l1.5-1.2" /></>,
+  Rectangulaire: <><rect x="1" y="5" width="16" height="10" rx="2" /><rect x="23" y="5" width="16" height="10" rx="2" /><path d="M17 10h6M1 7.5-.5 6.3M39 7.5l1.5-1.2" /></>,
+  Papillon: <>
+    <path d="M2.5 11c-.5-3 .5-6.5 3-7.5 1.8-.7 3-.2 3.5.7.5-.9 1.7-1.4 3.5-.7 2.5 1 3.5 4.5 3 7.5-.5 3-3 4.5-6.5 4.5S3 14 2.5 11z" />
+    <g transform="translate(40,0) scale(-1,1)"><path d="M2.5 11c-.5-3 .5-6.5 3-7.5 1.8-.7 3-.2 3.5.7.5-.9 1.7-1.4 3.5-.7 2.5 1 3.5 4.5 3 7.5-.5 3-3 4.5-6.5 4.5S3 14 2.5 11z" /></g>
+    <path d="M15.5 9h9M1 6.5-.5 5.5M39 6.5l1.5-1" />
+  </>,
+  'Oeil de chat': <>
+    <path d="M2.5 10.5C2 7.3 3.5 4 7 3c1.3-.4 2 .1 2 1 0-.9.7-1.4 2-1 3.5 1 5 4.3 4.5 7.5-.5 3.2-3 5-6.5 5s-6-1.8-6.5-5z" />
+    <g transform="translate(40,0) scale(-1,1)"><path d="M2.5 10.5C2 7.3 3.5 4 7 3c1.3-.4 2 .1 2 1 0-.9.7-1.4 2-1 3.5 1 5 4.3 4.5 7.5-.5 3.2-3 5-6.5 5s-6-1.8-6.5-5z" /></g>
+    <path d="M15.5 8.5h9M1 6-.5 5M39 6l1.5-1" />
+  </>,
+  Sport: <>
+    <path d="M2 6.5C2 4 4 2.5 7 2.5h3c3.5 0 6 2.5 6 7.5s-2.5 7-6 7H7C4 17 2 15.5 2 13z" />
+    <g transform="translate(40,0) scale(-1,1)"><path d="M2 6.5C2 4 4 2.5 7 2.5h3c3.5 0 6 2.5 6 7.5s-2.5 7-6 7H7C4 17 2 15.5 2 13z" /></g>
+    <path d="M16 10h8M2 7 .5 5.8M38 7l1.5-1.2" />
+  </>,
+  Wayfarer: <>
+    <path d="M3 4.5h11l2.5 4.5-2 6.5H4.5l-2-6.5z" />
+    <path d="M26 4.5h11l2 4.5-2 6.5H23.5l-2-6.5z" />
+    <path d="M17.5 9.5h5M2 6 .5 4.8M38.5 6l1.5-1.2" />
+  </>,
+}
+
+function ShapeIcon({ name, className = 'w-10 h-5' }: { name: string; className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 40 20" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round">
+      {SHAPE_PATHS[name]}
+    </svg>
+  )
+}
+
+// ── Styles maison ──────────────────────────────────────────────────────────────
+// Deux besoins que Tailwind ne couvre pas : l'animation du viseur caméra, et
+// l'étiquette d'impression — celle-ci part dans une fenêtre séparée qui n'a pas
+// la feuille de style de l'app, donc classes maison obligatoires (même raison que
+// PROFORMA_CSS dans vendeuse.tsx).
+const SCAN_CSS = `
+@keyframes scanline { 0%,100% { top: 8%; opacity: .25 } 50% { top: 92%; opacity: 1 } }
+.scan-line { animation: scanline 2.6s ease-in-out infinite; }
+@keyframes scanpulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+.scan-pulse { animation: scanpulse 1.4s ease-in-out infinite; }
+`
+
+const LABEL_CSS = `
+  @page { margin: 4mm; }
+  body { margin: 0; font-family: Inter, system-ui, sans-serif; color: #000; }
+  .lb { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 60mm; padding: 4mm; }
+  .lb .shop { font-size: 10px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+  .lb .marque { font-size: 13px; font-weight: 700; }
+  .lb .ref { font-size: 10px; color: #333; font-family: ui-monospace, monospace; }
+  .lb svg { margin: 2mm 0; max-width: 100%; }
+  .lb .meta { display: flex; justify-content: space-between; width: 100%; font-size: 9px; font-variant-numeric: tabular-nums; }
+`
+
+// ── Code-barres ────────────────────────────────────────────────────────────────
+/** showValue=false : le texte intégré au SVG rétrécit avec les barres et devient
+ *  illisible dans une carte étroite. On l'affiche alors séparément en HTML. */
+async function drawBarcode(target: SVGSVGElement, value: string, showValue = true) {
+  if (!value) return
+  const module = await import('jsbarcode')
+  const JsBarcode = (module.default || module) as any
+  if (typeof JsBarcode !== 'function') return
+  JsBarcode(target, value, {
+    format: 'CODE128',
+    lineColor: '#0f172a',
+    background: '#ffffff',
+    width: 2,
+    height: 46,
+    fontSize: 20,
+    margin: 8,
+    displayValue: showValue,
+  })
+  // JsBarcode fixe width/height en pixels mais n'ajoute pas de viewBox : sans lui,
+  // max-width:100% ne peut pas réduire le code proportionnellement et il déborde.
+  const w = target.getAttribute('width')
+  const h = target.getAttribute('height')
+  if (w && h) target.setAttribute('viewBox', `0 0 ${w} ${h}`)
+}
+
+function BarcodePreview({ value, className = '' }: { value: string; className?: string }) {
+  const ref = useRef<SVGSVGElement>(null)
+  useEffect(() => {
+    if (ref.current) void drawBarcode(ref.current, value, false)
+  }, [value])
+  return <svg ref={ref} className={`max-w-full h-auto ${className}`} />
+}
+
+/** L'étiquette part dans une fenêtre séparée plutôt qu'en masquant le reste de la
+ *  page : le vanilla s'appuyait sur `body > *:not(.print-label)`, impossible ici où
+ *  toute l'application vit sous un unique #root. */
+async function printMontureLabel(data: FinalMonture) {
+  // Le SVG est dessiné attaché au document — JsBarcode mesure le rendu, un nœud
+  // détaché ressort sans dimensions — puis retiré aussitôt.
+  const holder = document.createElement('div')
+  holder.style.cssText = 'position:absolute;left:-9999px;top:0'
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  holder.appendChild(svg)
+  document.body.appendChild(holder)
+
+  let markup = ''
+  try {
+    await drawBarcode(svg, data.id, true)
+    markup = svg.outerHTML
+  } finally {
+    holder.remove()
+  }
+
+  const popup = window.open('', '_blank', 'width=420,height=560')
+  if (!popup) {
+    window.alert("L'impression a été bloquée par le navigateur. Autorisez les fenêtres surgissantes pour imprimer l'étiquette.")
+    return
+  }
+  const esc = (v: string) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  popup.document.write(
+    `<!doctype html><html lang="fr"><head><meta charset="utf-8" />`
+    + `<title>Étiquette ${esc(data.id)}</title><style>${LABEL_CSS}</style></head><body>`
+    + `<div class="lb">`
+    + `<div class="shop">La Lunetterie</div>`
+    + `<div class="marque">${esc(data.marque || '—')}</div>`
+    + `<div class="ref">${esc(data.reference || '—')}</div>`
+    + markup
+    + `<div class="meta"><span>${esc(data.emplacement || '—')}</span><span>${esc(fmtFCFA(data.prix))}</span></div>`
+    + `</div>`
+    + `<script>window.onload=function(){window.print();}<\/script></body></html>`,
+  )
+  popup.document.close()
+}
+
+/** Trois notes montantes après un enregistrement : le magasinier a les mains
+ *  occupées, il valide à l'oreille sans quitter la monture des yeux. */
+function playSuccessChime() {
+  try {
+    const Ctor = window.AudioContext || (window as any).webkitAudioContext
+    if (!Ctor) return
+    const audioCtx = new Ctor()
+    ;[523, 659, 784].forEach((freq, i) => {
+      window.setTimeout(() => {
+        const osc = audioCtx.createOscillator()
+        const gain = audioCtx.createGain()
+        osc.connect(gain)
+        gain.connect(audioCtx.destination)
+        osc.frequency.value = freq
+        osc.type = 'sine'
+        gain.gain.value = 0.08
+        osc.start()
+        window.setTimeout(() => osc.stop(), 150)
+      }, i * 150)
+    })
+  } catch {
+    // Audio indisponible : l'enregistrement reste confirmé à l'écran.
+  }
+}
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+interface ReceptionSession {
+  code: string
+  registered: number
+  target: number
+  status: string
+}
+
+interface Movement {
+  id?: string | number
+  created_at?: string
+  brand?: string
+  reference?: string
+  barcode?: string
+  location_code?: string
+  [key: string]: any
+}
+
+type FieldKey = 'reference' | 'marque' | 'genre' | 'forme' | 'couleur' | 'matiere'
+type FieldSource = 'manual' | 'detected' | 'corrected'
+
+interface VerifyForm {
+  reference: string
+  marque: string
+  genre: string
+  forme: string
+  couleur: string
+  matiere: string
+  gamme: string
+  prixCustom: string
+}
+
+const EMPTY_FORM: VerifyForm = {
+  reference: '', marque: '', genre: '', forme: '', couleur: '', matiere: '', gamme: '', prixCustom: '',
+}
+
+const EMPTY_SOURCES: Record<FieldKey, FieldSource> = {
+  reference: 'manual', marque: 'manual', genre: 'manual', forme: 'manual', couleur: 'manual', matiere: 'manual',
+}
+
+interface FinalMonture {
+  id: string
+  glassId?: string
+  reference: string
+  marque: string
+  genre: string
+  forme: string
+  couleur: string
+  matiere: string
+  prix: number
+  quantite: number
+  emplacement: string
+  photoMonture: string
+  photoBranche: string
+}
+
+// ── Briques d'interface ────────────────────────────────────────────────────────
+const CARD = 'bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700'
+
+function Btn({ variant = 'outline', className = '', children, ...rest }: {
+  variant?: 'primary' | 'outline' | 'success' | 'danger'
+} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const base = 'inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none'
+  const variants = {
+    primary: 'bg-[#2563eb] text-white hover:bg-[#1d4ed8]',
+    success: 'bg-[#16a34a] text-white hover:bg-[#15803d]',
+    danger: 'bg-red-600 text-white hover:bg-red-700',
+    outline: 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50',
+  }
+  return <button type="button" className={`${base} ${variants[variant]} ${className}`} {...rest}>{children}</button>
+}
+
+function Pill({ children, tone = 'slate' }: { children: React.ReactNode; tone?: 'slate' | 'blue' | 'green' | 'red' }) {
+  const tones = {
+    slate: 'bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-300',
+    blue: 'bg-[#2563eb]/10 text-[#2563eb]',
+    green: 'bg-[#16a34a]/10 text-[#16a34a]',
+    red: 'bg-red-500/10 text-red-600 dark:text-red-400',
+  }
+  return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${tones[tone]}`}>{children}</span>
+}
+
+function CardHead({ icon, title, pill }: { icon: React.ReactNode; title: React.ReactNode; pill?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700 px-4 py-3">
+      <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+        <span className="text-[#2563eb]">{icon}</span>
+        {title}
+      </h3>
+      {pill}
+    </div>
+  )
+}
+
+// ── Étape 1 : photos ───────────────────────────────────────────────────────────
+// Le <video> ne peut pas être démonté entre les deux photos (le flux serait perdu) :
+// la vue de capture est donc rendue d'un bloc, avec la balise vidéo toujours présente.
+function CaptureCard({ target, photo, cameraOn, videoRef, onStart, onStop, onCapture, onRetake, onNext, analyzing }: {
+  target: 'monture' | 'branche'
+  photo: string | null
+  cameraOn: boolean
+  videoRef: React.RefObject<HTMLVideoElement | null>
+  onStart: () => void
+  onStop: () => void
+  onCapture: () => void
+  onRetake: () => void
+  onNext: () => void
+  analyzing: boolean
+}) {
+  const isMonture = target === 'monture'
+  return (
+    <div className={CARD}>
+      <CardHead
+        icon={ic.camera('w-4 h-4')}
+        title={<>Étape 1 · {isMonture ? 'Photo de la monture' : 'Photo de la branche'}</>}
+        pill={<Pill tone="blue">{isMonture ? 'Photo 1/2 · Monture' : 'Photo 2/2 · Branche'}</Pill>}
+      />
+
+      <div className="relative m-4 aspect-video min-h-[220px] overflow-hidden rounded-xl bg-slate-900">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={`absolute inset-0 h-full w-full object-cover ${cameraOn && !photo ? '' : 'invisible'}`}
+        />
+
+        {photo && <img src={photo} alt="Photo capturée" className="absolute inset-0 h-full w-full object-cover" />}
+
+        {!cameraOn && !photo && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800">{ic.camera('w-6 h-6')}</div>
+            <p className="text-sm font-bold text-slate-300">Caméra en attente</p>
+            <p className="text-xs">Appuyez sur « Démarrer »</p>
+          </div>
+        )}
+
+        {/* Viseur : purement décoratif, il cadre le geste. La détection est faite par le serveur. */}
+        {cameraOn && !photo && (
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute inset-[12%] rounded-lg">
+              {['left-0 top-0 border-l-2 border-t-2', 'right-0 top-0 border-r-2 border-t-2', 'bottom-0 left-0 border-b-2 border-l-2', 'bottom-0 right-0 border-b-2 border-r-2'].map(pos => (
+                <span key={pos} className={`absolute h-6 w-6 rounded-sm border-[#2563eb] ${pos}`} />
+              ))}
+              <span className="scan-line absolute left-[6%] right-[6%] h-0.5 rounded-full bg-[#2563eb]" />
+            </div>
+            <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+              <span className="scan-pulse h-1.5 w-1.5 rounded-full bg-[#16a34a]" />
+              Caméra prête
+            </div>
+          </div>
+        )}
+
+        {analyzing && (
+          <div className="absolute inset-x-0 bottom-0 bg-black/70 px-3 py-2 text-center text-[11px] font-semibold text-white">
+            Analyse IA en cours…
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 px-4 pb-4">
+        {!cameraOn
+          ? <Btn variant="primary" onClick={onStart}>{ic.play()} Démarrer</Btn>
+          : <Btn variant="danger" onClick={onStop}>{ic.stop()} Arrêter</Btn>}
+
+        {!photo
+          ? <Btn variant="success" onClick={onCapture} disabled={!cameraOn}>{ic.camera()} Capturer</Btn>
+          : <Btn onClick={onRetake}>{ic.refresh()} Reprendre</Btn>}
+
+        <Btn variant="primary" className="ml-auto" onClick={onNext} disabled={!photo}>
+          {ic.check()} {isMonture ? 'Photo suivante →' : 'Valider →'}
+        </Btn>
+      </div>
+    </div>
+  )
+}
+
+// ── Étape 2 : vérification ─────────────────────────────────────────────────────
+function SrcTag({ source }: { source: FieldSource }) {
+  if (source === 'detected') return <Pill tone="green">{ic.check('w-3 h-3')} Détecté</Pill>
+  return <Pill tone="slate">{source === 'corrected' ? 'Corrigé' : 'À saisir'}</Pill>
+}
+
+/** Un champ que l'IA a rempli se replie en résumé : le magasinier ne relit que ce
+ *  qui manque. Le crayon le rouvre pour corriger. */
+function Field({ icon, label, source, collapsed, summary, invalid, onExpand, children }: {
+  icon: React.ReactNode
+  label: string
+  source?: FieldSource
+  collapsed?: boolean
+  summary?: string
+  invalid?: boolean
+  onExpand?: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      className={`rounded-xl border p-3 transition-colors ${invalid ? 'border-red-500' : 'border-slate-200 dark:border-slate-700'} ${collapsed ? 'bg-slate-50 dark:bg-slate-800/60' : 'bg-white dark:bg-slate-800'}`}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-slate-400 dark:text-slate-500 flex-shrink-0">{icon}</span>
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span>
+        {collapsed && <span className="truncate text-sm font-bold text-slate-900 dark:text-white">{summary || '—'}</span>}
+        <span className="ml-auto flex items-center gap-2 flex-shrink-0">
+          {source && <SrcTag source={source} />}
+          {collapsed && (
+            <button
+              type="button"
+              onClick={onExpand}
+              title="Modifier"
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+            >
+              {ic.pencil('w-3.5 h-3.5')}
+            </button>
+          )}
+        </span>
+      </div>
+      {!collapsed && <div className="mt-2">{children}</div>}
+    </div>
+  )
+}
+
+const INPUT = 'w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-[#2563eb]'
+
+function PhotoBox({ url, label }: { url: string | null; label: string }) {
+  return (
+    <div className={`relative flex min-h-[120px] items-center justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 ${url ? '' : 'bg-slate-50 dark:bg-slate-900/50'}`}>
+      {url
+        ? <img src={url} alt={label} className="h-full w-full object-cover" />
+        : <div className="flex flex-col items-center gap-1 text-slate-300 dark:text-slate-600">{ic.image('w-6 h-6')}<p className="text-xs">Photo {label.toLowerCase()}</p></div>}
+      <span className="absolute left-2 top-2 rounded-lg bg-black/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">{label}</span>
+    </div>
+  )
+}
+
+// ── Écran d'activation de session ──────────────────────────────────────────────
+function ActivationGate({ status, isError, onActivate }: {
+  status: string
+  isError: boolean
+  onActivate: (code: string) => Promise<boolean>
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const scannerRef = useRef<Scanner | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [scanStatus, setScanStatus] = useState('')
+
+  // Le lecteur détient une caméra : quitter l'écran sans l'arrêter laisserait la
+  // diode allumée et le flux ouvert pour tout le reste de la session.
+  useEffect(() => () => { scannerRef.current?.stop() }, [])
+
+  async function startScanner() {
+    if (!videoRef.current) return
+    scannerRef.current?.stop()
+    const scanner = createScanner({
+      video: videoRef.current,
+      formats: ['code_128'],
+      onStatus: (message, error) => setScanStatus(error ? `⚠ ${message}` : message),
+      // onActivate est asynchrone : on attend son vrai résultat avant de décider
+      // d'arrêter la lecture. Renvoyer false garde la caméra active, sinon un code
+      // voisin mal cadré figerait l'écran sur un refus sans nouvelle tentative.
+      onDetect: code => onActivate(code),
+    })
+    scannerRef.current = scanner
+    setScanning(true)
+    const ok = await scanner.start()
+    if (!ok) setScanning(false)
+  }
+
+  async function submitCode() {
+    setBusy(true)
+    try {
+      await onActivate(code)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-xl">
+      <div className="mb-5 text-center">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Activer une session d'enregistrement</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Scannez l'étiquette générée par l'administrateur avant d'enregistrer des montures.
+        </p>
+      </div>
+
+      <div className={`${CARD} p-6 text-center`}>
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#2563eb]/10 text-[#2563eb]">
+          {ic.tag('w-6 h-6')}
+        </div>
+        <h3 className="mt-3 text-base font-bold text-slate-900 dark:text-white">Scanner le code-barres de session</h3>
+
+        <p className={`mt-2 text-sm ${isError ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
+          {status || 'La caméra peut détecter automatiquement le code. Vous pouvez aussi le saisir manuellement.'}
+        </p>
+        {scanStatus && <p className="mt-1 text-xs text-slate-400">{scanStatus}</p>}
+
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          className={`mx-auto mt-4 w-full max-w-sm rounded-xl bg-slate-900 ${scanning ? '' : 'hidden'}`}
+        />
+
+        {!scanning && (
+          <Btn variant="primary" className="mx-auto mt-4" onClick={() => void startScanner()}>
+            {ic.camera()} Ouvrir la caméra
+          </Btn>
+        )}
+
+        <div className="mt-6 border-t border-slate-100 dark:border-slate-700 pt-4 text-left">
+          <label htmlFor="sessionCode" className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+            Code de session
+          </label>
+          <form className="flex gap-2" onSubmit={e => { e.preventDefault(); void submitCode() }}>
+            <input
+              id="sessionCode"
+              type="text"
+              autoComplete="off"
+              value={code}
+              onChange={e => setCode(e.target.value)}
+              placeholder="SESSION-…"
+              className={INPUT}
+            />
+            <Btn type="submit" disabled={busy || !code.trim()} className="flex-shrink-0">
+              {busy ? 'Vérification…' : 'Activer'}
+            </Btn>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Écran des sessions ─────────────────────────────────────────────────────────
+function SessionsGate({ user, session, movements, onEnter }: {
+  user: any
+  session: ReceptionSession | null
+  movements: Movement[]
+  onEnter: () => void
+}) {
+  const [detailDate, setDetailDate] = useState<string | null>(null)
+
+  const today = todayKey()
+  const counts = new Map<string, number>()
+  movements.forEach(m => {
+    const key = dayKey(m.created_at)
+    if (key) counts.set(key, (counts.get(key) || 0) + 1)
+  })
+  if (!counts.has(today)) counts.set(today, 0)
+  const keys = Array.from(counts.keys()).sort((a, b) => b.localeCompare(a))
+
+  const name = `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Employé'
+  const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+
+  if (detailDate) {
+    const rows = movements
+      .filter(m => dayKey(m.created_at) === detailDate)
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+    return (
+      <div className="mx-auto max-w-3xl">
+        <div className="mb-4 flex items-center gap-3">
+          <Btn onClick={() => setDetailDate(null)}>{ic.arrowLeft()} Sessions</Btn>
+          <span className="text-sm font-bold text-slate-900 dark:text-white">{formatDayLabel(detailDate)}</span>
+        </div>
+        <div className={`${CARD} divide-y divide-slate-100 dark:divide-slate-700`}>
+          {rows.length === 0 && (
+            <div className="flex flex-col items-center gap-2 p-10 text-slate-400">
+              {ic.glasses('w-7 h-7')}
+              <p className="text-sm">Aucun enregistrement pour cette date.</p>
+            </div>
+          )}
+          {rows.map((row, index) => (
+            <div key={row.id ?? index} className="flex items-center gap-3 p-3">
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#2563eb]/10 text-[#2563eb]">
+                {ic.glasses('w-4 h-4')}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+                  {row.brand || row.marque || 'Monture'} {row.reference ? `· ${row.reference}` : ''}
+                </p>
+                <p className="truncate text-xs text-slate-400">{row.barcode || '—'} · {row.location_code || '—'}</p>
+              </div>
+              <span className="flex-shrink-0 text-xs tabular-nums text-slate-400">{formatRecordTime(row.created_at)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-5 text-center">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Bonjour, {name}</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Nous sommes le {todayLabel}. Choisissez la session du jour pour commencer, ou consultez une session précédente.
+        </p>
+        {session && (
+          <div className="mt-3 inline-flex">
+            <Pill tone="blue">{ic.tag('w-3.5 h-3.5')} {session.registered} / {session.target} montures enregistrées</Pill>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {keys.map(key => {
+          const isToday = key === today
+          const count = counts.get(key) || 0
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => (isToday ? onEnter() : setDetailDate(key))}
+              className={`${CARD} flex flex-col items-center gap-1 p-4 text-center transition-all hover:-translate-y-0.5 ${isToday ? 'ring-2 ring-[#2563eb]' : ''}`}
+            >
+              <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${isToday ? 'bg-[#2563eb]/10 text-[#2563eb]' : 'bg-slate-100 text-slate-400 dark:bg-slate-700/50'}`}>
+                {isToday ? ic.plus('w-5 h-5') : ic.calendar('w-5 h-5')}
+              </span>
+              <span className="text-3xl font-black tabular-nums text-slate-900 dark:text-white">{count}</span>
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                {isToday ? `Aujourd'hui · ${formatDayLabel(key)}` : formatDayLabel(key)}
+              </span>
+              <span className="text-[11px] text-slate-400">
+                {isToday ? 'ouvrir la session' : count > 1 ? 'montures' : 'monture'}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
+// ── Historique ─────────────────────────────────────────────────────────────────
+/** Une monture en stock porte ses champs à plat ; un mouvement en garde parfois une
+ *  copie dans un sous-objet `monture`. Même prudence que `recordField()` de scan.js. */
+function recordField(record: any, key: string): string {
+  if (!record) return ''
+  const direct = record[key]
+  if (direct != null && direct !== '') return String(direct)
+  const nested = record.monture?.[key]
+  if (nested != null && nested !== '') return String(nested)
+  return ''
+}
+
+/** Le nom du champ photo change selon l'écran qui a créé la monture : il faut essayer
+ *  toute la cascade. C'est celle de scan.js, reprise dans l'AGENTS.md. */
+function recordPhoto(record: any): string {
+  return recordField(record, 'photo_monture_url') || recordField(record, 'image_url')
+    || recordField(record, 'photo_url') || recordField(record, 'image')
+    || recordField(record, 'monture_image') || recordField(record, 'frame_image')
+}
+
+const HISTORIQUE_PAGE_SIZE = 10
+
+const SELECT = 'rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-[#2563eb]'
+
+/** Liste unique et filtrable de tout ce qui a été enregistré. Pas de blocs par date :
+ *  ils imposaient un détour alors que la recherche fait le même travail sans clic. */
+function HistoriqueScreen({ movements, onPrint }: {
+  movements: Movement[]
+  onPrint: (record: Movement) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [forme, setForme] = useState('')
+  const [genre, setGenre] = useState('')
+  const [page, setPage] = useState(1)
+
+  const formes = useMemo(() => distinctValues(movements, 'shape'), [movements])
+  const genres = useMemo(() => distinctValues(movements, 'gender'), [movements])
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return movements.filter(record => {
+      if (forme && recordField(record, 'shape') !== forme) return false
+      if (genre && recordField(record, 'gender') !== genre) return false
+      if (!needle) return true
+      return ['reference', 'brand', 'barcode', 'color']
+        .some(key => recordField(record, key).toLowerCase().includes(needle))
+    })
+  }, [movements, query, forme, genre])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / HISTORIQUE_PAGE_SIZE))
+  // Un filtre qui raccourcit la liste laisserait sinon la page courante dans le vide.
+  const current = Math.min(page, totalPages)
+  const rows = filtered.slice((current - 1) * HISTORIQUE_PAGE_SIZE, current * HISTORIQUE_PAGE_SIZE)
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-4">
+      <div className={`${CARD} p-4`}>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="relative flex-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{ic.search()}</span>
+            <input
+              type="search"
+              value={query}
+              onChange={e => { setQuery(e.target.value); setPage(1) }}
+              placeholder="Référence, marque, code-barres, couleur…"
+              className={`${INPUT} pl-9`}
+            />
+          </div>
+          <select value={forme} onChange={e => { setForme(e.target.value); setPage(1) }} className={SELECT}>
+            <option value="">Toutes les formes</option>
+            {formes.map(value => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <select value={genre} onChange={e => { setGenre(e.target.value); setPage(1) }} className={SELECT}>
+            <option value="">Tous les genres</option>
+            {genres.map(value => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </div>
+        <p className="mt-2 text-xs text-slate-400">
+          {filtered.length} monture{filtered.length > 1 ? 's' : ''} enregistrée{filtered.length > 1 ? 's' : ''}
+          {filtered.length !== movements.length ? ` sur ${movements.length}` : ''}
+        </p>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className={`${CARD} flex flex-col items-center gap-2 p-8 text-center`}>
+          <span className="text-slate-300 dark:text-slate-600">{ic.glasses('w-8 h-8')}</span>
+          <p className="text-sm text-slate-400">
+            {movements.length === 0 ? 'Aucun enregistrement pour l’instant.' : 'Aucun enregistrement ne correspond à ces filtres.'}
+          </p>
+        </div>
+      ) : (
+        // Cartes plutôt que lignes : la photo est ce qu'on reconnaît en premier, elle
+        // mérite d'être grande. Les attributs passent en pastilles, lues d'un coup d'œil.
+        <div className="grid gap-3 sm:grid-cols-2">
+          {rows.map((record, index) => {
+            const photo = recordPhoto(record)
+            const chips = ['gender', 'shape', 'color', 'size'].map(key => recordField(record, key)).filter(Boolean)
+            return (
+              <article key={recordField(record, 'barcode') || index} className={`${CARD} flex items-center gap-3 p-3`}>
+                <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-700">
+                  {photo
+                    ? <img src={photo} alt="" loading="lazy" className="h-full w-full object-cover" />
+                    : <span className="text-slate-300 dark:text-slate-600">{ic.glasses('w-6 h-6')}</span>}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <strong className="truncate text-sm font-bold text-slate-900 dark:text-white">
+                      {recordField(record, 'brand') || 'Sans marque'}
+                    </strong>
+                    <span className="flex-shrink-0 text-[11px] text-slate-400">
+                      {formatRecordTime(recordField(record, 'created_at'))}
+                    </span>
+                  </div>
+                  {recordField(record, 'reference') && (
+                    <p className="truncate text-xs text-slate-400">{recordField(record, 'reference')}</p>
+                  )}
+                  {chips.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {chips.map(chip => (
+                        <span key={chip} className="rounded-lg bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                          {chip}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => onPrint(record)}
+                  className="flex-shrink-0 rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                  title="Imprimer l'étiquette"
+                  aria-label="Imprimer l'étiquette"
+                >
+                  {ic.printer()}
+                </button>
+              </article>
+            )
+          })}
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3">
+          <Btn onClick={() => setPage(current - 1)} disabled={current <= 1}>{ic.arrowLeft()} Précédent</Btn>
+          <span className="text-xs tabular-nums text-slate-400">Page {current} / {totalPages}</span>
+          <Btn onClick={() => setPage(current + 1)} disabled={current >= totalPages}>Suivant</Btn>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function distinctValues(records: Movement[], key: string) {
+  return Array.from(new Set(records.map(record => recordField(record, key)).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b, 'fr'))
+}
+
+/** L'étiquette attend une FinalMonture ; un enregistrement d'historique n'en est pas
+ *  une. On ne remplit que ce que l'étiquette imprime — le reste ne serait jamais lu. */
+function recordToLabel(record: Movement): FinalMonture {
+  return {
+    id: recordField(record, 'barcode'),
+    reference: recordField(record, 'reference'),
+    marque: recordField(record, 'brand'),
+    genre: '',
+    forme: '',
+    couleur: '',
+    matiere: '',
+    prix: Number(recordField(record, 'price')) || 0,
+    quantite: 1,
+    emplacement: recordField(record, 'location_code'),
+    photoMonture: '',
+    photoBranche: '',
+  }
+}
+
+// ── Listes reçues ──────────────────────────────────────────────────────────────
+interface SendList {
+  id: number
+  created_at?: string
+  session_code?: string
+  status?: string
+  city?: string
+  destination_station_name?: string
+  item_count?: number
+  sent_count?: number
+}
+
+interface SendListItem {
+  id: number
+  barcode?: string
+  reference?: string
+  brand?: string
+  status?: string
+  [key: string]: any
+}
+
+interface Dispatch {
+  box_code?: string
+  box_reference?: string
+  code?: string
+  reference?: string
+  city?: string
+  station_name?: string
+  sent_count?: number
+  skipped?: { reference?: string; reason?: string }[]
+}
+
+function listDispatched(list: SendList) {
+  return String(list.status || '').toUpperCase() === 'TRAITEE' || Number(list.sent_count || 0) > 0
+}
+
+/** La vérification survit au rechargement : le magasinier scanne un carton de trente
+ *  montures, il ne doit pas tout reprendre parce que la page a bougé. */
+function verifiedStorageKey(listId: number | string) {
+  return `lunetterie.sendlist.verified.${listId}`
+}
+
+function loadVerifiedIds(listId: number | string): Set<number> {
+  try {
+    const raw = window.localStorage.getItem(verifiedStorageKey(listId))
+    const parsed = raw ? JSON.parse(raw) : []
+    return new Set(Array.isArray(parsed) ? parsed : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveVerifiedIds(listId: number | string, ids: Set<number>) {
+  try {
+    window.localStorage.setItem(verifiedStorageKey(listId), JSON.stringify(Array.from(ids)))
+  } catch {
+    // Stockage indisponible : la vérification reste valable pour la session en cours.
+  }
+}
+
+function dispatchMessage(dispatch: Dispatch) {
+  const count = Number(dispatch.sent_count || 0)
+  const plural = count > 1 ? 's' : ''
+  let message = `${count} monture${plural} envoyée${plural} vers ${dispatch.station_name || 'la station locale'}.`
+  const skipped = dispatch.skipped || []
+  if (skipped.length) {
+    message += ` Non parties : ${skipped.map(item => `${item.reference} (${item.reason})`).join(', ')}.`
+  }
+  return message
+}
+
+const LISTE_PAGE_SIZE = 10
+
+function ListesScreen({ lists, loading, onReload }: {
+  lists: SendList[]
+  loading: boolean
+  onReload: () => void
+}) {
+  const [open, setOpen] = useState<SendList | null>(null)
+  const [items, setItems] = useState<SendListItem[]>([])
+  const [loadingItems, setLoadingItems] = useState(false)
+  const [verified, setVerified] = useState<Set<number>>(new Set())
+  const [code, setCode] = useState('')
+  const [message, setMessage] = useState('')
+  const [tone, setTone] = useState<'ok' | 'warn' | 'error' | ''>('')
+  const [sending, setSending] = useState(false)
+  const [dispatch, setDispatch] = useState<Dispatch | null>(null)
+  const [page, setPage] = useState(1)
+  const codeRef = useRef<HTMLInputElement>(null)
+
+  async function openListe(list: SendList) {
+    setOpen(list)
+    setItems([])
+    setPage(1)
+    setMessage('')
+    setTone('')
+    setVerified(loadVerifiedIds(list.id))
+    setLoadingItems(true)
+
+    try {
+      const payload = await apiFetch(`/inventory/send-lists/${list.id}/items`)
+      const raw: SendListItem[] = Array.isArray(payload.data?.items) ? payload.data.items : []
+
+      // Chaque ligne est complétée par la fiche de sa monture : photo, forme, couleur.
+      // Sans station_id — le passer déclencherait PlaceOnDisplay côté serveur, qui
+      // réceptionne les montures EN_TRANSIT. Ouvrir une liste doit rester une lecture.
+      const detailed = await Promise.all(raw.map(async item => {
+        if (!item.barcode) return item
+        try {
+          const glassPayload = await apiFetch(`/inventory/glasses/${encodeURIComponent(item.barcode)}`)
+          const glass = glassPayload?.data?.glass
+          // `glass` porte son propre `id` : sans le rétablir il écraserait celui de la
+          // ligne, or c'est sur ce dernier que porte la vérification.
+          return glass ? { ...item, ...glass, id: item.id, glass_id: glass.id } : item
+        } catch {
+          return item
+        }
+      }))
+
+      setItems(detailed.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))))
+    } catch (error) {
+      console.error('Erreur chargement des éléments de la liste', error)
+      setMessage('Impossible de charger le contenu de cette liste.')
+      setTone('error')
+    } finally {
+      setLoadingItems(false)
+    }
+  }
+
+  async function verify() {
+    const value = code.trim()
+    if (!value || !open) return
+    const needle = value.toLowerCase()
+
+    const match = items.find(item =>
+      String(item.barcode || '').toLowerCase() === needle
+      || String(item.reference || '').toLowerCase() === needle)
+
+    if (!match) {
+      setMessage(`« ${value} » ne figure pas dans cette liste.`)
+      setTone('error')
+      codeRef.current?.select()
+      return
+    }
+    if (verified.has(match.id)) {
+      setMessage(`« ${value} » a déjà été vérifiée.`)
+      setTone('warn')
+      setCode('')
+      return
+    }
+
+    try {
+      // Sans station_id, pour ne rien déplacer : on confirme seulement l'existence.
+      await apiFetch(`/inventory/glasses/${encodeURIComponent(match.barcode || value)}`)
+    } catch {
+      setMessage(`« ${value} » est introuvable en base de données.`)
+      setTone('error')
+      codeRef.current?.select()
+      return
+    }
+
+    const next = new Set(verified)
+    next.add(match.id)
+    setVerified(next)
+    saveVerifiedIds(open.id, next)
+
+    // La validée remonte en tête et la pagination revient au début : elle doit rester
+    // sous les yeux du magasinier.
+    setItems(list => [match, ...list.filter(item => item.id !== match.id)])
+    setPage(1)
+
+    const remaining = items.length - next.size
+    setMessage(remaining === 0
+      ? 'Liste complète : toutes les montures sont vérifiées.'
+      : `« ${match.reference || match.barcode} » validée.`)
+    setTone('ok')
+    setCode('')
+    codeRef.current?.focus()
+  }
+
+  /** Envoie le colis. Le serveur déduit la station de destination de la ville de la
+   *  liste — aucun choix manuel ici — déplace les montures et clôt la liste. */
+  async function send() {
+    if (!open || sending) return
+    setSending(true)
+    setMessage('Envoi en cours…')
+    setTone('')
+
+    try {
+      const payload = await apiFetch('/inventory/send-lists/dispatch', {
+        method: 'POST',
+        body: JSON.stringify({ id: Number(open.id), from_station_id: Number(DEFAULT_STATION_ID) }),
+      })
+      const result: Dispatch = payload?.data?.dispatch || {}
+      setDispatch(result)
+      // La vérification a rempli son office : on libère le stockage local de cette liste.
+      try { window.localStorage.removeItem(verifiedStorageKey(open.id)) } catch { /* sans conséquence */ }
+      setMessage(dispatchMessage(result))
+      setTone('ok')
+      onReload()
+    } catch (error) {
+      // Le serveur refuse l'envoi entier quand il ne sait pas où livrer (aucune station
+      // pour la ville, ou plusieurs). Son message dit quoi corriger : on le remonte tel
+      // quel plutôt qu'un « erreur réseau » qui n'aiderait personne.
+      setMessage(error instanceof Error ? error.message : "Impossible d'envoyer la liste.")
+      setTone('error')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const toneClass = tone === 'error'
+    ? 'text-red-600 dark:text-red-400'
+    : tone === 'warn' ? 'text-amber-600 dark:text-amber-400'
+    : tone === 'ok' ? 'text-green-700 dark:text-green-400'
+    : 'text-slate-400'
+
+  // ── Une liste ouverte ────────────────────────────────────────────────────────
+  if (open) {
+    const dispatched = listDispatched(open)
+    const done = items.filter(item => verified.has(item.id)).length
+    const complete = items.length > 0 && done === items.length
+    const totalPages = Math.max(1, Math.ceil(items.length / LISTE_PAGE_SIZE))
+    const current = Math.min(page, totalPages)
+    const rows = items.slice((current - 1) * LISTE_PAGE_SIZE, current * LISTE_PAGE_SIZE)
+
+    return (
+      <div className="mx-auto max-w-4xl space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Btn onClick={() => { setOpen(null); setDispatch(null) }}>{ic.arrowLeft()} Listes</Btn>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+              {dayLabel(open.created_at)}
+            </p>
+            <p className="truncate text-xs text-slate-400">{open.session_code || '—'}</p>
+          </div>
+        </div>
+
+        <div className={`${CARD} p-4`}>
+          <div className="flex items-baseline justify-between gap-3">
+            <strong className="text-sm font-bold text-slate-900 dark:text-white">Confirmation des montures</strong>
+            <span className="flex-shrink-0 text-xs tabular-nums text-slate-400">{done} / {items.length} vérifiée{done > 1 ? 's' : ''}</span>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">Scannez le code-barres de chaque monture avant l'envoi.</p>
+
+          <form
+            onSubmit={e => { e.preventDefault(); void verify() }}
+            className="mt-3 flex flex-col gap-2 sm:flex-row"
+          >
+            <input
+              ref={codeRef}
+              type="text"
+              value={code}
+              onChange={e => setCode(e.target.value)}
+              disabled={dispatched || loadingItems}
+              autoComplete="off"
+              placeholder="Scannez ou saisissez le code-barres"
+              className={`${INPUT} flex-1 disabled:opacity-50`}
+            />
+            <Btn variant="primary" type="submit" disabled={dispatched || loadingItems || !code.trim()}>
+              {ic.check()} Valider
+            </Btn>
+          </form>
+
+          {message && <p className={`mt-2 text-xs ${toneClass}`}>{message}</p>}
+        </div>
+
+        {loadingItems ? (
+          <div className={`${CARD} p-8 text-center text-sm text-slate-400`}>Chargement du contenu…</div>
+        ) : items.length === 0 ? (
+          <div className={`${CARD} p-8 text-center text-sm text-slate-400`}>Cette liste est vide.</div>
+        ) : (
+          <div className="space-y-2">
+            {rows.map(item => {
+              const ok = verified.has(item.id)
+              const photo = recordPhoto(item)
+              return (
+                <div
+                  key={item.id}
+                  className={`${CARD} flex items-center gap-3 p-3 ${ok ? 'border-green-200 dark:border-green-800' : ''}`}
+                >
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-700">
+                    {photo
+                      ? <img src={photo} alt="" loading="lazy" className="h-full w-full object-cover" />
+                      : <span className="text-slate-300 dark:text-slate-600">{ic.glasses()}</span>}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+                      {item.reference || item.barcode || '—'}
+                    </p>
+                    <p className="truncate text-xs text-slate-400">{item.barcode || '—'}</p>
+                  </div>
+                  {ok
+                    ? <span className="flex-shrink-0 text-[#16a34a]">{ic.checkCircle('w-5 h-5')}</span>
+                    : <span className="flex-shrink-0 text-[11px] text-slate-400">à vérifier</span>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-3">
+            <Btn onClick={() => setPage(current - 1)} disabled={current <= 1}>{ic.arrowLeft()} Précédent</Btn>
+            <span className="text-xs tabular-nums text-slate-400">Page {current} / {totalPages}</span>
+            <Btn onClick={() => setPage(current + 1)} disabled={current >= totalPages}>Suivant</Btn>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          {/* Une liste déjà partie ne se renvoie pas : le serveur la refuserait, autant
+              ne pas réarmer le bouton en la rouvrant. */}
+          <Btn variant="primary" onClick={() => void send()} disabled={dispatched || !complete || sending}>
+            {ic.send()}
+            {dispatched
+              ? 'Liste envoyée'
+              : sending ? 'Envoi en cours…'
+              : complete ? `Envoyer (${items.length})`
+              : `Envoyer — ${items.length - done} à vérifier`}
+          </Btn>
+        </div>
+
+        {dispatch && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+            <div className={`${CARD} w-full max-w-sm p-5 text-center`}>
+              <p className="text-sm font-bold text-slate-900 dark:text-white">Carton d'envoi</p>
+              <p className="mt-1 text-xs text-slate-400">
+                {dispatch.city || ''} · {dispatch.sent_count || 0} monture{Number(dispatch.sent_count || 0) > 1 ? 's' : ''}
+              </p>
+
+              <div className="mt-4 flex flex-col items-center rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700">
+                <BarcodePreview value={dispatch.box_code || dispatch.box_reference || dispatch.code || ''} />
+                <div className="mt-1 font-mono text-sm font-bold tabular-nums text-slate-900">
+                  {dispatch.box_code || dispatch.box_reference || dispatch.code || '—'}
+                </div>
+                <span className="mt-1 text-[11px] text-slate-400">{dispatch.box_reference || dispatch.reference || 'Colis d’expédition'}</span>
+              </div>
+
+              <Btn variant="primary" className="mt-4 w-full justify-center" onClick={() => { setDispatch(null); setOpen(null) }}>
+                Fermer
+              </Btn>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Choix de la liste ────────────────────────────────────────────────────────
+  return (
+    <div className="mx-auto max-w-4xl space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-400">
+          {loading ? 'Chargement…' : `${lists.length} liste${lists.length > 1 ? 's' : ''} reçue${lists.length > 1 ? 's' : ''}`}
+        </p>
+        <Btn onClick={onReload} disabled={loading}>{ic.refresh()} Actualiser</Btn>
+      </div>
+
+      {lists.length === 0 && !loading ? (
+        <div className={`${CARD} flex flex-col items-center gap-2 p-8 text-center`}>
+          <span className="text-slate-300 dark:text-slate-600">{ic.glasses('w-8 h-8')}</span>
+          <p className="text-sm text-slate-400">Aucune liste reçue.</p>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[...lists]
+            .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+            .map(list => {
+              const sent = listDispatched(list)
+              const total = Number(list.item_count || 0)
+              const count = Number(list.sent_count || 0) || total
+              const destination = list.destination_station_name || list.city || ''
+              const isToday = dayKey(list.created_at) === todayKey()
+
+              return (
+                <button
+                  key={list.id}
+                  onClick={() => void openListe(list)}
+                  className={`${CARD} p-4 text-left transition-all hover:border-slate-300 dark:hover:border-slate-600 ${isToday ? 'ring-1 ring-[#2563eb]' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+                      {isToday ? 'Aujourd’hui · ' : ''}{dayLabel(list.created_at)}
+                    </p>
+                    <Pill tone={sent ? 'green' : 'blue'}>{sent ? 'Envoyée' : 'À traiter'}</Pill>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-slate-400">
+                    {list.session_code || '—'} · {sent
+                      ? `${count} lunettes envoyées${destination ? ` vers ${destination}` : ''}`
+                      : `${total} lunettes`}
+                  </p>
+                </button>
+              )
+            })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+type Screen = 'loading' | 'activation' | 'sessions' | 'wizard' | 'historique' | 'listes'
+
+// ── Coquille Direction ─────────────────────────────────────────────────────────
+/** Barre latérale, barre haute et navigation mobile reprises de la Direction
+ *  (`src/App.tsx`, déjà rejouées dans `vendeuse.tsx`) : mêmes largeurs, mêmes rayons,
+ *  mêmes couleurs. Le magasinier n'a que deux destinations, mais il les porte dans le
+ *  même cadre que le reste de l'application. */
+const NAV: {
+  id: Screen; label: string; short: string
+  icon: (c?: string) => React.ReactElement
+  /** Enregistrer et consulter ses sessions n'ont de sens qu'une session ouverte ;
+   *  les listes et l'historique se consultent à tout moment. */
+  needsSession?: boolean
+}[] = [
+  { id: 'wizard', label: 'Enregistrement', short: 'Scan', icon: ic.camera, needsSession: true },
+  { id: 'listes', label: 'Listes reçues', short: 'Listes', icon: ic.send },
+  { id: 'historique', label: 'Historique', short: 'Histo.', icon: ic.checkCircle },
+  { id: 'sessions', label: 'Mes sessions', short: 'Sessions', icon: ic.calendar, needsSession: true },
+]
+
+function Sidebar({ current, onNavigate, dark, onToggleDark, user, hasSession, newLists }: {
+  current: Screen; onNavigate: (s: Screen) => void
+  dark: boolean; onToggleDark: () => void; user: any
+  hasSession: boolean; newLists: number
+}) {
+  const name = `${String(user?.first_name || '').trim()} ${String(user?.last_name || '').trim()}`.trim() || 'Magasinier'
+  const initial = (name[0] || 'M').toUpperCase()
+
+  return (
+    <aside className="hidden md:flex flex-col w-56 lg:w-60 bg-slate-900 dark:bg-slate-950 h-screen sticky top-0 flex-shrink-0">
+      <div className="px-4 py-5 border-b border-slate-800 flex-shrink-0">
+        <div className="flex flex-col items-center gap-2.5 text-center">
+          {/* Fond blanc nécessaire : le JPEG n'a pas de transparence. */}
+          <div className="w-full max-w-[180px] rounded-xl bg-white px-3 py-2">
+            <img src={logoUrl} alt="La Lunetterie" className="w-full h-auto object-contain" />
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Magasinier</p>
+        </div>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+        {NAV.map(item => (
+          <button
+            key={item.id}
+            onClick={() => onNavigate(item.id)}
+            disabled={Boolean(item.needsSession) && !hasSession}
+            // Les entrées qui exigent une session restent visibles mais inertes : les
+            // faire disparaître ferait sauter la barre entière à l'activation.
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+              current === item.id
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800 disabled:hover:bg-transparent disabled:hover:text-slate-400'
+            }`}
+          >
+            <span className="flex-shrink-0">{item.icon('w-4 h-4')}</span>
+            <span className="truncate font-medium">{item.label}</span>
+            {item.id === 'listes' && newLists > 0 && (
+              <span className="ml-auto flex-shrink-0 rounded-lg bg-[#dc2626] px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">
+                {newLists}
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <div className="px-4 py-3 border-t border-slate-800 space-y-3 flex-shrink-0">
+        <button onClick={onToggleDark} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full">
+          {dark ? ic.sun('w-4 h-4') : ic.moon('w-4 h-4')}
+          <span className="text-xs">{dark ? 'Thème clair' : 'Thème sombre'}</span>
+        </button>
+        <button onClick={logoutToLogin} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full">
+          {ic.signOut('w-4 h-4')}
+          <span className="text-xs">Déconnexion</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-xl bg-blue-600 flex items-center justify-center text-white text-xs font-black flex-shrink-0">{initial}</div>
+          <div className="min-w-0">
+            <p className="text-xs text-white font-semibold truncate">{name}</p>
+            <p className="text-xs text-slate-500 truncate">{user?.station_name || 'Stock général'}</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+function MobileNav({ current, onNavigate, hasSession, newLists }: {
+  current: Screen; onNavigate: (s: Screen) => void
+  hasSession: boolean; newLists: number
+}) {
+  return (
+    <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-40">
+      <div className="flex">
+        {NAV.map(item => (
+          <button
+            key={item.id}
+            onClick={() => onNavigate(item.id)}
+            disabled={Boolean(item.needsSession) && !hasSession}
+            className={`relative flex-1 flex flex-col items-center py-2.5 gap-1 transition-colors disabled:opacity-40 ${
+              current === item.id ? 'text-blue-600' : 'text-slate-400'
+            }`}
+          >
+            {item.icon('w-5 h-5')}
+            <span className="text-[9px] font-semibold leading-none">{item.short}</span>
+            {item.id === 'listes' && newLists > 0 && (
+              <span className="absolute right-1/4 top-1 rounded-lg bg-[#dc2626] px-1.5 text-[9px] font-black tabular-nums text-white">
+                {newLists}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    </nav>
+  )
+}
+
+function TopBar({ current, session, dark, onToggleDark, onReset }: {
+  current: Screen
+  session: ReceptionSession | null
+  dark: boolean
+  onToggleDark: () => void
+  onReset: (() => void) | null
+}) {
+  const label = current === 'activation'
+    ? 'Activer une session'
+    : NAV.find(item => item.id === current)?.label || 'Enregistrement monture'
+
+  return (
+    <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-100 dark:border-slate-800 px-4 md:px-6 h-14 flex items-center gap-3 flex-shrink-0">
+      <div className="flex-1 min-w-0">
+        <h1 className="font-bold text-slate-900 dark:text-white text-sm md:text-base truncate leading-tight">{label}</h1>
+      </div>
+
+      {/* Le quota suit le magasinier d'un écran à l'autre : c'est lui qui dit s'il peut
+          encore enregistrer, il n'a donc pas sa place dans le seul assistant. */}
+      {session && (
+        <span className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex-shrink-0">
+          {ic.tag('w-3.5 h-3.5')}
+          <span className="tabular-nums">{session.code} · {session.registered}/{session.target}</span>
+        </span>
+      )}
+
+      {onReset && (
+        <Btn variant="primary" onClick={onReset} className="flex-shrink-0 px-2.5 md:px-3.5">
+          {ic.refresh()} <span className="hidden sm:inline">Nouveau</span>
+        </Btn>
+      )}
+
+      {/* Thème et déconnexion vivent dans la barre latérale ; sur mobile elle n'existe
+          pas, ils remontent donc ici. */}
+      <button
+        onClick={onToggleDark}
+        className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors flex-shrink-0"
+        aria-label="Changer de thème"
+      >
+        {dark ? ic.sun('w-4 h-4') : ic.moon('w-4 h-4')}
+      </button>
+      <button
+        onClick={logoutToLogin}
+        className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors flex-shrink-0"
+        aria-label="Se déconnecter"
+      >
+        {ic.signOut('w-4 h-4')}
+      </button>
+    </header>
+  )
+}
+
+function ScanPage() {
+  const [dark, setDark] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [screen, setScreen] = useState<Screen>('loading')
+
+  // Session de réception
+  const [session, setSession] = useState<ReceptionSession | null>(null)
+  const [activationStatus, setActivationStatus] = useState('')
+  const [activationError, setActivationError] = useState(false)
+  const [movements, setMovements] = useState<Movement[]>([])
+  const [lists, setLists] = useState<SendList[]>([])
+  const [loadingLists, setLoadingLists] = useState(false)
+
+  // Assistant
+  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [captureTarget, setCaptureTarget] = useState<'monture' | 'branche'>('monture')
+  const [photoMonture, setPhotoMonture] = useState<string | null>(null)
+  const [photoBranche, setPhotoBranche] = useState<string | null>(null)
+  const [cameraOn, setCameraOn] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+
+  const [form, setForm] = useState<VerifyForm>(EMPTY_FORM)
+  const [sources, setSources] = useState<Record<FieldKey, FieldSource>>(EMPTY_SOURCES)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [invalid, setInvalid] = useState<Record<string, boolean>>({})
+  /** Forme détectée par l'IA, renvoyée telle quelle au serveur (detected_shape) :
+   *  c'est l'écart avec la correction du magasinier qui fait progresser le modèle. */
+  const [detectedShape, setDetectedShape] = useState('')
+  const [aiMountType, setAiMountType] = useState('')
+
+  const [finalData, setFinalData] = useState<FinalMonture | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [toast, setToast] = useState('')
+
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+
+  // ── Caméra de capture ────────────────────────────────────────────────────────
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach(track => track.stop())
+    streamRef.current = null
+    if (videoRef.current) videoRef.current.srcObject = null
+    setCameraOn(false)
+  }, [])
+
+  const startCamera = useCallback(async () => {
+    // Sans cette garde, un second appel (retour à l'étape 1, double clic) ouvrirait
+    // un deuxième flux et laisserait le premier allumé jusqu'au rechargement.
+    if (streamRef.current) return
+    const blocked = cameraUnavailableReason()
+    if (blocked) { window.alert(blocked); return }
+    try {
+      const stream = await openCamera()
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+      setCameraOn(true)
+    } catch (error) {
+      console.error('Ouverture de la caméra impossible', error)
+      window.alert(humanCameraError(error))
+      setCameraOn(false)
+    }
+  }, [])
+
+  // Le flux survit aux changements d'étape mais pas au démontage de la page.
+  useEffect(() => () => stopCamera(), [stopCamera])
+
+  function snapshot() {
+    const video = videoRef.current
+    if (!video) return null
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
+    canvas.getContext('2d')?.drawImage(video, 0, 0)
+    return canvas.toDataURL('image/jpeg', 0.92)
+  }
+
+  // ── Analyse IA ───────────────────────────────────────────────────────────────
+  // Un échec n'interrompt jamais l'enregistrement : les champs restent simplement
+  // ouverts à la saisie manuelle.
+  async function analyzeMonture(dataUrl: string) {
+    setAnalyzing(true)
+    try {
+      const body = new FormData()
+      body.append('image', dataURLtoBlob(dataUrl), 'monture.jpg')
+      const payload = await apiFetch('/inventory/analyze', { method: 'POST', body })
+      const a = payload.data || {}
+
+      setDetectedShape(a.shape || '')
+      setAiMountType(a.mount_type || '')
+
+      const detected: Partial<Record<FieldKey, string>> = {}
+      if (a.shape) detected.forme = a.shape
+      if (a.color) detected.couleur = normalizeColorValue(a.color)
+      if (a.material) detected.matiere = a.material
+      if (a.brand) detected.marque = a.brand
+      if (a.gender) detected.genre = a.gender
+
+      applyDetection(detected)
+    } catch (error) {
+      console.warn('Analyse IA indisponible, saisie manuelle requise :', error)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  async function analyzeBranche(dataUrl: string) {
+    setAnalyzing(true)
+    try {
+      const body = new FormData()
+      body.append('image', dataURLtoBlob(dataUrl), 'branche.jpg')
+      const payload = await apiFetch('/inventory/analyze-branche', { method: 'POST', body })
+      const b = payload.data || {}
+
+      const detected: Partial<Record<FieldKey, string>> = {}
+      if (b.reference) detected.reference = b.reference
+      if (b.brand) detected.marque = b.brand
+
+      applyDetection(detected)
+    } catch (error) {
+      console.warn('OCR branche indisponible, saisie manuelle requise :', error)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  function applyDetection(detected: Partial<Record<FieldKey, string>>) {
+    const keys = Object.keys(detected) as FieldKey[]
+    if (keys.length === 0) return
+    setForm(previous => ({ ...previous, ...detected }))
+    setSources(previous => {
+      const next = { ...previous }
+      keys.forEach(key => { next[key] = 'detected' })
+      return next
+    })
+    setCollapsed(previous => {
+      const next = { ...previous }
+      keys.forEach(key => { next[key] = true })
+      return next
+    })
+  }
+
+  function setField(key: keyof VerifyForm, value: string) {
+    setForm(previous => ({ ...previous, [key]: value }))
+    setInvalid(previous => ({ ...previous, [key]: false }))
+    // Un champ détecté que l'on modifie devient « Corrigé » : c'est cette
+    // correction qui vaut vérité face à la prédiction du modèle.
+    if (key in EMPTY_SOURCES) {
+      setSources(previous => (previous[key as FieldKey] === 'detected'
+        ? { ...previous, [key]: 'corrected' }
+        : previous))
+    }
+  }
+
+  // ── Capture ──────────────────────────────────────────────────────────────────
+  const photo = captureTarget === 'monture' ? photoMonture : photoBranche
+
+  function capture() {
+    const dataUrl = snapshot()
+    if (!dataUrl) return
+    if (captureTarget === 'monture') {
+      setPhotoMonture(dataUrl)
+      void analyzeMonture(dataUrl)
+    } else {
+      setPhotoBranche(dataUrl)
+      void analyzeBranche(dataUrl)
+    }
+  }
+
+  function retake() {
+    if (captureTarget === 'monture') setPhotoMonture(null)
+    else setPhotoBranche(null)
+  }
+
+  function nextCapture() {
+    if (captureTarget === 'monture') {
+      if (!photoMonture) return
+      setCaptureTarget('branche')
+      // La caméra reste ouverte entre les deux photos : la relancer coûterait une
+      // seconde de noir et, sur mobile, un nouveau geste utilisateur.
+      return
+    }
+    if (!photoBranche) return
+    stopCamera()
+    setStep(2)
+  }
+
+  // ── Étape 2 → 3 ──────────────────────────────────────────────────────────────
+  function gammePrice() {
+    if (form.gamme === 'luxe' && form.prixCustom.trim()) {
+      const numeric = Number(form.prixCustom.trim())
+      return Number.isFinite(numeric) && numeric > 0 ? numeric : 0
+    }
+    return normalizePriceValue(form.gamme)
+  }
+
+  async function confirmVerification() {
+    const required: (keyof VerifyForm)[] = ['reference', 'marque', 'genre', 'forme', 'couleur', 'gamme']
+    const nextInvalid: Record<string, boolean> = {}
+    required.forEach(key => { if (!String(form[key]).trim()) nextInvalid[key] = true })
+
+    if (form.gamme === 'luxe') {
+      const numeric = Number(form.prixCustom.trim())
+      if (!form.prixCustom.trim() || !Number.isFinite(numeric) || numeric <= 0) nextInvalid.prixCustom = true
+    }
+
+    if (Object.keys(nextInvalid).length > 0) {
+      setInvalid(nextInvalid)
+      // Un champ replié en erreur resterait invisible : on rouvre ce qui bloque.
+      setCollapsed(previous => {
+        const next = { ...previous }
+        Object.keys(nextInvalid).forEach(key => { next[key] = false })
+        return next
+      })
+      window.alert('Veuillez remplir tous les champs obligatoires.')
+      return
+    }
+
+    setConfirming(true)
+    let locationCode: string
+    try {
+      // Aperçu seulement : l'emplacement n'est pas réservé, celui réellement attribué
+      // peut différer si un autre poste le prend entre-temps. Le serveur tranche.
+      const payload = await apiFetch(`/inventory/storage/next-free?station_id=${DEFAULT_STATION_ID}&zone=STOCK`)
+      locationCode = payload.data?.code || '—'
+    } catch (error: any) {
+      window.alert(`Impossible de trouver un emplacement libre en stock : ${error?.message || 'erreur inconnue'}`)
+      return
+    } finally {
+      setConfirming(false)
+    }
+
+    setFinalData({
+      id: `MNT-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`,
+      reference: form.reference.trim(),
+      marque: form.marque.trim(),
+      genre: form.genre,
+      forme: form.forme,
+      couleur: form.couleur,
+      matiere: form.matiere,
+      prix: gammePrice(),
+      quantite: 1,
+      emplacement: locationCode,
+      photoMonture: photoMonture || '',
+      photoBranche: photoBranche || '',
+    })
+    setStep(3)
+  }
+
+  // ── Étape 3 : enregistrement réel ────────────────────────────────────────────
+  async function saveRecord() {
+    if (!finalData) return
+    if (!session || session.registered >= session.target) {
+      window.alert('La session est absente ou son quota est atteint. Activez une nouvelle session avant de continuer.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const body = new FormData()
+      body.append('image', dataURLtoBlob(finalData.photoMonture), 'monture.jpg')
+      body.append('branche_image', dataURLtoBlob(finalData.photoBranche), 'branche.jpg')
+      body.append('station_id', DEFAULT_STATION_ID)
+      body.append('price', String(finalData.prix))
+      body.append('reception_command_code', session.code)
+      body.append('reference', finalData.reference)
+      body.append('brand', finalData.marque)
+      body.append('gender', finalData.genre)
+      body.append('shape', finalData.forme)
+      body.append('detected_shape', detectedShape)
+      body.append('color', finalData.couleur)
+      body.append('material', finalData.matiere)
+      body.append('mount_type', aiMountType)
+
+      const payload = await apiFetch('/inventory/reception', { method: 'POST', body })
+      const data = payload.data || {}
+
+      // Les valeurs prévisualisées étaient fictives : le code-barres, l'ID et
+      // l'emplacement qui comptent sont ceux que le serveur vient d'attribuer.
+      const recorded: FinalMonture = {
+        ...finalData,
+        id: data.barcode || finalData.id,
+        glassId: data.glass_id,
+        emplacement: data.location_code || data.location || finalData.emplacement,
+      }
+      setFinalData(recorded)
+
+      await incrementSession()
+
+      setSaved(true)
+      playSuccessChime()
+      showToast(`Monture enregistrée — ${recorded.id}`)
+      // Pas de retour automatique à la caméra : la boîte d'impression est modale et
+      // surgirait par-dessus un flux déjà relancé.
+      void printMontureLabel(recorded)
+    } catch (error: any) {
+      console.error('Erreur enregistrement monture', error)
+      window.alert(error?.message || "Échec de l'enregistrement de la monture")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function showToast(text: string) {
+    setToast(text)
+    window.setTimeout(() => setToast(''), 3200)
+  }
+
+  // ── Session de réception ─────────────────────────────────────────────────────
+  const activateSession = useCallback(async (rawCode: string) => {
+    const code = String(rawCode || '').trim().toUpperCase()
+    if (!code) {
+      setActivationStatus('Saisissez ou scannez le code de session.')
+      setActivationError(true)
+      return false
+    }
+
+    try {
+      const payload = await apiFetch(`/inventory/reception-commands/${encodeURIComponent(code)}`)
+      const command = payload.data?.command || payload.data
+      if (!command || command.status !== 'active') {
+        setActivationStatus('Ce code est invalide ou la session est fermée.')
+        setActivationError(true)
+        return false
+      }
+      if (Number(command.registered_count || 0) >= Number(command.target_count || 0)) {
+        setActivationStatus('Cette session a déjà atteint son nombre de montures.')
+        setActivationError(true)
+        return false
+      }
+
+      // Le suivi des réceptions coche « Reçu » sur ce scan, pas sur la première
+      // monture : on horodate donc l'activation dès la lecture du code. Un échec
+      // ici ne doit pas bloquer le magasinier — seul l'affichage du suivi attendra.
+      try {
+        await apiFetch(`/inventory/reception-commands/${encodeURIComponent(code)}/activate`, { method: 'POST' })
+      } catch (error) {
+        console.warn('Activation de session non enregistrée côté serveur', error)
+      }
+
+      const active: ReceptionSession = {
+        code: String(command.code),
+        registered: Number(command.registered_count || 0),
+        target: Number(command.target_count || 0),
+        status: String(command.status),
+      }
+      setSession(active)
+      setActivationError(false)
+      setActivationStatus(`Session activée : ${active.target - active.registered} monture(s) restante(s).`)
+      setScreen('sessions')
+      return true
+    } catch (error) {
+      // 404 / 400 : c'est le code qui ne vaut rien, pas le serveur. Le magasinier
+      // doit lire « ce code est invalide », sinon il attend un rétablissement réseau
+      // qui n'arrivera jamais.
+      const status = error instanceof ApiError ? error.status : 0
+      if (status === 404 || status === 400) {
+        setActivationStatus('Ce code est invalide ou la session est fermée.')
+      } else {
+        console.error('Erreur activation session', error)
+        setActivationStatus('Impossible de valider la session sur le serveur. Réessayez.')
+      }
+      setActivationError(true)
+      return false
+    }
+  }, [])
+
+  async function incrementSession() {
+    if (!session) return
+    try {
+      const payload = await apiFetch(
+        `/inventory/reception-commands/${encodeURIComponent(session.code)}/increment`,
+        { method: 'POST' },
+      )
+      const command = payload.data?.command || payload.data || {}
+
+      // Défensif : si /increment ne renvoie pas registered_count / target_count sous
+      // la forme attendue, `target` ne doit surtout pas tomber à 0 — la vérification
+      // « registered >= target » croirait la session terminée après une seule monture
+      // et fermerait le flux d'enregistrement à tort.
+      const parsedRegistered = Number(command.registered_count)
+      const parsedTarget = Number(command.target_count)
+      const nextRegistered = Number.isFinite(parsedRegistered) ? parsedRegistered : session.registered + 1
+      const nextTarget = Number.isFinite(parsedTarget) && parsedTarget > 0 ? parsedTarget : session.target
+      if (!Number.isFinite(parsedRegistered) || !Number.isFinite(parsedTarget) || parsedTarget <= 0) {
+        console.warn('Réponse inattendue de /increment, valeurs de secours utilisées :', command)
+      }
+
+      setSession({ ...session, registered: nextRegistered, target: nextTarget, status: command.status || session.status })
+    } catch (error) {
+      console.error('Erreur incrémentation commande', error)
+    }
+  }
+
+  const loadMovements = useCallback(async (userId?: string) => {
+    try {
+      const query = userId
+        ? `?user_id=${encodeURIComponent(userId)}&action=RECEPTION_FOURNISSEUR&limit=300`
+        : '?action=RECEPTION_FOURNISSEUR&limit=300'
+      const payload = await apiFetch(`/inventory/movements${query}`)
+      setMovements(Array.isArray(payload.data?.movements) ? payload.data.movements : [])
+    } catch (error) {
+      console.error('Erreur chargement des sessions précédentes', error)
+      setMovements([])
+    }
+  }, [])
+
+  const loadLists = useCallback(async () => {
+    setLoadingLists(true)
+    try {
+      const payload = await apiFetch('/inventory/send-lists')
+      setLists(Array.isArray(payload.data?.lists) ? payload.data.lists : [])
+    } catch (error) {
+      // Une liste indisponible ne doit pas empêcher d'enregistrer : c'est un écran de
+      // consultation, le poste reste utilisable sans lui.
+      console.error('Erreur chargement des listes reçues', error)
+      setLists([])
+    } finally {
+      setLoadingLists(false)
+    }
+  }, [])
+
+  // ── Garde ────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!getToken()) {
+      window.location.replace('/magasin.html')
+      return
+    }
+    void (async () => {
+      try {
+        const payload = await apiFetch('/auth/me')
+        const account = payload?.data?.user
+        if (!account) throw new Error('session invalide')
+        // Le rôle est relu auprès du serveur, jamais cru sur parole depuis localStorage.
+        if (!ALLOWED_ROLES.includes(String(getRoleName(account)))) {
+          window.location.replace('/magasin.html')
+          return
+        }
+        window.localStorage.setItem('user', JSON.stringify(account))
+        setUser(account)
+        setScreen('activation')
+        void loadMovements(account.id)
+        void loadLists()
+      } catch {
+        logoutToLogin()
+      }
+    })()
+  }, [loadMovements, loadLists])
+
+  // ── Réinitialisation ─────────────────────────────────────────────────────────
+  function resetAll(skipConfirm = false) {
+    if (!skipConfirm && step > 1 && !window.confirm('Voulez-vous vraiment recommencer ?')) return
+
+    stopCamera()
+    setPhotoMonture(null)
+    setPhotoBranche(null)
+    setCaptureTarget('monture')
+    setForm(EMPTY_FORM)
+    setSources(EMPTY_SOURCES)
+    setCollapsed({})
+    setInvalid({})
+    setDetectedShape('')
+    setAiMountType('')
+    setFinalData(null)
+    setSaved(false)
+
+    // Quota atteint : la session ne peut plus rien recevoir, on renvoie à l'activation
+    // plutôt que de laisser rouvrir un flux qui échouerait à l'enregistrement.
+    if (!session || session.registered >= session.target) {
+      setSession(null)
+      setScreen('activation')
+      setActivationError(false)
+      setActivationStatus('La session est terminée. Scannez une nouvelle étiquette pour continuer.')
+      return
+    }
+
+    setStep(1)
+    setScreen('wizard')
+    void startCamera()
+  }
+
+  function enterSession() {
+    setScreen('wizard')
+    setStep(1)
+    // Ce clic est le geste utilisateur qui autorise l'accès caméra sur mobile ; un
+    // démarrage silencieux au chargement de la page serait souvent bloqué.
+    if (!cameraOn) void startCamera()
+  }
+
+  /** Navigation de la barre latérale. Quitter l'assistant démonte la carte de capture,
+   *  donc le <video> : sans arrêt explicite, la piste caméra resterait ouverte et la
+   *  diode du téléphone allumée sur un écran qui ne filme plus. `enterSession` la
+   *  rallume au retour. */
+  function navigate(next: Screen) {
+    if (next === screen) return
+    if (screen === 'wizard') stopCamera()
+    if (next === 'wizard') {
+      enterSession()
+      return
+    }
+    setScreen(next)
+  }
+
+  // ── Rendu ────────────────────────────────────────────────────────────────────
+  // Le compteur ne retient que ce qui reste à traiter : une liste déjà partie n'appelle
+  // plus aucun geste.
+  const newLists = lists.filter(list => !listDispatched(list)).length
+
+  return (
+    <div className={dark ? 'dark' : ''}>
+      <style>{SCAN_CSS}</style>
+      <div className="flex min-h-screen bg-slate-50 dark:bg-slate-900">
+        <Sidebar
+          current={screen}
+          onNavigate={navigate}
+          dark={dark}
+          onToggleDark={() => setDark(d => !d)}
+          user={user}
+          hasSession={Boolean(session)}
+          newLists={newLists}
+        />
+
+        <div className="flex-1 flex flex-col min-w-0">
+          <TopBar
+            current={screen}
+            session={session}
+            dark={dark}
+            onToggleDark={() => setDark(d => !d)}
+            onReset={screen === 'wizard' ? () => resetAll() : null}
+          />
+
+          <main className="flex-1 px-4 md:px-6 py-4 md:py-6 pb-24 md:pb-8 overflow-auto">
+          {screen === 'loading' && null}
+
+          {screen === 'activation' && (
+            <ActivationGate status={activationStatus} isError={activationError} onActivate={activateSession} />
+          )}
+
+          {screen === 'sessions' && (
+            <SessionsGate user={user} session={session} movements={movements} onEnter={enterSession} />
+          )}
+
+          {screen === 'historique' && (
+            <HistoriqueScreen movements={movements} onPrint={record => void printMontureLabel(recordToLabel(record))} />
+          )}
+
+          {screen === 'listes' && (
+            <ListesScreen lists={lists} loading={loadingLists} onReload={() => void loadLists()} />
+          )}
+
+          {screen === 'wizard' && (
+            <div className="mx-auto max-w-4xl">
+              {/* Le <video> vit dans cette carte : la démonter entre les deux photos
+                  couperait le flux, d'où une seule vue de capture réutilisée. */}
+              <div className={step === 1 ? '' : 'hidden'}>
+                <CaptureCard
+                  target={captureTarget}
+                  photo={photo}
+                  cameraOn={cameraOn}
+                  videoRef={videoRef}
+                  analyzing={analyzing}
+                  onStart={() => void startCamera()}
+                  onStop={stopCamera}
+                  onCapture={capture}
+                  onRetake={retake}
+                  onNext={nextCapture}
+                />
+              </div>
+
+              {step === 2 && (
+                <div className={CARD}>
+                  <CardHead
+                    icon={ic.check2('w-4 h-4')}
+                    title="Étape 2 · Vérification"
+                    pill={<Pill tone={analyzing ? 'blue' : 'slate'}>{analyzing ? 'Analyse IA en cours…' : 'Vérifiez les champs signalés'}</Pill>}
+                  />
+
+                  <div className="grid gap-4 p-4 lg:grid-cols-[260px_1fr]">
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+                      <PhotoBox url={photoMonture} label="Monture" />
+                      <PhotoBox url={photoBranche} label="Branche" />
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <Field
+                        icon={ic.tag()} label="Référence" source={sources.reference}
+                        collapsed={collapsed.reference} summary={form.reference} invalid={invalid.reference}
+                        onExpand={() => setCollapsed(p => ({ ...p, reference: false }))}
+                      >
+                        <input
+                          type="text" value={form.reference} placeholder="RB2180-001" className={INPUT}
+                          onChange={e => setField('reference', e.target.value)}
+                        />
+                      </Field>
+
+                      <Field
+                        icon={ic.building()} label="Marque" source={sources.marque}
+                        collapsed={collapsed.marque} summary={form.marque} invalid={invalid.marque}
+                        onExpand={() => setCollapsed(p => ({ ...p, marque: false }))}
+                      >
+                        {/* Seule suggestion quand l'IA n'a rien lu ; le champ reste libre. */}
+                        <input
+                          type="text" list="marquesList" value={form.marque} placeholder="Ray-Ban" className={INPUT}
+                          onChange={e => setField('marque', e.target.value)}
+                        />
+                        <datalist id="marquesList"><option value="OPAL" /></datalist>
+                      </Field>
+
+                      <Field
+                        icon={ic.gender()} label="Genre" source={sources.genre}
+                        collapsed={collapsed.genre} summary={form.genre} invalid={invalid.genre}
+                        onExpand={() => setCollapsed(p => ({ ...p, genre: false }))}
+                      >
+                        <select value={form.genre} className={INPUT} onChange={e => setField('genre', e.target.value)}>
+                          <option value="">Sélectionner un genre</option>
+                          {GENRES.map(genre => <option key={genre} value={genre}>{genre}</option>)}
+                        </select>
+                      </Field>
+
+                      <Field
+                        icon={ic.shapes()} label="Forme" source={sources.forme}
+                        collapsed={collapsed.forme} summary={form.forme} invalid={invalid.forme}
+                        onExpand={() => setCollapsed(p => ({ ...p, forme: false }))}
+                      >
+                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
+                          {FORMES.map(forme => {
+                            const selected = form.forme === forme
+                            return (
+                              <button
+                                key={forme}
+                                type="button"
+                                onClick={() => setField('forme', forme)}
+                                className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-[11px] font-semibold transition-all ${selected
+                                  ? 'border-[#2563eb] bg-[#2563eb]/10 text-[#2563eb]'
+                                  : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'}`}
+                              >
+                                <ShapeIcon name={forme} />
+                                <span className="text-center leading-tight">{forme === 'Oeil de chat' ? 'Œil de chat' : forme}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <p className="mt-2 text-[11px] text-slate-400">
+                          Choisissez la forme réelle de la monture : ça aide l'IA à mieux la reconnaître.
+                        </p>
+                      </Field>
+
+                      <Field
+                        icon={ic.palette()} label="Couleur" source={sources.couleur}
+                        collapsed={collapsed.couleur} summary={form.couleur} invalid={invalid.couleur}
+                        onExpand={() => setCollapsed(p => ({ ...p, couleur: false }))}
+                      >
+                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
+                          {COULEURS.map(({ value, swatch }) => {
+                            const selected = form.couleur === value
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => setField('couleur', value)}
+                                className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition-all ${selected
+                                  ? 'border-[#2563eb] bg-[#2563eb]/10 text-[#2563eb]'
+                                  : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'}`}
+                              >
+                                <span
+                                  className="h-4 w-4 flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-600"
+                                  style={{ background: swatch }}
+                                />
+                                <span className="truncate">{value}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <p className="mt-2 text-[11px] text-slate-400">
+                          Choisissez la couleur réelle de la monture : ça aide l'IA à mieux la reconnaître.
+                        </p>
+                      </Field>
+
+                      <Field
+                        icon={ic.cube()} label="Matière" source={sources.matiere}
+                        collapsed={collapsed.matiere} summary={form.matiere}
+                        onExpand={() => setCollapsed(p => ({ ...p, matiere: false }))}
+                      >
+                        <select value={form.matiere} className={INPUT} onChange={e => setField('matiere', e.target.value)}>
+                          <option value="">Sélectionner une matière</option>
+                          {MATIERES.map(matiere => <option key={matiere} value={matiere}>{matiere}</option>)}
+                        </select>
+                      </Field>
+
+                      {/* La gamme n'est jamais détectée : toujours ouverte. */}
+                      <Field icon={ic.banknote()} label="Gamme" invalid={invalid.gamme || invalid.prixCustom}>
+                        <select value={form.gamme} className={INPUT} onChange={e => setField('gamme', e.target.value)}>
+                          <option value="">Sélectionner une gamme</option>
+                          <option value="classique">Classique</option>
+                          <option value="moyenne gamme">Moyenne gamme</option>
+                          <option value="luxe">Luxe</option>
+                        </select>
+                        {form.gamme === 'luxe' && (
+                          <input
+                            type="text" inputMode="numeric" placeholder="Prix en FCFA"
+                            value={form.prixCustom} className={`${INPUT} mt-2`}
+                            onChange={e => setField('prixCustom', e.target.value)}
+                          />
+                        )}
+                      </Field>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700">
+                    <Btn onClick={() => { setStep(1); void startCamera() }}>{ic.arrowLeft()} Retour</Btn>
+                    <Btn variant="primary" className="ml-auto" onClick={() => void confirmVerification()} disabled={confirming}>
+                      {ic.check()} {confirming ? "Recherche de l'emplacement…" : 'Confirmer →'}
+                    </Btn>
+                  </div>
+                </div>
+              )}
+
+              {step === 3 && finalData && (
+                <div className={CARD}>
+                  <CardHead
+                    icon={ic.save('w-4 h-4')}
+                    title="Étape 3 · Enregistrement"
+                    pill={<Pill tone={saved ? 'green' : 'slate'}>
+                      {saved ? 'Monture enregistrée · étiquette imprimée' : 'Emplacement généré automatiquement'}
+                    </Pill>}
+                  />
+
+                  <div className="p-4">
+                    <div className="mx-auto flex max-w-sm flex-col items-center rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700">
+                      <BarcodePreview value={finalData.id} />
+                      <div className="mt-1 font-mono text-sm font-bold tabular-nums text-slate-900">{finalData.id}</div>
+                      <span className="mt-1 text-[11px] text-slate-400">Aperçu de l'étiquette</span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+                      {[
+                        ['Marque', finalData.marque || '—'],
+                        ['Référence', finalData.reference || '—'],
+                        ['ID', finalData.id],
+                        ['Emplacement', finalData.emplacement],
+                        ['Quantité', String(finalData.quantite)],
+                        ['Gamme', fmtFCFA(finalData.prix)],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/50">
+                          <div className="text-[11px] font-semibold text-slate-400">{label}</div>
+                          <div className="mt-0.5 truncate text-sm font-bold text-slate-900 dark:text-white">{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700">
+                    {!saved ? (
+                      <>
+                        <Btn onClick={() => setStep(2)}>{ic.arrowLeft()} Retour</Btn>
+                        <Btn variant="success" className="ml-auto" onClick={() => void saveRecord()} disabled={saving}>
+                          {ic.save()} {saving ? 'Enregistrement en cours…' : 'Enregistrer'}
+                        </Btn>
+                      </>
+                    ) : (
+                      <>
+                        <Btn onClick={() => void printMontureLabel(finalData)}>{ic.printer()} Réimprimer l'étiquette</Btn>
+                        <Btn variant="primary" className="ml-auto" onClick={() => resetAll(true)}>
+                          {ic.plus()} Enregistrer une autre monture
+                        </Btn>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          </main>
+        </div>
+
+        {/* Remonté au-dessus de la barre mobile, qui le masquerait sinon sur téléphone. */}
+        {toast && (
+          <div className="fixed bottom-20 md:bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl bg-[#16a34a] px-4 py-3 text-sm font-semibold text-white shadow-lg">
+            {ic.checkCircle()} {toast}
+          </div>
+        )}
+
+        <MobileNav
+          current={screen}
+          onNavigate={navigate}
+          hasSession={Boolean(session)}
+          newLists={newLists}
+        />
+      </div>
+    </div>
+  )
+}
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <ScanPage />
+  </React.StrictMode>,
+)

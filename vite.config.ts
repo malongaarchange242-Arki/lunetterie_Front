@@ -16,11 +16,19 @@ export default defineConfig(({ mode }) => {
       sourcemap: emitSourcemaps ? 'inline' : false,
       minify: !emitSourcemaps,
       // Site multi-pages : sans ces entrées explicites, Vite ne construit que index.html
-      // et /login.html renvoie un 404 en production.
+      // et les autres pages renvoient un 404 en production.
+      // Deux portes d'entrée seulement : index.html pour la Direction, magasin.html pour
+      // les postes. login.html a été retiré, sa connexion vit désormais dans les deux.
       rollupOptions: {
         input: {
           index: path.resolve(__dirname, 'index.html'),
-          login: path.resolve(__dirname, 'login.html'),
+          magasin: path.resolve(__dirname, 'magasin.html'),
+          vendeuse: path.resolve(__dirname, 'vendeuse.html'),
+          scan: path.resolve(__dirname, 'scan.html'),
+          caisse: path.resolve(__dirname, 'caisse.html'),
+          responsable: path.resolve(__dirname, 'responsable.html'),
+          sav: path.resolve(__dirname, 'sav.html'),
+          labo: path.resolve(__dirname, 'labo.html'),
         },
       },
     },
@@ -40,8 +48,11 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0',
       port: parseInt(process.env.PORT || '8443'),
-      strictPort: true,
-      hmr: false,
+      strictPort: false,
+      // Rechargement à chaud : les modifications d'un fichier source s'appliquent dans
+      // le navigateur sans recharger la page à la main. Était coupé par le scaffold
+      // Figma Make, qui pilote son propre aperçu.
+      hmr: true,
       watch: { ignored: ['**/.figma/**'] },
       proxy: {
         '/api': {

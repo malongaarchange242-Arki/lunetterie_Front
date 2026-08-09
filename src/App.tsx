@@ -60,7 +60,13 @@ interface Employee {
   avatar: string
 }
 
-type MvtStage = 'ordered' | 'shipped' | 'received' | 'transferred' | 'display' | 'sold'
+// Le pipeline suit une monture qui existe déjà et qui franchit des frontières : ni son entrée
+// dans le parc ni ses déplacements internes n'en font partie.
+type MvtStage = 'shipped' | 'received' | 'display' | 'sold'
+
+// Actions de mouvement qui n'appartiennent à aucune étape du pipeline, donc absentes de
+// l'historique. Détaillé au point de filtrage, dans HistoryView.
+const OUT_OF_PIPELINE_ACTIONS = new Set(['RECEPTION_FOURNISSEUR', 'RANGEMENT'])
 
 function getEmployeeGroup(stationName?: string) {
   const normalized = String(stationName || '').toLowerCase()
@@ -88,10 +94,8 @@ function normalizeMovementStage(action?: string, toStationName?: string): MvtSta
   const normalizedAction = String(action || '').trim().toUpperCase()
   const normalizedStation = String(toStationName || '').trim().toLowerCase()
 
-  if (normalizedAction === 'RECEPTION_FOURNISSEUR') return 'ordered'
   if (normalizedAction === 'EXPEDITION') return 'shipped'
   if (normalizedAction === 'RECEPTION_STATION') return 'received'
-  if (normalizedAction === 'RANGEMENT') return 'transferred'
   if (normalizedAction === 'PRESENTOIR' || normalizedStation.includes('présentoir') || normalizedStation.includes('presentoir')) return 'display'
   if (normalizedAction === 'LIVRAISON' || normalizedAction === 'VENTE' || normalizedAction === 'VENDUE') return 'sold'
 
@@ -260,13 +264,16 @@ function buildFrameRowsFromGlasses(glasses: any[], stationMap: Map<number, strin
 
 const MOVEMENTS_DATA: Movement[] = []
 
-const STOCK_STATUSES = ['EN_STOCK_GENERAL', 'EN_STOCK_SOUS_STATION', 'EN_PRESENTOIR', 'EN_LABORATOIRE', 'RESERVE'] as const
+// RESERVEE, avec deux E : c'est la valeur de l'enum. Le handler découpe ce paramètre et
+// le passe à un IN (...) sans rien valider, donc un statut mal orthographié ne renvoie
+// pas d'erreur — il fait juste disparaître les lignes concernées.
+const STOCK_STATUSES = ['EN_STOCK_GENERAL', 'EN_STOCK_SOUS_STATION', 'EN_PRESENTOIR', 'EN_LABORATOIRE', 'RESERVEE'] as const
 
-// Tous les statuts de models/enums.go. Le chatbot reçoit la base entière, vendues et
-// pertes comprises, et filtre lui-même sur le champ `status`.
+// Tous les statuts de backend/internal/inventory/models/enums.go. Le chatbot reçoit la
+// base entière, vendues et pertes comprises, et filtre lui-même sur le champ `status`.
 const ALL_GLASS_STATUSES = [
   'RECU_FOURNISSEUR', 'EN_STOCK_GENERAL', 'EN_TRANSIT', 'EN_STOCK_SOUS_STATION',
-  'EN_PRESENTOIR', 'RESERVEE', 'EN_LABORATOIRE', 'PRETE_A_LIVRER',
+  'EN_PRESENTOIR', 'EN_CAISSE', 'RESERVEE', 'EN_LABORATOIRE', 'PRETE_A_LIVRER',
   'VENDUE', 'PERDUE', 'CASSEE', 'RETOURNEE',
 ] as const
 
@@ -307,10 +314,41 @@ function fmtPct(part: number, total: number) {
   return `${value.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`
 }
 
+// Le magasin est identifié par sa VILLE partout dans les échanges serveur — les paniers y
+// sont indexés — mais il s'affiche « Stock magasin (Ville) » : le poste s'appelle Stock
+// magasin, la ville n'en est que le qualificatif. Seul le libellé change, jamais la valeur.
+function magasinLabel(city: string) {
+  return `Stock magasin (${city})`
+}
+
+// Ce qu'il faut renvoyer à un magasin pour le remettre au niveau de sa dernière livraison.
+// Une ville jamais livrée n'a pas de ligne : sans carton de référence, il n'y a pas de
+// pourcentage à calculer.
+interface RestockSuggestion {
+  city: string
+  last_box_qty: number
+  last_box_at: string
+  current_stock: number
+  to_send: number
+  alert: boolean
+}
+
 function normalizeStationCityName(station: { id?: number; name?: string; city?: string }) {
   const raw = String(station.city || station.name || '').trim()
   if (!raw) return ''
   return raw.replace(/^station\s+/i, '').trim()
+}
+
+// « Station Pointe-Noire » est un nom de base, pas un nom métier : sur le terrain c'est le
+// stock du magasin de la ville. La ville est conservée — c'est elle qui distingue deux
+// magasins, et la règle vaut pour toute ville à venir, sans nom écrit en dur.
+function stationDisplayLabel(name?: string | null) {
+  const raw = String(name || '').trim()
+  if (!raw) return ''
+  const city = raw.match(/^station\s+(.+)$/i)
+  if (city) return `Stock magasin ${city[1].trim()}`
+  if (/^stock\s+principal$/i.test(raw)) return 'Stock principal'
+  return raw
 }
 
 function isStoreStation(station: { id?: number; name?: string; city?: string; type?: string }) {
@@ -886,10 +924,8 @@ const CARD_ROW_CLASS = '-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto p
 const CARD_CLASS = 'flex w-[62%] flex-shrink-0 snap-start flex-col items-start gap-2.5 rounded-[20px] border p-5 text-left shadow-sm transition-all hover:-translate-y-[3px] hover:shadow-lg sm:w-auto sm:flex-shrink'
 
 const STAGE_META: Record<MvtStage, { label: string; color: string; bg: string; icon: ReactNode }> = {
-  ordered: { label: 'Commande', color: '#d97706', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: ic.order() },
   shipped: { label: 'En transit', color: '#2563eb', bg: 'bg-blue-50 dark:bg-blue-900/20', icon: ic.plane() },
   received: { label: 'Réceptionné', color: '#16a34a', bg: 'bg-green-50 dark:bg-green-900/20', icon: ic.box() },
-  transferred: { label: 'Transfert station', color: '#0891b2', bg: 'bg-cyan-50 dark:bg-cyan-900/20', icon: ic.transfer() },
   display: { label: 'Mis en présentoir', color: '#9333ea', bg: 'bg-purple-50 dark:bg-purple-900/20', icon: ic.display() },
   sold: { label: 'Vendu', color: '#059669', bg: 'bg-emerald-50 dark:bg-emerald-900/20', icon: ic.check() },
 }
@@ -1087,6 +1123,13 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
 
   const summary = summarizeStockSummary(stockSummary)
   const selectedCityTotal = getCityTotal(stats)
+  const targetCity = selectedCity || cityNames[0] || ''
+
+  // Dénominateur écrit en toutes lettres sous chaque pourcentage. « du parc » était du
+  // jargon de gestion de flotte : on ne devinait ni ce que le mot désignait, ni qu'il
+  // changeait de sens sur la tuile des références.
+  const montureDenominator = `sur ${summary.totalUnits.toLocaleString('fr-FR')} monture${summary.totalUnits > 1 ? 's' : ''}`
+  const referenceDenominator = `sur ${summary.totalReferences.toLocaleString('fr-FR')} référence${summary.totalReferences > 1 ? 's' : ''}`
 
   return (
     <div className="space-y-5">
@@ -1156,16 +1199,22 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
 
       <div className="grid grid-cols-2 gap-3">
         {[
-          { label: 'Stock général', value: summary.generalUnits, total: summary.totalUnits, of: 'du parc', color: '#2563eb' },
-          { label: 'Stock local', value: summary.localUnits, total: summary.totalUnits, of: 'du parc', color: '#0891b2' },
-          { label: 'Présentoir', value: summary.presentoirUnits, total: summary.totalUnits, of: 'du parc', color: '#7c3aed' },
-          // Rapportées au nombre de références, pas au parc : une référence critique n'est pas
-          // une monture, et le pourcentage n'aurait aucun sens sur l'autre dénominateur.
-          { label: 'Références critiques', value: summary.criticalReferences, total: summary.totalReferences, of: 'des références', color: '#059669' },
+          { label: 'Stock général', value: summary.generalUnits, total: summary.totalUnits, of: montureDenominator, color: '#2563eb', screen: { type: 'stock-general' } as NavScreen },
+          { label: 'Stock magasin', value: summary.localUnits, total: summary.totalUnits, of: montureDenominator, color: '#0891b2', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'stock' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
+          { label: 'Présentoir', value: summary.presentoirUnits, total: summary.totalUnits, of: montureDenominator, color: '#7c3aed', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'presentoire' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
+          // Rapportées au nombre de références, pas aux montures : une référence critique n'est
+          // pas une monture, et le pourcentage n'aurait aucun sens sur l'autre dénominateur.
+          // C'est cette exception qui justifie d'écrire le dénominateur sous chaque tuile.
+          { label: 'Références critiques', value: summary.criticalReferences, total: summary.totalReferences, of: referenceDenominator, color: '#059669', screen: { type: 'stock-general' } as NavScreen },
         ].map(item => {
           const ratio = item.total > 0 ? item.value / item.total : 0
           return (
-            <div key={item.label} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4">
+            <button
+              type="button"
+              key={item.label}
+              onClick={() => onNavigate(item.screen)}
+              className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4 text-left transition-all hover:border-slate-300 hover:shadow-sm dark:hover:border-slate-600"
+            >
               <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">{item.label}</p>
               <div className="flex items-baseline gap-1.5 mt-1">
                 <p className="text-3xl font-black tabular-nums" style={{ color: item.color }}>{summary.hasData ? item.value : '—'}</p>
@@ -1181,7 +1230,7 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
                   <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">{item.of}</p>
                 </>
               )}
-            </div>
+            </button>
           )
         })}
       </div>
@@ -1614,8 +1663,11 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
 // Même tableau que la page Expédition, sans les paniers de demande ni le sélecteur
 // d'action : ici on consulte le contenu de l'entrepôt central, on n'y prépare pas d'envoi.
 const STOCK_GENERAL_PAGE_SIZE = 20
+// Table du stock général dans Expédition : plus dense que l'écran dédié, elle partage la
+// page avec les filtres et les cartons.
+const STOCK_PAGE_SIZE = 15
 
-function StockGeneralScreen() {
+function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) => void }) {
   const [glasses, setGlasses] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [rayonFilter, setRayonFilter] = useState('all')
@@ -1728,24 +1780,43 @@ function StockGeneralScreen() {
               ) : pageRows.length === 0 ? (
                 <tr><td colSpan={8} className="px-3 py-6 text-center text-green-700">Aucune lunette trouvée.</td></tr>
               ) : (
-                pageRows.map((g: any, idx: number) => (
-                  <tr key={`stock-general-${g.id || idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                    <td className="px-2 py-2">
-                      {g.photo_monture_url ? (
-                        <img src={g.photo_monture_url} alt={g.reference || g.barcode || ''} className="h-12 w-12 rounded-md object-cover" />
-                      ) : (
-                        <span className="inline-block rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-500">—</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-2 font-mono text-slate-900 dark:text-white">{g.reference || g.barcode || '—'}</td>
-                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.brand || g.marque || '—'}</td>
-                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.shape || '—'}</td>
-                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.gender || '—'}</td>
-                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.status || '—'}</td>
-                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.created_at ? String(g.created_at).slice(0, 10) : '—'}</td>
-                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.location_code || g.station_name || '—'}</td>
-                  </tr>
-                ))
+                pageRows.map((g: any, idx: number) => {
+                  const frameRef = String(g.reference || g.barcode || g.ref || '').trim()
+                  return (
+                    <tr
+                      key={`stock-general-${g.id || idx}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        if (!frameRef) return
+                        onNavigate({ type: 'frame', ref: frameRef, city: '' })
+                      }}
+                      onKeyDown={event => {
+                        if (!frameRef) return
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          onNavigate({ type: 'frame', ref: frameRef, city: '' })
+                        }
+                      }}
+                      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus:outline-none focus:bg-slate-100 dark:focus:bg-slate-800"
+                    >
+                      <td className="px-2 py-2">
+                        {g.photo_monture_url ? (
+                          <img src={g.photo_monture_url} alt={g.reference || g.barcode || ''} className="h-12 w-12 rounded-md object-cover" />
+                        ) : (
+                          <span className="inline-block rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-500">—</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 font-mono text-slate-900 dark:text-white">{g.reference || g.barcode || '—'}</td>
+                      <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.brand || g.marque || '—'}</td>
+                      <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.shape || '—'}</td>
+                      <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.gender || '—'}</td>
+                      <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.status || '—'}</td>
+                      <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.created_at ? String(g.created_at).slice(0, 10) : '—'}</td>
+                      <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.location_code || g.station_name || '—'}</td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -1784,7 +1855,7 @@ function StockGeneralScreen() {
 }
 
 // ── Suivi detail screen ───────────────────────────────────────────────────────
-function SuiviDetailScreen({ pays, city, section, cityStockCounts, framesByCity }: { pays: string; city: string; section: SuiviSection; cityStockCounts: Record<string, CityStats>; framesByCity: Record<string, FrameRecord[]> }) {
+function SuiviDetailScreen({ pays, city, section, cityStockCounts, framesByCity, onNavigate }: { pays: string; city: string; section: SuiviSection; cityStockCounts: Record<string, CityStats>; framesByCity: Record<string, FrameRecord[]>; onNavigate: (screen: NavScreen) => void }) {
   const [calYear, setCalYear] = useState(2026)
   const [calMonth, setCalMonth] = useState(7)
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
@@ -1932,9 +2003,11 @@ function SuiviDetailScreen({ pays, city, section, cityStockCounts, framesByCity 
                   {selectedDay ? `Aucune monture le ${selectedDay} ${MONTH_FR[calMonth]}` : 'Aucune monture dans cette section'}
                 </div>
               ) : frames.map(f => (
-                <div
+                <button
                   key={f.ref + f.date}
-                  className="items-center hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors"
+                  type="button"
+                  onClick={() => onNavigate({ type: 'frame', ref: f.ref, city })}
+                  className="w-full items-center text-left hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors"
                   style={{ display: 'grid', gridTemplateColumns: SUIVI_GRID_COLUMNS }}
                 >
                   <div className="px-2 py-3 flex justify-start">
@@ -1957,7 +2030,7 @@ function SuiviDetailScreen({ pays, city, section, cityStockCounts, framesByCity 
                     </div>
                   </div>
                   <div className="px-2 py-3 flex justify-end"><Badge status={f.status} /></div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -2135,14 +2208,15 @@ function CityDetailScreen({ block, pays, city, onNavigate, cityStockCounts, fram
 }
 
 // ── Frame detail ──────────────────────────────────────────────────────────────
-function FrameDetailScreen({ frameRef, city, framesByCity }: { frameRef: string; city: string; framesByCity: Record<string, FrameRecord[]> }) {
-  const frame = framesByCity[city]?.find(f => f.ref === frameRef)
+function FrameDetailScreen({ frameRef, city, framesByCity }: { frameRef: string; city?: string; framesByCity: Record<string, FrameRecord[]> }) {
+  const frameFromCity = city ? framesByCity[city]?.find(f => f.ref === frameRef) : undefined
+  const frame = frameFromCity || Object.values(framesByCity).flat().find(f => f.ref === frameRef)
+  const resolvedCity = city && framesByCity[city] ? city : Object.keys(framesByCity).find(key => framesByCity[key]?.some(f => f.ref === frameRef)) || city || '—'
+
   return (
     <div className="space-y-4 max-w-sm mx-auto">
       <div className="bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 rounded-3xl overflow-hidden aspect-video flex items-center justify-center">
-        <div className="w-56 h-36 p-4">
-          <GlassesIllustration className="w-full h-full" />
-        </div>
+        <FramePhoto src={frame?.photo} alt={frame?.ref || 'monture'} className="w-full h-full object-cover" />
       </div>
       {frame && (
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
@@ -2151,7 +2225,7 @@ function FrameDetailScreen({ frameRef, city, framesByCity }: { frameRef: string;
             ['Marque', frame.marque],
             ['Enregistré par', frame.enregistrePar],
             ['Date', frame.date],
-            ['Ville', city],
+            ['Ville', resolvedCity],
             ['Statut', frame.status],
           ].map(([k, v]) => (
             <div key={k} className="flex justify-between items-center px-4 py-3.5">
@@ -2170,7 +2244,7 @@ function HistoryView() {
   const [activeTab, setActiveTab] = useState<'lunettes' | 'employes'>('lunettes')
   // La grille d'étapes reste affichée en permanence et sert de sélecteur : seul le détail
   // en dessous change. Une étape est donc toujours sélectionnée.
-  const [selectedStage, setSelectedStage] = useState<MvtStage>('ordered')
+  const [selectedStage, setSelectedStage] = useState<MvtStage>('shipped')
   const [liveItems, setLiveItems] = useState<Movement[]>(MOVEMENTS_DATA)
 
   useEffect(() => {
@@ -2189,10 +2263,17 @@ function HistoryView() {
         const items = Array.isArray(payload?.data?.movements) ? payload.data.movements : []
 
         const mapped: Movement[] = items
+          // Hors pipeline, et écartées ici plutôt que dans normalizeMovementStage, dont le
+          // repli les ferait toutes retomber dans « Réceptionné » :
+          //   RECEPTION_FOURNISSEUR — sans station d'origine, marque l'entrée de la monture
+          //     dans le parc et non un déplacement ;
+          //   RANGEMENT — changement de casier à l'intérieur d'une même station, la monture
+          //     n'a franchi aucune frontière.
+          .filter((entry: any) => !OUT_OF_PIPELINE_ACTIONS.has(String(entry.action || '').trim().toUpperCase()))
           .map((entry: any): Movement => {
             const stage = normalizeMovementStage(entry.action, entry.to_station_name)
-            const from = String(entry.from_station_name || 'Inconnu').trim() || 'Inconnu'
-            const to = String(entry.to_station_name || 'Inconnu').trim() || 'Inconnu'
+            const from = stationDisplayLabel(entry.from_station_name) || 'Inconnu'
+            const to = stationDisplayLabel(entry.to_station_name) || 'Inconnu'
             const operator = [entry.user_first_name, entry.user_last_name].filter(Boolean).join(' ') || 'Système'
             const { date, time } = formatMovementDate(entry.created_at)
             const ref = String(entry.reference || entry.barcode || `MVT-${entry.id ?? 'n/a'}`)
@@ -2221,7 +2302,7 @@ function HistoryView() {
       .catch(() => setLiveItems([]))
   }, [])
 
-  const pipeline: MvtStage[] = ['ordered', 'shipped', 'received', 'transferred', 'display', 'sold']
+  const pipeline: MvtStage[] = ['shipped', 'received', 'display', 'sold']
 
   const stageItems = liveItems.filter(m => m.stage === selectedStage)
   const activeMeta = STAGE_META[selectedStage]
@@ -2337,7 +2418,7 @@ function HistoryView() {
                           <span className="text-slate-600 dark:text-slate-300">
                             {mvt.from} <span className="text-slate-400">→</span> {mvt.to}
                           </span>
-                          <span className="text-slate-400">{mvt.date} à {mvt.time} · {mvt.operator}</span>
+                          <span className="text-slate-400">{mvt.date} à {mvt.time} · Par {mvt.operator}</span>
                         </div>
                       </div>
 
@@ -2378,6 +2459,10 @@ function ReceptionView() {
   const [isCreatingReceptionSession, setIsCreatingReceptionSession] = useState(false)
   const [isDeletingSessionId, setIsDeletingSessionId] = useState<number | null>(null)
   const [showStockPage, setShowStockPage] = useState(false)
+  // Les sessions passées occupent leur propre page, comme le stock : l'écran Expédition
+  // servait à la fois à créer et à consulter, et la liste s'allongeant, la création
+  // finissait poussée hors de vue.
+  const [showHistoryPage, setShowHistoryPage] = useState(false)
   const [stockGlasses, setStockGlasses] = useState<any[]>([])
   const [isLoadingStock, setIsLoadingStock] = useState(false)
   // 'GENERAL' = liste du stock général ; sinon le nom du magasin dont on regarde les manquants.
@@ -2386,8 +2471,15 @@ function ReceptionView() {
   const [stockRayonFilter, setStockRayonFilter] = useState<string>('all')
   const [stockEtagereFilter, setStockEtagereFilter] = useState<string>('all')
   const [stockBacFilter, setStockBacFilter] = useState<string>('all')
+  const [stockPage, setStockPage] = useState(1)
+  // Sélection pour composer une liste depuis le stock existant. On garde les codes-barres et
+  // non les indices de ligne : la sélection doit survivre au changement de page et de filtre.
+  const [stockListSelection, setStockListSelection] = useState<string[]>([])
+  const [stockListCity, setStockListCity] = useState('')
+  const [isSendingStockList, setIsSendingStockList] = useState(false)
   const [excludedPreparationKeys, setExcludedPreparationKeys] = useState<string[]>([])
   const [basketCounts, setBasketCounts] = useState<Record<string, number>>({})
+  const [restockByCity, setRestockByCity] = useState<Record<string, RestockSuggestion>>({})
   const [basketItems, setBasketItems] = useState<BasketItem[]>([])
   const [isLoadingBasket, setIsLoadingBasket] = useState(false)
   const [excludedDemandIds, setExcludedDemandIds] = useState<number[]>([])
@@ -2873,6 +2965,31 @@ function ReceptionView() {
     }
   }
 
+  // Besoins de réapprovisionnement, indexés par ville normalisée : c'est la même clé que
+  // partout ailleurs, sinon « Pointe-Noire » et « pointe-noire » ne se retrouveraient pas.
+  async function loadRestockSuggestions() {
+    const token = window.localStorage.getItem('token')
+    if (!token) {
+      setRestockByCity({})
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/inventory/send-boxes/restock`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) throw new Error('restock unavailable')
+      const payload = await response.json().catch(() => ({}))
+      const byCity: Record<string, RestockSuggestion> = {}
+      for (const row of payload?.data?.suggestions || []) {
+        byCity[String(row.city || '').trim().toLowerCase()] = row as RestockSuggestion
+      }
+      setRestockByCity(byCity)
+    } catch {
+      setRestockByCity({})
+    }
+  }
+
   async function loadBasketCounts() {
     const token = window.localStorage.getItem('token')
     if (!token) {
@@ -2991,8 +3108,12 @@ function ReceptionView() {
     const magasinGlasses = (stockGlasses || []).filter((g: any) => isLocalStockStatus(g.status))
 
     const fixedMagasins = ['Pointe-Noire', 'Kinshasa']
+    // Les paniers sont indexés par VILLE côté serveur, alors que les montures portent un nom
+    // de STATION. Sans cette normalisation, « Station Pointe-Noire » se retrouvait à côté de
+    // « Pointe-Noire » : deux chips pour le même magasin, dont une qui affichait toujours 0
+    // et ouvrait un panier vide, puisque aucune ville ne porte ce nom.
     const discoveredMagasins = magasinGlasses
-      .map((g: any) => String(g.station_name || '').trim())
+      .map((g: any) => normalizeStationCityName({ name: String(g.station_name || ''), city: String(g.station_city || '') }))
       .filter(Boolean)
     // Une ville peut avoir un panier sans avoir encore de stock : elle doit quand même
     // apparaître, c'est précisément le magasin qui a tout à recevoir.
@@ -3025,12 +3146,14 @@ function ReceptionView() {
     const header = selectedMagasin
       ? {
         title: stockAction === 'PANIER'
-          ? `Panier — ${selectedMagasin}`
+          ? `Panier — ${magasinLabel(selectedMagasin)}`
           : stockAction === 'ENVOI'
-            ? `Envoyer le stock — ${selectedMagasin}`
-            : `Stock magasin — ${selectedMagasin}`,
+            ? `Envoyer le stock — ${magasinLabel(selectedMagasin)}`
+            : magasinLabel(selectedMagasin),
+        // Au moment de préparer un colis, le besoin de réapprovisionnement et les demandes
+        // clients se répondent : combien envoyer, et quoi choisir en priorité.
         subtitle: stockAction === 'PANIER'
-          ? 'Recherches client enregistrées par le chatbot pour ce magasin.'
+          ? restockSubtitle(selectedMagasin)
           : stockAction === 'ENVOI'
             ? 'Bon de préparation des montures à sortir du stock général.'
             : "Choisissez l'action à effectuer sur ce magasin.",
@@ -3095,7 +3218,7 @@ function ReceptionView() {
 
         {renderBasketRow(magasins, selectedMagasin)}
 
-        {!selectedMagasin && renderGeneralStockTable(filteredGeneralGlasses)}
+        {!selectedMagasin && renderGeneralStockTable(filteredGeneralGlasses, magasins)}
         {selectedMagasin && !stockAction && renderStockActionChooser(selectedMagasin)}
         {selectedMagasin && stockAction === 'PANIER' && renderBasketAnalysis(selectedMagasin, filteredGeneralGlasses)}
         {selectedMagasin && stockAction === 'ENVOI' && renderStockPreparation(selectedMagasin, filteredGeneralGlasses)}
@@ -3103,27 +3226,113 @@ function ReceptionView() {
     )
   }
 
+  function toggleStockSelection(barcode: string) {
+    setStockListSelection(prev => prev.includes(barcode) ? prev.filter(b => b !== barcode) : [...prev, barcode])
+  }
+
+  // Compose une liste depuis le stock existant et l'adresse au Stock Général. La Direction
+  // commande, elle n'expédie pas : c'est le magasinier qui scannera chaque monture en rayon
+  // avant l'envoi réel.
+  async function submitStockList(rows: any[]) {
+    const token = window.localStorage.getItem('token')
+    if (!token || !stockListCity || stockListSelection.length === 0) return
+
+    const byBarcode = new Map(rows.map((g: any) => [String(g.barcode || ''), g]))
+    const items = stockListSelection
+      .map(barcode => byBarcode.get(barcode))
+      .filter(Boolean)
+      .map((glass: any) => ({
+        glass_id: glass.id ?? null,
+        barcode: glass.barcode || '',
+        reference: glass.reference || '',
+        brand: glass.brand || '',
+        location_code: glass.location_code || '',
+      }))
+    if (items.length === 0) return
+
+    setIsSendingStockList(true)
+    try {
+      const response = await fetch(`${API_URL}/inventory/send-lists`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        // Pas de session_code : c'est ce qui dit au serveur que la source est le stock
+        // existant, et déclenche la vérification de disponibilité.
+        body: JSON.stringify({ city: stockListCity, items }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload?.success === false) {
+        const rejected = payload?.data?.rejected || {}
+        const detail = Object.entries(rejected).map(([code, reason]) => `· ${code} — ${reason}`).join('\n')
+        throw new Error([payload?.error || "Impossible d'enregistrer la liste.", detail].filter(Boolean).join('\n'))
+      }
+
+      const list = payload?.data?.list || {}
+      const sent = Number(payload?.data?.sent || items.length)
+      const rejected: Record<string, string> = payload?.data?.rejected || {}
+      let message = `Liste ${list.session_code || ''} enregistrée : ${sent} monture${sent > 1 ? 's' : ''} à préparer par le Stock Général pour ${stockListCity}.`
+      // Le lot n'est pas atomique : sans ce détail, la Direction croirait avoir envoyé
+      // toute sa sélection alors que des montures ont été écartées.
+      const rejectedEntries = Object.entries(rejected)
+      if (rejectedEntries.length) {
+        message += `\n\nÉcartées (${rejectedEntries.length}) :\n` + rejectedEntries.map(([code, reason]) => `· ${code} — ${reason}`).join('\n')
+      }
+      window.alert(message)
+
+      setStockListSelection([])
+      await loadStockGlasses()
+      await loadSentLists()
+    } catch (error: any) {
+      window.alert(error?.message || "Impossible d'enregistrer la liste.")
+    } finally {
+      setIsSendingStockList(false)
+    }
+  }
+
+  // Le panneau ouvert par une puce montre les deux signaux d'un coup : ce qu'il faut
+  // renvoyer, et ce que les clients ont cherché sans le trouver.
+  function restockSubtitle(city: string) {
+    const restock = restockByCity[city.trim().toLowerCase()]
+    const demands = 'Recherches client enregistrées par le chatbot pour ce magasin.'
+    if (!restock) return `Aucun carton encore livré à ce magasin. ${demands}`
+    const need = restock.to_send > 0
+      ? `${restock.to_send.toLocaleString('fr-FR')} monture${restock.to_send > 1 ? 's' : ''} à renvoyer`
+      : 'Stock au niveau de la dernière livraison'
+    return `${need} — ${restock.current_stock} en stock sur ${restock.last_box_qty} au dernier carton. ${demands}`
+  }
+
   function renderBasketRow(magasins: string[], selectedMagasin: string) {
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Paniers de demande</span>
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Réapprovisionnement</span>
         {magasins.map(magasin => {
-          const count = basketCounts[magasin] || 0
+          // Le chiffre est une quantité à préparer, plafonnée au dernier carton reçu. Une
+          // ville jamais livrée n'a pas de suggestion : rien à afficher, et surtout pas
+          // d'alerte sur un magasin qui n'a encore rien reçu.
+          const restock = restockByCity[magasin.trim().toLowerCase()]
+          const toSend = restock?.to_send || 0
+          const isAlert = Boolean(restock?.alert)
+          const demands = basketCounts[magasin] || 0
           const isActive = magasin === selectedMagasin && stockAction === 'PANIER'
+          const hint = restock
+            ? `${restock.current_stock} en stock sur ${restock.last_box_qty} livrées au dernier carton${demands ? ` · ${demands} demande${demands > 1 ? 's' : ''} client` : ''}`
+            : 'Aucun carton encore livré à ce magasin'
           return (
             <button
               key={`basket-${magasin}`}
               onClick={() => openBasket(magasin)}
+              title={hint}
               className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold transition-colors ${isActive
                 ? 'border-blue-500 bg-blue-600 text-white'
-                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800'}`}
+                : isAlert
+                  ? 'border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800'}`}
             >
               {ic.cart('w-4 h-4')}
-              {magasin}
-              <span className={`min-w-[1.5rem] rounded-full px-1.5 py-0.5 text-xs font-bold tabular-nums ${count > 0
+              {magasinLabel(magasin)}
+              <span className={`min-w-[1.5rem] rounded-full px-1.5 py-0.5 text-xs font-bold tabular-nums ${isAlert
                 ? 'bg-amber-500 text-white'
                 : isActive ? 'bg-blue-500 text-blue-100' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'}`}>
-                {count}
+                {toSend}
               </span>
             </button>
           )
@@ -3132,13 +3341,67 @@ function ReceptionView() {
     )
   }
 
-  function renderGeneralStockTable(generalGlasses: any[]) {
+  function renderGeneralStockTable(generalGlasses: any[], magasins: string[]) {
+    const totalPages = Math.max(1, Math.ceil(generalGlasses.length / STOCK_PAGE_SIZE))
+    // Page bornée à l'affichage : si un filtre réduit la liste entre deux rendus, on retombe
+    // sur la dernière page existante au lieu d'afficher une tranche vide.
+    const currentPage = Math.min(stockPage, totalPages)
+    const start = (currentPage - 1) * STOCK_PAGE_SIZE
+    const pageRows = generalGlasses.slice(start, start + STOCK_PAGE_SIZE)
+
+    const allSelected = generalGlasses.length > 0 && generalGlasses.every((g: any) => stockListSelection.includes(String(g.barcode || '')))
+
     return (
+      <div className="space-y-3">
+      {/* Composer une liste depuis le stock existant. La Direction commande, le Stock Général
+          prépare et expédie — ce bouton n'envoie aucune monture, il crée l'ordre. */}
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+          {stockListSelection.length > 0
+            ? `${stockListSelection.length} monture${stockListSelection.length > 1 ? 's' : ''} sélectionnée${stockListSelection.length > 1 ? 's' : ''}`
+            : 'Cochez les montures à envoyer'}
+        </span>
+        <select
+          value={stockListCity}
+          onChange={e => setStockListCity(e.target.value)}
+          className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+        >
+          <option value="">Destination…</option>
+          {magasins.map(city => <option key={`dest-${city}`} value={city}>{magasinLabel(city)}</option>)}
+        </select>
+        <button
+          onClick={() => submitStockList(generalGlasses)}
+          disabled={isSendingStockList || !stockListCity || stockListSelection.length === 0}
+          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {isSendingStockList ? 'Enregistrement…' : 'Envoyer au Stock Général'}
+        </button>
+        {stockListSelection.length > 0 && (
+          <button
+            onClick={() => setStockListSelection([])}
+            className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            Tout décocher
+          </button>
+        )}
+      </div>
+
       <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
-        <div className="min-w-[720px]">
+        <div className="min-w-[760px]">
           <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
             <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
               <tr>
+                <th className="px-2 py-2 text-left font-semibold">
+                  {/* Porte sur tout le résultat filtré, pas seulement la page affichée :
+                      cocher page par page pour un envoi de 40 montures serait absurde. */}
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={() => setStockListSelection(allSelected ? [] : generalGlasses.map((g: any) => String(g.barcode || '')).filter(Boolean))}
+                    title="Tout sélectionner"
+                    className="h-4 w-4 cursor-pointer accent-blue-600"
+                  />
+                </th>
                 <th className="px-2 py-2 text-left font-semibold">Photo</th>
                 <th className="px-2 py-2 text-left font-semibold">Réf</th>
                 <th className="px-2 py-2 text-left font-semibold">Marque</th>
@@ -3151,12 +3414,22 @@ function ReceptionView() {
             </thead>
             <tbody className="divide-y divide-green-200 dark:divide-green-700 bg-white dark:bg-slate-900">
               {isLoadingStock ? (
-                <tr><td colSpan={8} className="px-3 py-6 text-center text-green-700">Chargement...</td></tr>
-              ) : generalGlasses.length === 0 ? (
-                <tr><td colSpan={8} className="px-3 py-6 text-center text-green-700">Aucune lunette trouvée.</td></tr>
+                <tr><td colSpan={9} className="px-3 py-6 text-center text-green-700">Chargement...</td></tr>
+              ) : pageRows.length === 0 ? (
+                <tr><td colSpan={9} className="px-3 py-6 text-center text-green-700">Aucune lunette trouvée.</td></tr>
               ) : (
-                generalGlasses.map((g: any, idx: number) => (
-                  <tr key={`stock-${g.id || idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                pageRows.map((g: any, idx: number) => (
+                  <tr key={`stock-${g.id || idx}`} className={`transition-colors ${stockListSelection.includes(String(g.barcode || ''))
+                    ? 'bg-blue-50 dark:bg-blue-900/20'
+                    : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                    <td className="px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={stockListSelection.includes(String(g.barcode || ''))}
+                        onChange={() => toggleStockSelection(String(g.barcode || ''))}
+                        className="h-4 w-4 cursor-pointer accent-blue-600"
+                      />
+                    </td>
                     <td className="px-2 py-2">
                       {g.photo_monture_url ? (
                         <img src={g.photo_monture_url} alt={g.reference || g.barcode || ''} className="h-12 w-12 rounded-md object-cover" />
@@ -3177,6 +3450,35 @@ function ReceptionView() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Masquée tant qu'une seule page suffit : une barre « Page 1 / 1 » n'apprend rien. */}
+      {totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
+            {(start + 1).toLocaleString('fr-FR')}–{Math.min(start + STOCK_PAGE_SIZE, generalGlasses.length).toLocaleString('fr-FR')} sur {generalGlasses.length.toLocaleString('fr-FR')}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setStockPage(p => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Précédent
+            </button>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-200 tabular-nums">
+              Page {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setStockPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Suivant
+            </button>
+          </div>
+        </div>
+      )}
       </div>
     )
   }
@@ -3590,6 +3892,7 @@ function ReceptionView() {
     if (!showStockPage) return
 
     void loadBasketCounts()
+    void loadRestockSuggestions()
 
     // Le chatbot vit dans un autre composant : il signale par cet événement qu'il vient de
     // déposer une demande, ce qui fait monter le compteur sans recharger la page.
@@ -3603,6 +3906,12 @@ function ReceptionView() {
     if (stockAction !== 'PANIER' && stockAction !== 'ENVOI') return
     void loadBasketItems(stockScope)
   }, [showStockPage, stockScope, stockAction])
+
+  // Changer un filtre ou de magasin remet en première page : rester en page 3 d'une liste
+  // qui vient d'être réduite donnerait un tableau vide sans explication.
+  useEffect(() => {
+    setStockPage(1)
+  }, [stockRayonFilter, stockEtagereFilter, stockBacFilter, stockScope])
 
   function renderDetailSession() {
     if (!detailSession) return null
@@ -3766,9 +4075,31 @@ function ReceptionView() {
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-white">Sessions de réception</h2>
-        <div className="flex items-center gap-2">
-          <button onClick={() => { setShowStockPage(true); void loadStockGlasses() }} className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 text-slate-800 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors active:scale-95">
+        <div className="flex items-center gap-2 min-w-0">
+          {showHistoryPage && (
+            <button
+              onClick={() => { setShowHistoryPage(false); setShowCountriesView(false) }}
+              className="flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-sm font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+            >
+              {ic.back('w-4 h-4')} Retour
+            </button>
+          )}
+          <h2 className="truncate text-base font-semibold text-slate-900 dark:text-white">
+            {showHistoryPage ? 'Historique des sessions de réception' : 'Expédition'}
+          </h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {!showHistoryPage && (
+            <button onClick={() => setShowHistoryPage(true)} className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 text-slate-800 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors active:scale-95 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700">
+              {ic.hist('w-4 h-4')} Historique
+              {sessions.length > 0 && (
+                <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                  {sessions.length}
+                </span>
+              )}
+            </button>
+          )}
+          <button onClick={() => { setShowStockPage(true); void loadStockGlasses() }} className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 text-slate-800 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors active:scale-95 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700">
             {ic.box('w-4 h-4')} Voir mon stock
           </button>
           <button onClick={() => setShowSupplierModal(true)} className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors active:scale-95">
@@ -3825,7 +4156,24 @@ function ReceptionView() {
           </div>
         )
       })()}
-      {showCountriesView ? (
+      {/* Écran d'accueil de l'Expédition : ce qu'on vient y faire, pas ce qu'on y a fait.
+          Sans ça la page serait vide tant qu'aucune session n'est en cours. */}
+      {!showHistoryPage && !receptionSession && (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-6 text-center dark:border-slate-700 dark:bg-slate-800/70">
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Aucune session en cours</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Créez une expédition avec « Nouvelle », ou consultez les sessions déjà enregistrées.
+          </p>
+          <button
+            onClick={() => setShowHistoryPage(true)}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3.5 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+          >
+            {ic.hist('w-4 h-4')} Voir l&apos;historique
+          </button>
+        </div>
+      )}
+
+      {showHistoryPage && (showCountriesView ? (
         <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
           <div className="flex items-center justify-between">
             <div>
@@ -3970,7 +4318,7 @@ function ReceptionView() {
             </div>
           </div>
         )
-      })}
+      }))}
 
       {renderDetailSession()}
 
@@ -4361,16 +4709,71 @@ function SupplierView() {
 
 // Une couleur et une icône par groupe, comme STAGE_META pour les étapes : c'est ce qui
 // teinte la carte sélectionnée et l'en-tête de la liste.
+// Les postes de terrain seulement. Direction et Administrateur ne se créent pas ici :
+// ce formulaire sert à ouvrir un poste en magasin.
+// ids 9 et 10 : fixés par les migrations 025_caisse et 028_sav (7 = DIRECTION,
+// 8 = SUPER_DIRECTEUR).
 const ROLE_OPTIONS = [
-  { id: 1, label: 'Super administrateur', value: 'SUPER_ADMIN' },
-  { id: 2, label: 'Administrateur', value: 'ADMIN' },
-  { id: 3, label: 'Magasinier', value: 'MAGASINIER' },
-  { id: 4, label: 'Vendeur', value: 'VENDEUR' },
-  { id: 5, label: 'Laboratoire', value: 'LABORATOIRE' },
-  { id: 6, label: 'Responsable de station', value: 'RESPONSABLE_STATION' },
-  // id 9 : fixé par la migration 025_caisse (7 = DIRECTION, 8 = SUPER_DIRECTEUR).
   { id: 9, label: 'Caissier', value: 'CAISSIER' },
+  { id: 4, label: 'Vendeur(se)', value: 'VENDEUR' },
+  { id: 5, label: 'Laboratoire', value: 'LABORATOIRE' },
+  { id: 10, label: 'SAV', value: 'SAV' },
+  { id: 6, label: 'Responsable Magasin', value: 'RESPONSABLE_STATION' },
+  { id: 3, label: 'Magasinier', value: 'MAGASINIER' },
 ]
+
+interface StationRow { id: number; name: string; type: string; city: string }
+
+/** Le poste où travaille l'employé. Il n'est pas stocké tel quel : c'est la station
+ *  correspondante qui part dans users.station_id, parce que c'est elle qui cadre les
+ *  requêtes de chaque écran (`glasses?station_id=…`) et que labo.tsx l'envoie avec sa
+ *  livraison. Un poste sans station laisse le champ vide. */
+const POSTE_OPTIONS: Array<{
+  id: string
+  label: string
+  /** Station reconnue par son nom. */
+  stationName?: string
+  /** Station reconnue par son type plutôt que par son nom. */
+  stationType?: string
+  /** Le magasin de la ville choisie dans le formulaire. */
+  cityStore?: boolean
+}> = [
+  { id: 'caisse', label: 'Caisse', stationName: 'Caisse' },
+  { id: 'vendeur', label: 'Vendeur', stationName: 'Présentoir' },
+  { id: 'labo', label: 'Laboratoire', stationName: 'Laboratoire' },
+  // Le SAV suit des clients, il ne détient aucune monture : pas de station.
+  { id: 'sav', label: 'SAV' },
+  { id: 'responsable', label: 'Responsable Magasin', cityStore: true },
+  { id: 'magasinier', label: 'Magasinier', stationType: 'STOCK_GENERAL' },
+]
+
+function foldAccents(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+}
+
+function resolveStationId(posteId: string, stations: StationRow[], city: string): number | null {
+  const poste = POSTE_OPTIONS.find(p => p.id === posteId)
+  if (!poste) return null
+
+  if (poste.stationType) {
+    // Aucune station de type STOCK_GENERAL n'est semée par les migrations : on retombe
+    // sur son nom, celui que stationDisplayLabel() sait déjà reconnaître.
+    return stations.find(s => s.type === poste.stationType)?.id
+      ?? stations.find(s => /^stock\s+(principal|g[ée]n[ée]ral)$/i.test(s.name.trim()))?.id
+      ?? null
+  }
+  if (poste.cityStore) {
+    return stations.find(s => foldAccents(s.city) === foldAccents(city) && /^station\s/i.test(s.name))?.id ?? null
+  }
+  if (!poste.stationName) return null
+
+  // Une station homonyme dans la ville choisie l'emporte : le jour où chaque ville aura
+  // sa Caisse et son Laboratoire, on ne veut pas rattacher l'employé à celle d'à côté.
+  const wanted = foldAccents(poste.stationName)
+  return stations.find(s => foldAccents(s.name) === wanted && foldAccents(s.city) === foldAccents(city))?.id
+    ?? stations.find(s => foldAccents(s.name) === wanted)?.id
+    ?? null
+}
 
 const EMPLOYEE_GROUP_META: Record<string, { color: string; icon: (c?: string) => React.ReactElement }> = {
   'Station Générale': { color: '#2563eb', icon: ic.box },
@@ -4383,7 +4786,8 @@ function EmployeesView() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [hasError, setHasError] = useState(false)
-  const [stations, setStations] = useState<Array<{ id: number; name: string }>>([])
+  // type et city servent à retrouver la station d'un poste (cf. resolveStationId).
+  const [stations, setStations] = useState<StationRow[]>([])
   const [cities, setCities] = useState<Array<{ id: number; name: string }>>([])
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [employeeForm, setEmployeeForm] = useState({
@@ -4393,7 +4797,7 @@ function EmployeesView() {
     email: '',
     city: '',
     roleId: '',
-    stationId: '',
+    posteId: '',
   })
   const [isSavingEmployee, setIsSavingEmployee] = useState(false)
   const [employeeFormError, setEmployeeFormError] = useState('')
@@ -4429,7 +4833,12 @@ function EmployeesView() {
             ? citiesPayload.cities
             : []
 
-        setStations(stations.map((station: any) => ({ id: Number(station.id) || 0, name: String(station.name || 'Non assigné') })))
+        setStations(stations.map((station: any) => ({
+          id: Number(station.id) || 0,
+          name: String(station.name || 'Non assigné'),
+          type: String(station.type || ''),
+          city: String(station.city || ''),
+        })))
         setCities(citiesData.map((city: any) => ({ id: Number(city.id) || 0, name: String(city.nom || city.name || 'Sans nom') })))
         return users
       })
@@ -4491,7 +4900,9 @@ function EmployeesView() {
           gender: employeeForm.gender,
           city: employeeForm.city.trim(),
           role_id: Number(employeeForm.roleId),
-          station_id: employeeForm.stationId ? Number(employeeForm.stationId) : null,
+          // Le poste choisi n'est pas stocké tel quel : c'est sa station qui compte,
+          // parce que c'est elle que les écrans de poste relisent dans user.station_id.
+          station_id: employeeForm.posteId ? resolveStationId(employeeForm.posteId, stations, employeeForm.city) : null,
         }),
       })
 
@@ -4518,7 +4929,7 @@ function EmployeesView() {
       }
 
       setShowAddEmployee(false)
-      setEmployeeForm({ fullName: '', gender: '', phone: '', email: '', city: '', roleId: '', stationId: '' })
+      setEmployeeForm({ fullName: '', gender: '', phone: '', email: '', city: '', roleId: '', posteId: '' })
     } catch (error: any) {
       setEmployeeFormError(error?.message || 'Erreur lors de la création de l’employé.')
     } finally {
@@ -4598,13 +5009,12 @@ function EmployeesView() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Station</label>
-                  <select value={employeeForm.stationId} onChange={e => setEmployeeForm(f => ({ ...f, stationId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
-                    <option value="">Aucune station</option>
-                    {stations.map(station => {
-                      const label = station.name === 'Station Pointe-Noire' ? 'Stock magasin' : station.name === 'Stock Principal' ? 'Stock principal' : station.name
-                      return <option key={station.id} value={station.id}>{label}</option>
-                    })}
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Poste</label>
+                  <select value={employeeForm.posteId} onChange={e => setEmployeeForm(f => ({ ...f, posteId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                    <option value="">Sélectionner</option>
+                    {POSTE_OPTIONS.map(poste => (
+                      <option key={poste.id} value={poste.id}>{poste.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -4684,7 +5094,7 @@ function EmployeesView() {
                     <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-xs font-black text-white shadow-sm" style={{ backgroundColor: ROLE_COLOR[emp.role] || '#6b7280' }}>{emp.avatar}</div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{emp.name}</p>
-                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">{ROLE_LABEL[emp.role] || emp.role} · {emp.station}</p>
+                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">{ROLE_LABEL[emp.role] || emp.role} · {stationDisplayLabel(emp.station)}</p>
                     </div>
                     <Badge status={emp.status} />
                   </div>
@@ -5187,8 +5597,8 @@ export default function App() {
       case 'dashboard': return <DashboardScreen onNavigate={navigate} stockSummary={stockSummary} cityStockCounts={cityStockCounts} stationCities={stationCities} />
       case 'pays': return <PaysScreen block={current.block} onNavigate={navigate} cityStockCounts={cityStockCounts} stationCities={stationCities} stockSummary={stockSummary} />
       case 'city': return <CityDetailScreen block={current.block} pays={current.pays} city={current.city} onNavigate={navigate} cityStockCounts={cityStockCounts} framesByCity={framesByCity} />
-      case 'suivi-detail': return <SuiviDetailScreen pays={current.pays} city={current.city} section={current.section} cityStockCounts={cityStockCounts} framesByCity={framesByCity} />
-      case 'stock-general': return <StockGeneralScreen />
+      case 'suivi-detail': return <SuiviDetailScreen pays={current.pays} city={current.city} section={current.section} cityStockCounts={cityStockCounts} framesByCity={framesByCity} onNavigate={navigate} />
+      case 'stock-general': return <StockGeneralScreen onNavigate={navigate} />
       case 'frame': return <FrameDetailScreen frameRef={current.ref} city={current.city} framesByCity={framesByCity} />
       case 'module': return renderModuleView(current.id)
     }
