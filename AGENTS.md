@@ -10,13 +10,18 @@ React 19 + Vite 8 + Tailwind v4, sur un backend Go déjà en production.
 
 | Dossier | État | Rôle |
 |---|---|---|
-| `../Frontend/` | **en production** | Vanilla JS, ~20 000 lignes, 8 pages. La référence fonctionnelle. |
-| `Frontend_React/` | en cours | Le portage. Couvre la Direction et le poste Vendeuse. |
+| `../Pojet la lunetterie/Frontend/` | **en production** | Vanilla JS, ~20 000 lignes, 8 pages. La référence fonctionnelle. |
+| `Frontend_React/` | en cours | Le portage. Couvre la Direction et les six postes magasin. |
 
-**Avant d'implémenter un comportement métier, va lire son équivalent dans `../Frontend/`.**
-C'est là que vivent les règles réelles (statuts, transitions, libellés, contrôles). Les
-fichiers utiles : `presentoir.js` (les postes magasin), `scan.js` (enregistrement),
-`direction.js` / `admin.js` (vues d'ensemble), `auth-guard.js` (rôles et redirections).
+Le backend Go est un **dépôt distinct**, `../backend/`. Les `cmd/` et `internal/` posés à
+la racine de `D:\Pojet la lunetterie` sont une copie ancienne : les routes qu'on y lit ne
+sont pas celles qui tournent.
+
+**Avant d'implémenter un comportement métier, va lire son équivalent dans le front
+vanilla.** C'est là que vivent les règles réelles (statuts, transitions, libellés,
+contrôles). Les fichiers utiles : `presentoir.js` (les postes magasin), `scan.js`
+(enregistrement), `direction.js` / `admin.js` (vues d'ensemble), `auth-guard.js` (rôles et
+redirections).
 
 ## Points d'entrée
 
@@ -26,50 +31,60 @@ marche en dev.
 
 | Fichier | Module | Écran |
 |---|---|---|
-| `index.html` | `src/entry.tsx` → `src/App.tsx` | Direction (5 500 lignes, monolithe) |
-| `login.html` | `src/login.tsx` | Connexion — l'entrée de tout le monde |
-| `magasin.html` | `src/magasin.tsx` | Interface Magasin : choix du poste, 2ᵉ vérification |
+| `index.html` | `src/entry.tsx` → `src/App.tsx` | Direction (5 500 lignes, monolithe) + sa connexion |
+| `magasin.html` | `src/magasin.tsx` | Connexion du magasin : choix du poste puis nom + code |
 | `vendeuse.html` | `src/vendeuse.tsx` | Poste Vendeuse |
+| `caisse.html` | `src/caisse.tsx` | Poste Caisse : tranche les lignes de proforma |
+| `labo.html` | `src/labo.tsx` | Poste Laboratoire : réception, montage, `PRETE_A_LIVRER` |
+| `sav.html` | `src/sav.tsx` | Poste SAV : suivi client sur les proformas |
+| `responsable.html` | `src/responsable.tsx` | Poste R. Magasin : supervision + mise en présentoir |
 | `scan.html` | `src/scan.tsx` | Enregistrement des montures (magasinier) |
 
 `src/main.tsx`, `src/index.html`, `src/login.js`, `src/login.css`, `src/presentoir.html`
 et `src/imports/` sont des restes de l'ancien front vanilla. **Rien ne les référence.**
+`Labo21.html` à la racine est un brouillon hors build (il charge un script CDN).
 
 ## Le parcours de connexion
 
+`login.html` **n'existe plus** : il y a deux portes, et chacune porte sa connexion.
+
 ```
-login.html ── nom + code PIN (4 ou 6 chiffres) ou empreinte WebAuthn
-     │
-     ├─ SUPER_ADMIN, ADMIN ─────────────→ /index.html      (Direction)
-     ├─ VENDEUR, CAISSIER, LABORATOIRE,
-     │  SAV, RESPONSABLE_STATION ───────→ /magasin.html
-     │                                        │
-     │                                   2ᵉ vérification : sa carte,
-     │                                   nom pré-rempli, code à ressaisir
-     │                                        │
-     │                                        └─→ /vendeuse.html
-     │
-     └─ MAGASINIER ──────────────────────→ /scan.html
+index.html ── nom + code PIN (4 ou 6 chiffres) ou empreinte  → Direction
+                (SUPER_ADMIN, ADMIN)
+
+magasin.html ── on choisit d'abord son poste, puis nom + code
+     │          Le rôle renvoyé par le serveur doit correspondre au poste choisi,
+     │          sinon la connexion est refusée en le nommant.
+     ├─ VENDEUR ─────────────→ /vendeuse.html
+     ├─ CAISSIER ────────────→ /caisse.html
+     ├─ LABORATOIRE ─────────→ /labo.html
+     ├─ SAV ─────────────────→ /sav.html
+     ├─ RESPONSABLE_STATION ─→ /responsable.html
+     └─ MAGASINIER ──────────→ /scan.html
 ```
 
-La table de routage est `ROLE_HOME` dans `src/login.tsx`. **Une chaîne vide y signifie
-« écran pas encore construit » : la connexion est refusée avec un message nommant le
-rôle**, plutôt que d'ouvrir une session sans destination.
+La table des postes est `POSTES` dans `src/magasin.tsx` : chaque entrée associe un
+`role` serveur et un `home`. **Un `home` vide signifie « écran pas encore construit » :
+on affiche une confirmation au lieu de rediriger vers un 404.**
 
-### Le verrou de `scan.html`
+### Les verrous de chaque poste
 
-Un seul : jeton valide **et** rôle `MAGASINIER` ou `SUPER_ADMIN`, revérifié auprès de
-`/auth/me`. Pas de passage par `magasin.html`, pas de `localStorage.poste` — la double
-vérification appartient aux postes de vente, pas à l'enregistrement. Le magasinier va de
-la connexion à sa caméra sans écran intermédiaire, et n'en ressort pas de la journée.
+Tous relisent le rôle auprès de `/auth/me` — jamais sur parole depuis `localStorage`.
+S'y ajoute `localStorage.poste`, posé par `magasin.html` : sans lui, retour à
+`/magasin.html`, sinon l'écran s'ouvrirait en tapant l'URL.
 
-### Les deux verrous de `vendeuse.html`
+| Écran | Rôle | `poste` exigé |
+|---|---|---|
+| `vendeuse.html` | `VENDEUR` | `vendeuse` |
+| `caisse.html` | `CAISSIER` | `caisse` |
+| `labo.html` | `LABORATOIRE` | `labo` |
+| `responsable.html` | `RESPONSABLE_STATION` | `responsable` |
+| `sav.html` | `SAV` ou `SUPER_ADMIN` | `sav`, sauf `SUPER_ADMIN` |
+| `scan.html` | `MAGASINIER` ou `SUPER_ADMIN` | — |
 
-1. jeton valide **et** rôle `VENDEUR` (revérifié auprès de `/auth/me`, jamais cru sur parole) ;
-2. `localStorage.poste === 'vendeuse'`, posé par `magasin.html`.
-
-Sans le second, retour à `/magasin.html` — sinon la 2ᵉ vérification se contournerait
-en tapant l'URL.
+`SUPER_ADMIN` entre par la Direction, où rien ne pose `poste` : l'en dispenser est la
+seule façon de lui laisser consulter `sav.html` et `scan.html`. Le magasinier, lui, va de
+la connexion à sa caméra sans écran intermédiaire et n'en ressort pas de la journée.
 
 ### Clés `localStorage`
 
@@ -89,8 +104,9 @@ Le serveur renvoie tantôt `role_name`, tantôt `role_id` seul : passe toujours 
 `getRoleName()`, qui gère les deux plus les alias (`VENDEUSE` → `VENDEUR`,
 `DIRECTION` → `ADMIN`, `LABO` → `LABORATOIRE`…).
 
-⚠️ **`SAV` n'existe pas encore côté backend.** La carte est prête, la connexion
-échouera tant que le serveur ne connaît pas ce rôle.
+Les `role_id` 9 (`CAISSIER`) et 10 (`SAV`) sont fixés à la main par les migrations
+`025_caisse` et `028_sav` : la séquence aurait fait dépendre leur id de l'ordre
+d'exécution des migrations.
 
 ## Cycle de vie d'une monture
 
@@ -104,6 +120,23 @@ RECU_FOURNISSEUR → EN_STOCK_GENERAL → EN_TRANSIT → EN_STOCK_SOUS_STATION
 
 Un transfert se fait en **trois appels** : `POST /transfers` → `POST /transfers/:id/items`
 (une par monture) → `POST /transfers/:id/dispatch`.
+
+### Les deux passages qui ne se font pas tout seuls
+
+**`EN_STOCK_SOUS_STATION` → `EN_PRESENTOIR`** : le seul chemin est un transfert vers le
+poste **Présentoir**, une station à part entière qu'on retrouve par son nom exact dans
+`/auth/stations`. Une simple recherche de code-barres depuis un magasin ne fait que
+consulter (`display_service.go` `PlaceOnDisplay`). C'est l'onglet « Mise en présentoir »
+de `src/responsable.tsx`. Sans ce geste, la vendeuse n'a rien à vendre et `POST /proformas`
+répond avec un `warning` : `SendToCaisse` n'accepte **que** des montures `EN_PRESENTOIR`
+de la station appelante.
+
+**`EN_TRANSIT` → `EN_LABORATOIRE`** : après encaissement la monture part en transit vers
+le labo, et c'est `GET /inventory/glasses/:barcode?station_id=` qui vaut réception. Le
+scan de `src/labo.tsx` fait cet appel quand le code est inconnu de ses listes.
+
+`PRETE_A_LIVRER` est le **dernier statut du cycle** : le backend n'a pas de « livrée ».
+La remise au client se pointe à l'écran, elle ne s'enregistre nulle part.
 
 **Emplacements**, deux grammaires : `RAYON-A-ETA-3-BAC-B-POS-12` pour l'entrepôt,
 `PR03-12` (meuble-position) pour le présentoir.
@@ -148,7 +181,7 @@ de bâtir dessus.**
 | Manque | Conséquence |
 |---|---|
 | pas de `sold_by` sur une monture vendue | impossible d'attribuer une vente à une vendeuse ; « Mes stats » compte des **mouvements**, rapprochés par comparaison de chaînes sur `user_first_name + user_last_name` |
-| pas de `created_by` sur une proforma | « Suivi de mes clients » liste les clients **du magasin**, pas ceux du compte connecté |
+| ~~pas de `created_by` sur une proforma~~ **comblé** | `POST /proformas` grave l'auteur (`proforma_handler.go`) et `created_by` revient dans les lectures (`proforma_repository.go`). **Le front n'en tire pas encore parti** : « Suivi de mes clients » liste toujours les clients **du magasin**. À brancher |
 | ~~pas d'issue par ligne de proforma~~ **comblé** | `proforma.items[].outcome` vaut `VENDUE` ou `RETOUR_PRESENTOIR` dès que la Caisse a tranché (`null` tant qu'elle attend), avec `settled_at`. C'est lui qui donne le statut d'une ligne, plus la déduction par code-barres |
 | aucun champ d'ordonnance | foyer, teinte, sphère, cylindre, axe, addition, prix des verres, accessoires, montage, remise **transitent dans `proforma.note`** |
 | réclamations : **écriture seule** | `POST /inventory/claims` existe et l'écran Réclamation l'utilise. Il n'y a **pas de route de lecture** — `claims` n'enregistre que `Create` (`cmd/api/main.go`), et le dépôt Go n'a pas de `List`. « Suivi de réclamation » demande quand même `GET /inventory/claims` : la table se remplira seule le jour où la route existera. En attendant, son erreur est tenue **à l'écart du bandeau global**, sinon tout le poste afficherait « 1 liste indisponible » en permanence |

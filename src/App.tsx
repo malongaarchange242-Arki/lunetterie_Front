@@ -62,7 +62,10 @@ interface Employee {
 
 // Le pipeline suit une monture qui existe déjà et qui franchit des frontières : ni son entrée
 // dans le parc ni ses déplacements internes n'en font partie.
-type MvtStage = 'shipped' | 'received' | 'display' | 'sold'
+//
+// L'ordre est chronologique et sert tel quel de gabarit aux cartes : le client paie à la
+// caisse, la monture part au montage, puis elle est livrée.
+type MvtStage = 'shipped' | 'received' | 'display' | 'caisse' | 'labo' | 'sold'
 
 // Actions de mouvement qui n'appartiennent à aucune étape du pipeline, donc absentes de
 // l'historique. Détaillé au point de filtrage, dans HistoryView.
@@ -97,9 +100,17 @@ function normalizeMovementStage(action?: string, toStationName?: string): MvtSta
   if (normalizedAction === 'EXPEDITION') return 'shipped'
   if (normalizedAction === 'RECEPTION_STATION') return 'received'
   if (normalizedAction === 'PRESENTOIR' || normalizedStation.includes('présentoir') || normalizedStation.includes('presentoir')) return 'display'
+  // MISE_EN_CAISSE et LABORATOIRE sont bien émises par le serveur (enums.go), mais aucune
+  // n'était reconnue ici : la première retombait dans le repli « Réceptionné », la seconde
+  // était happée par la ligne « labo » qui renvoyait 'display'. Les deux étapes existaient
+  // donc dans les données, comptées sous une autre carte.
+  if (normalizedAction === 'MISE_EN_CAISSE') return 'caisse'
+  if (normalizedAction === 'LABORATOIRE' || normalizedAction === 'CONTROLE_QUALITE') return 'labo'
   if (normalizedAction === 'LIVRAISON' || normalizedAction === 'VENTE' || normalizedAction === 'VENDUE') return 'sold'
 
-  if (normalizedStation.includes('laboratoire') || normalizedStation.includes('labo')) return 'display'
+  // Replis par station, quand l'action ne dit rien : la destination trahit l'étape.
+  if (normalizedStation.includes('caisse')) return 'caisse'
+  if (normalizedStation.includes('laboratoire') || normalizedStation.includes('labo')) return 'labo'
   if (normalizedStation.includes('présentoir') || normalizedStation.includes('presentoir')) return 'display'
 
   return 'received'
@@ -914,6 +925,9 @@ const ic = {
   filter: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
   pkg: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
   flask: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6M10 2v6.4a2 2 0 0 1-.4 1.2L4.7 17a2 2 0 0 0 1.6 3.2h11.4a2 2 0 0 0 1.6-3.2l-4.9-7.4a2 2 0 0 1-.4-1.2V2"/></svg>,
+  // Un billet plutôt qu'un tiroir-caisse : à 20 px, le tiroir se confond avec la boîte de
+  // l'étape « Réceptionné ».
+  cash: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>,
 }
 
 // Bloc de base repris de historique.html : --surface, --line, --radius-lg (20px), --shadow-sm.
@@ -923,10 +937,18 @@ const BLOCK_CLASS = 'rounded-[20px] border border-slate-200 bg-white shadow-sm d
 const CARD_ROW_CLASS = '-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-x-visible sm:px-0 sm:pb-0'
 const CARD_CLASS = 'flex w-[62%] flex-shrink-0 snap-start flex-col items-start gap-2.5 rounded-[20px] border p-5 text-left shadow-sm transition-all hover:-translate-y-[3px] hover:shadow-lg sm:w-auto sm:flex-shrink'
 
+/** L'ordre des teintes suit l'ordre des cartes et a été vérifié au validateur de palette
+ *  sur les deux fonds. La pire paire adjacente est vendu/labo à ΔE 7,9 en protanopie :
+ *  dans la bande basse, donc admise seulement parce que chaque carte porte en clair son
+ *  libellé et son icône. Le cyan de la caisse reprend celui du rôle CAISSIER
+ *  (`ROLE_COLOR`) ; l'inverser avec l'ambre du labo mettrait le cyan contre le vert de
+ *  « Vendu », indiscernables même en vision normale (ΔE 11,8). */
 const STAGE_META: Record<MvtStage, { label: string; color: string; bg: string; icon: ReactNode }> = {
   shipped: { label: 'En transit', color: '#2563eb', bg: 'bg-blue-50 dark:bg-blue-900/20', icon: ic.plane() },
   received: { label: 'Réceptionné', color: '#16a34a', bg: 'bg-green-50 dark:bg-green-900/20', icon: ic.box() },
   display: { label: 'Mis en présentoir', color: '#9333ea', bg: 'bg-purple-50 dark:bg-purple-900/20', icon: ic.display() },
+  caisse: { label: 'En caisse', color: '#0891b2', bg: 'bg-cyan-50 dark:bg-cyan-900/20', icon: ic.cash() },
+  labo: { label: 'Au laboratoire', color: '#d97706', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: ic.flask() },
   sold: { label: 'Vendu', color: '#059669', bg: 'bg-emerald-50 dark:bg-emerald-900/20', icon: ic.check() },
 }
 
@@ -2302,7 +2324,7 @@ function HistoryView() {
       .catch(() => setLiveItems([]))
   }, [])
 
-  const pipeline: MvtStage[] = ['shipped', 'received', 'display', 'sold']
+  const pipeline: MvtStage[] = ['shipped', 'received', 'display', 'caisse', 'labo', 'sold']
 
   const stageItems = liveItems.filter(m => m.stage === selectedStage)
   const activeMeta = STAGE_META[selectedStage]
@@ -2317,7 +2339,7 @@ function HistoryView() {
             Suivi Global
           </h2>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            Traçabilité complète des montures : commandes, transits, réceptions, transferts, présentoir, ventes.
+            Traçabilité complète des montures : transits, réceptions, présentoir, caisse, laboratoire, ventes.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

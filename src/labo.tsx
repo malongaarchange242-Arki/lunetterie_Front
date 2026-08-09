@@ -371,6 +371,9 @@ function LaboPage() {
   const [selection, setSelection] = useState<string[]>([])
   const [scanInput, setScanInput] = useState('')
   const [scanError, setScanError] = useState('')
+  // Le scan d'une arrivée fait un aller-retour serveur : sans ce drapeau, l'opérateur
+  // rescanne pendant que la réception est en cours.
+  const [scanBusy, setScanBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   const [flash, setFlash] = useState('')
 
@@ -440,22 +443,62 @@ function LaboPage() {
     setSelection(list => (list.includes(barcode) ? list.filter(b => b !== barcode) : [...list, barcode]))
   }
 
-  /** Ajoute à la sélection la monture dont le code vient d'être scanné. */
-  function scan(value: string) {
+  /** Ajoute à la sélection la monture dont le code vient d'être scanné.
+   *
+   *  Le scan interroge le serveur quand le code est inconnu des listes chargées : une
+   *  monture encaissée ne débarque pas d'elle-même ici, la Caisse l'expédie EN_TRANSIT
+   *  (sales_and_reserves_service.go CreateSale) et c'est la recherche du code-barres
+   *  avec `station_id` qui vaut réception et la fait passer EN_LABORATOIRE
+   *  (display_service.go PlaceOnDisplay). Se contenter des listes déjà chargées
+   *  laisserait ces montures en transit pour toujours. */
+  async function scan(value: string) {
     const code = value.trim().toUpperCase()
     if (!code) return
-    const found = data.aMonter.find(g => g.barcode.toUpperCase() === code || glassRef(g).toUpperCase() === code)
-    if (!found) {
-      // Distinguer les deux échecs : « déjà livrée » et « inconnue au labo » n'appellent
-      // pas la même réaction de l'opérateur.
-      const ailleurs = data.pretes.find(g => g.barcode.toUpperCase() === code || glassRef(g).toUpperCase() === code)
-      setScanError(ailleurs ? `${code} est déjà marquée prête.` : `${code} n'est pas au laboratoire.`)
-      setScanInput('')
+    const matches = (g: Glass) => g.barcode.toUpperCase() === code || glassRef(g).toUpperCase() === code
+
+    setScanInput('')
+
+    // Déjà au labo : rien à demander au serveur.
+    const found = data.aMonter.find(matches)
+    if (found) {
+      setScanError('')
+      if (!selection.includes(found.barcode)) setSelection([...selection, found.barcode])
       return
     }
+    // Distinguer les deux échecs : « déjà livrée » et « inconnue au labo » n'appellent
+    // pas la même réaction de l'opérateur.
+    if (data.pretes.some(matches)) {
+      setScanError(`${code} est déjà marquée prête.`)
+      return
+    }
+    if (!stationId) {
+      setScanError("Aucune station rattachée à ce compte : impossible de réceptionner ici.")
+      return
+    }
+
+    setScanBusy(true)
     setScanError('')
-    setScanInput('')
-    if (!selection.includes(found.barcode)) setSelection([...selection, found.barcode])
+    try {
+      const payload = await apiFetch(`/inventory/glasses/${encodeURIComponent(code)}?station_id=${stationId}`)
+      const glass: Glass | undefined = payload?.data?.glass
+      const status = String(glass?.status || '')
+      if (status !== 'EN_LABORATOIRE') {
+        // Le serveur explique lui-même pourquoi un scan reste sans effet (« en transit
+        // vers un autre poste ») : sa note vaut mieux que notre déduction.
+        const note = String(payload?.data?.placement_note || '')
+        setScanError(note || `${code} est au statut « ${status || 'inconnu'} » : elle n'est pas arrivée au laboratoire.`)
+        return
+      }
+
+      const barcode = glass?.barcode || code
+      await reload()
+      setSelection(list => (list.includes(barcode) ? list : [...list, barcode]))
+      setFlash(`${barcode} réceptionnée au laboratoire.`)
+    } catch (error: any) {
+      setScanError(error?.message || `${code} n'est pas au laboratoire.`)
+    } finally {
+      setScanBusy(false)
+    }
   }
 
   /** La seule écriture du poste : POST /inventory/deliveries pose PRETE_A_LIVRER.
@@ -473,7 +516,7 @@ function LaboPage() {
       setSelection([])
       setFlash(`${n} monture${n > 1 ? 's' : ''} marquée${n > 1 ? 's' : ''} prête${n > 1 ? 's' : ''}.`)
       await reload()
-      setTab('pretes')
+      setTab('prete')
     } catch (e: any) {
       setScanError(e?.message || "Échec de l'enregistrement.")
     } finally {
@@ -663,13 +706,13 @@ function LaboPage() {
                   <div className="flex items-center gap-2.5">
                     <Pastille color={C.primary}>{ic.scan()}</Pastille>
                     <div>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">Scanner une monture terminée</p>
-                      <p className="text-xs text-slate-400">Elle passe en attente, puis validez pour l'envoyer au magasin</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">Scanner une monture</p>
+                      <p className="text-xs text-slate-400">Une arrivée de la Caisse est réceptionnée au scan ; validez ensuite pour l'envoyer au magasin</p>
                     </div>
                   </div>
 
                   <form
-                    onSubmit={e => { e.preventDefault(); scan(scanInput) }}
+                    onSubmit={e => { e.preventDefault(); void scan(scanInput) }}
                     className="mt-4 flex gap-2"
                   >
                     <input
@@ -682,7 +725,7 @@ function LaboPage() {
                         // à la frappe : tous les lecteurs n'émettent pas cet Entrée.
                         const code = value.trim().toUpperCase()
                         if (code && data.aMonter.some(g => g.barcode.toUpperCase() === code || glassRef(g).toUpperCase() === code)) {
-                          scan(value)
+                          void scan(value)
                         }
                       }}
                       placeholder="Code-barres ou référence…"
@@ -691,9 +734,10 @@ function LaboPage() {
                     />
                     <button
                       type="submit"
-                      className="flex-shrink-0 rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2 text-sm font-semibold text-white transition-colors"
+                      disabled={scanBusy}
+                      className="flex-shrink-0 rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-50"
                     >
-                      Ajouter
+                      {scanBusy ? 'Réception…' : 'Ajouter'}
                     </button>
                   </form>
 
@@ -745,7 +789,7 @@ function LaboPage() {
             )}
 
             {/* ── PRÊTES À LIVRER ──────────────────────────────────────────── */}
-            {tab === 'pretes' && (
+            {tab === 'prete' && (
               <div>
                 <div className={`${CARD} p-0 overflow-hidden`}>
                   <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">

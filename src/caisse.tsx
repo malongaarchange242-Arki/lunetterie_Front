@@ -233,12 +233,17 @@ const ic = {
   x: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s} strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>,
 }
 
+/** Mêmes entrées que les onglets de la page : un poste de caisse n'a qu'un seul jeu
+ *  de destinations, deux libellés pour la même vue feraient hésiter. « Inventaire »
+ *  n'a pas de compteur — ce n'est pas une file à écouler. */
 const NAV: { id: Screen; label: string; short: string; icon: (c?: string) => React.ReactElement }[] = [
-  { id: 'attente', label: 'À traiter', short: 'À faire', icon: ic.inbox },
-  { id: 'reglees', label: 'Réglées', short: 'Réglées', icon: ic.checkCircle },
+  { id: 'attente', label: 'À traiter', short: 'À traiter', icon: ic.inbox },
+  { id: 'reglees', label: 'Labo payé', short: 'Labo payé', icon: ic.checkCircle },
   { id: 'reserve', label: 'Réserve', short: 'Réserve', icon: ic.bookmark },
-  { id: 'journee', label: 'Journée', short: 'Journée', icon: ic.chart },
+  { id: 'journee', label: 'Inventaire', short: 'Inventaire', icon: ic.chart },
 ]
+
+type NavCounts = Partial<Record<Screen, number>>
 
 const DEMO_PROFORMAS: Proforma[] = [
   { id: 101, code: 'PRF-001', client_name: 'Jean Dupont', client_phone: '06 12 34 56 78', status: 'EN_ATTENTE', created_at: new Date().toISOString(), total_amount: 73000, items: [{ id: 1001, reference: 'MN-AVA-001', unit_price: 73000 }] },
@@ -824,9 +829,9 @@ function JourneeScreen({ data }: { data: CaisseData }) {
 }
 
 // ── Coquille ───────────────────────────────────────────────────────────────────
-function Sidebar({ current, onNavigate, dark, onToggleDark, user, pending }: {
+function Sidebar({ current, onNavigate, dark, onToggleDark, user, counts }: {
   current: Screen; onNavigate: (s: Screen) => void
-  dark: boolean; onToggleDark: () => void; user: any; pending: number
+  dark: boolean; onToggleDark: () => void; user: any; counts: NavCounts
 }) {
   const name = `${String(user?.first_name || '').trim()} ${String(user?.last_name || '').trim()}`.trim() || 'Caisse'
   const initial = (name[0] || 'C').toUpperCase()
@@ -853,12 +858,10 @@ function Sidebar({ current, onNavigate, dark, onToggleDark, user, pending }: {
             }`}
           >
             <span className="flex-shrink-0">{item.icon('w-4 h-4')}</span>
-            <span className="truncate font-medium">{item.label}</span>
-            {item.id === 'attente' && pending > 0 && (
-              <span className="ml-auto flex-shrink-0 rounded-lg bg-[#d97706] px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">
-                {pending}
-              </span>
-            )}
+            <span className="truncate font-medium">
+              {item.label}
+              {counts[item.id] !== undefined && <span className="tabular-nums"> ({counts[item.id]})</span>}
+            </span>
           </button>
         ))}
       </nav>
@@ -884,8 +887,8 @@ function Sidebar({ current, onNavigate, dark, onToggleDark, user, pending }: {
   )
 }
 
-function MobileNav({ current, onNavigate, pending }: {
-  current: Screen; onNavigate: (s: Screen) => void; pending: number
+function MobileNav({ current, onNavigate, counts }: {
+  current: Screen; onNavigate: (s: Screen) => void; counts: NavCounts
 }) {
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-40">
@@ -894,17 +897,15 @@ function MobileNav({ current, onNavigate, pending }: {
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
-            className={`relative flex-1 flex flex-col items-center py-2.5 gap-1 transition-colors ${
+            className={`flex-1 flex flex-col items-center py-2.5 gap-1 transition-colors ${
               current === item.id ? 'text-blue-600' : 'text-slate-400'
             }`}
           >
             {item.icon('w-5 h-5')}
-            <span className="text-[9px] font-semibold leading-none">{item.short}</span>
-            {item.id === 'attente' && pending > 0 && (
-              <span className="absolute right-1/4 top-1 rounded-lg bg-[#d97706] px-1.5 text-[9px] font-black tabular-nums text-white">
-                {pending}
-              </span>
-            )}
+            <span className="text-[9px] font-semibold leading-none">
+              {item.short}
+              {counts[item.id] !== undefined && <span className="tabular-nums"> ({counts[item.id]})</span>}
+            </span>
           </button>
         ))}
       </div>
@@ -1002,6 +1003,14 @@ function CaissePage() {
   const montantLabo = useMemo(() => laboValidées.reduce((sum, p) => sum + proformaTotal(p), 0), [laboValidées])
   const montantReserve = useMemo(() => reserveValidées.reduce((sum, p) => sum + proformaTotal(p), 0), [reserveValidées])
 
+  // Les mêmes nombres alimentent la navigation et les onglets : un écart entre les deux
+  // se lirait comme deux files différentes.
+  const navCounts: NavCounts = {
+    attente: enAttente.length,
+    reglees: laboValidées.length,
+    reserve: reserveValidées.length,
+  }
+
   function navigate(next: Screen) {
     setOpenId(null)
     setScreen(next)
@@ -1018,7 +1027,7 @@ function CaissePage() {
           dark={dark}
           onToggleDark={() => setDark(d => !d)}
           user={user}
-          pending={enAttente.length}
+          counts={navCounts}
         />
 
         <div className="flex-1 flex flex-col min-w-0">
@@ -1064,9 +1073,9 @@ function CaissePage() {
 
                 <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid #e0e0e0', paddingBottom: '0', overflowX: 'auto', flexWrap: 'wrap' }}>
                   {[
-                    { id: 'attente' as Screen, label: `À traiter (${enAttente.length})`, icon: <BadgeCheck size={16} />, color: screen === 'attente' ? '#FF6B6B' : 'transparent', text: screen === 'attente' ? 'white' : '#666' },
-                    { id: 'reglees' as Screen, label: `Labo payé (${laboValidées.length})`, icon: <CreditCard size={16} />, color: screen === 'reglees' ? '#4CAF50' : 'transparent', text: screen === 'reglees' ? 'white' : '#666' },
-                    { id: 'reserve' as Screen, label: `Réserve (${reserveValidées.length})`, icon: <PackageCheck size={16} />, color: screen === 'reserve' ? '#9C27B0' : 'transparent', text: screen === 'reserve' ? 'white' : '#666' },
+                    { id: 'attente' as Screen, label: `À traiter (${navCounts.attente})`, icon: <BadgeCheck size={16} />, color: screen === 'attente' ? '#FF6B6B' : 'transparent', text: screen === 'attente' ? 'white' : '#666' },
+                    { id: 'reglees' as Screen, label: `Labo payé (${navCounts.reglees})`, icon: <CreditCard size={16} />, color: screen === 'reglees' ? '#4CAF50' : 'transparent', text: screen === 'reglees' ? 'white' : '#666' },
+                    { id: 'reserve' as Screen, label: `Réserve (${navCounts.reserve})`, icon: <PackageCheck size={16} />, color: screen === 'reserve' ? '#9C27B0' : 'transparent', text: screen === 'reserve' ? 'white' : '#666' },
                     { id: 'journee' as Screen, label: 'Inventaire', icon: <CalendarDays size={16} />, color: screen === 'journee' ? '#2196F3' : 'transparent', text: screen === 'journee' ? 'white' : '#666' },
                   ].map(tab => (
                     <button
@@ -1219,7 +1228,7 @@ function CaissePage() {
           </div>
         )}
 
-        <MobileNav current={screen} onNavigate={navigate} pending={enAttente.length} />
+        <MobileNav current={screen} onNavigate={navigate} counts={navCounts} />
       </div>
     </div>
   )

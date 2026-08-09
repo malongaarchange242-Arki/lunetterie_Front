@@ -255,11 +255,14 @@ const TONE = {
 type Tone = keyof typeof TONE
 type TabId = 'tableau' | 'ventes' | 'remise' | 'presentoir' | 'stock'
 
+// Les libellés sont ceux de la maquette. Les identifiants, eux, disent ce que l'onglet
+// fait côté métier — « remise » remet au client, « presentoir » expédie au Présentoir —
+// et servent au code qui envoie les transferts : les renommer brouillerait la lecture.
 const TABS: { id: TabId; label: string; short: string; icon: IconFn }[] = [
   { id: 'tableau', label: 'Tableau de bord', short: 'Bord', icon: ic.home },
   { id: 'ventes', label: 'Ventes', short: 'Ventes', icon: ic.chart },
-  { id: 'remise', label: 'Remise client', short: 'Remise', icon: ic.hand },
-  { id: 'presentoir', label: 'Mise en présentoir', short: 'Présentoir', icon: ic.scan },
+  { id: 'remise', label: 'Réception', short: 'Réception', icon: ic.hand },
+  { id: 'presentoir', label: 'Scanner', short: 'Scanner', icon: ic.scan },
   { id: 'stock', label: 'Stock', short: 'Stock', icon: ic.pkg },
 ]
 
@@ -619,13 +622,21 @@ function Trend({ current, previous, label }: { current: number; previous: number
   )
 }
 
-/** Liste de montures, même gabarit partout : réf, client, une méta, un badge. */
-function GlassRow({ glass, client, meta, badge, tinted }: {
-  glass: Glass; client: string; meta?: string; badge?: ReactNode; tinted?: boolean
+/** Liste de montures, même gabarit partout : réf, client, une méta, un badge.
+ *  `code` remplace la pastille par le CODE128 de la monture, pour les listes qu'on pointe
+ *  à la douchette : l'opérateur voit ce qu'il vise. */
+function GlassRow({ glass, client, meta, badge, tinted, code }: {
+  glass: Glass; client: string; meta?: string; badge?: ReactNode; tinted?: boolean; code?: boolean
 }) {
   return (
     <div className={`flex items-center gap-3 px-4 py-3 transition-colors ${tinted ? 'bg-green-50/60 dark:bg-green-500/5' : ''}`}>
-      <Pastille color={tinted ? C.success : C.primary}>{tinted ? ic.check() : ic.glasses()}</Pastille>
+      {code && glass.barcode ? (
+        <div className={`w-16 h-11 rounded-xl bg-white p-1 flex-shrink-0 border-2 ${tinted ? 'border-green-500' : 'border-amber-400'}`}>
+          <Code128 value={glass.barcode} height={26} showValue={false} />
+        </div>
+      ) : (
+        <Pastille color={tinted ? C.success : C.primary}>{tinted ? ic.check() : ic.glasses()}</Pastille>
+      )}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{glassRef(glass)}</p>
         <p className="text-xs text-slate-400 truncate">{client}</p>
@@ -689,11 +700,16 @@ function ResponsableMagasinPage() {
   const [user, setUser] = useState<any>(null)
   const [ready, setReady] = useState(false)
 
-  // Scans : le marquage reste local, aucun mouvement n'est encore envoyé au serveur.
+  // Scans : le pointage reste local jusqu'à l'envoi. Celui du présentoir se conclut par un
+  // vrai transfert (envoyerAuPresentoir) ; celui de la remise n'a pas d'équivalent en base,
+  // PRETE_A_LIVRER est le dernier statut du cycle.
   const [scannedPresentoir, setScannedPresentoir] = useState<string[]>([])
   const [scanPresentoir, setScanPresentoir] = useState('')
   const [scannedRemise, setScannedRemise] = useState<string[]>([])
   const [scanRemise, setScanRemise] = useState('')
+  // La liste à prendre s'affiche avant le premier scan : le responsable part au meuble en
+  // sachant ce qu'il vient chercher, plutôt que de découvrir chaque monture au douchage.
+  const [presentoirDemarre, setPresentoirDemarre] = useState(false)
 
   // Les deux étapes doivent avoir été franchies : un jeton valide de rôle
   // RESPONSABLE_STATION, et le passage par /magasin.html (qui pose `poste`). Sans le
@@ -730,6 +746,102 @@ function ResponsableMagasinPage() {
   const stationId = user?.station_id ? Number(user.station_id) : null
   const stationName = String(user?.station_name || '')
   const { data, loading, error, reload } = useStoreData(stationId, stationName, ready)
+
+  // Le Présentoir est un poste à part entière en base, pas une zone du magasin : c'est
+  // vers lui que part le transfert. Son id ne se devine pas — presentoir.js:135 le
+  // retrouve par son nom exact dans /auth/stations, on fait pareil.
+  const [presentoirStationId, setPresentoirStationId] = useState<number | null>(null)
+  useEffect(() => {
+    if (!ready) return
+    void (async () => {
+      try {
+        const payload = await apiFetch('/auth/stations')
+        const stations: any[] = payload?.data?.stations || []
+        const presentoir = stations.find(s => String(s.name || '').trim().toLowerCase() === 'présentoir')
+        setPresentoirStationId(presentoir ? Number(presentoir.id) : null)
+      } catch {
+        // Sans la liste, l'envoi se refuse de lui-même avec un message explicite. Inutile
+        // de bloquer le reste de l'écran, qui ne dépend pas de cette station.
+        setPresentoirStationId(null)
+      }
+    })()
+  }, [ready])
+
+  const [envoiBusy, setEnvoiBusy] = useState(false)
+  const [envoiMessage, setEnvoiMessage] = useState('')
+  const [envoiErreur, setEnvoiErreur] = useState(false)
+
+  /** Sort du stock local les montures pointées et les expédie au poste Présentoir.
+   *
+   *  Trois appels, comme confirmTransferToStation() de presentoir.js:1478 : créer le
+   *  transfert, y ajouter chaque monture, puis l'expédier. C'est le seul chemin vers
+   *  EN_PRESENTOIR depuis un magasin — une simple recherche de code-barres n'y suffit
+   *  pas (display_service.go PlaceOnDisplay), et sans ce passage la vendeuse ne voit
+   *  rien à vendre et la proforma ne peut pas pousser les montures en caisse.
+   *
+   *  Rien d'atomique : une monture refusée ne retient pas les autres, elle est nommée
+   *  dans le compte rendu. */
+  async function envoyerAuPresentoir() {
+    if (envoiBusy || scannedPresentoir.length === 0) return
+    if (!stationId) {
+      setEnvoiMessage("Aucune station rattachée à ce compte : impossible d'expédier.")
+      setEnvoiErreur(true)
+      return
+    }
+    if (!presentoirStationId) {
+      setEnvoiMessage('Station « Présentoir » introuvable en base : le transfert ne peut pas être adressé.')
+      setEnvoiErreur(true)
+      return
+    }
+
+    setEnvoiBusy(true)
+    setEnvoiMessage('')
+    setEnvoiErreur(false)
+    const pointees = [...scannedPresentoir]
+    try {
+      const creation = await apiFetch('/inventory/transfers', {
+        method: 'POST',
+        body: JSON.stringify({ from_station_id: stationId, to_station_id: presentoirStationId }),
+      })
+      const transferId = creation?.data?.id
+      if (!transferId) throw new Error("Le serveur n'a pas renvoyé de transfert.")
+
+      const refuses: string[] = []
+      for (const barcode of pointees) {
+        try {
+          await apiFetch(`/inventory/transfers/${transferId}/items`, {
+            method: 'POST',
+            body: JSON.stringify({ barcode }),
+          })
+        } catch {
+          const glass = data.local.find(g => g.barcode === barcode)
+          refuses.push(glass ? glassRef(glass) : barcode)
+        }
+      }
+      // Expédier un transfert vide laisserait une coquille en base sans rien déplacer.
+      if (refuses.length === pointees.length) {
+        throw new Error(`Aucune monture n'a pu être ajoutée au transfert (${refuses.join(', ')}).`)
+      }
+
+      await apiFetch(`/inventory/transfers/${transferId}/dispatch`, { method: 'POST' })
+
+      const envoyees = pointees.length - refuses.length
+      setEnvoiMessage(
+        `${envoyees} monture${envoyees > 1 ? 's' : ''} envoyée${envoyees > 1 ? 's' : ''} au présentoir.`
+        + (refuses.length ? ` Non envoyées : ${refuses.join(', ')}.` : ''),
+      )
+      setEnvoiErreur(refuses.length > 0)
+      setScannedPresentoir([])
+      setScanPresentoir('')
+      setPresentoirDemarre(false)
+      await reload()
+    } catch (error: any) {
+      setEnvoiMessage(error?.message || "Échec de l'envoi au présentoir.")
+      setEnvoiErreur(true)
+    } finally {
+      setEnvoiBusy(false)
+    }
+  }
 
   const clientIndex = useMemo(() => buildClientIndex(data.proformas), [data.proformas])
   const clientOf = (glass: Glass) => {
@@ -830,6 +942,32 @@ function ResponsableMagasinPage() {
   const dateDuJour = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const tabCourant = TABS.find(t => t.id === activeTab)
   const nomAffiche = fullName(user) || 'Responsable'
+
+  // Où en est une monture déjà encaissée : payer n'est pas retirer, elle passe par le
+  // laboratoire avant de revenir. C'est ce que la colonne Statut des ventes donne à lire.
+  const laboBarcodes = useMemo(() => new Set(data.labo.map(g => String(g.barcode || '').toUpperCase())), [data.labo])
+  const pretesBarcodes = useMemo(() => new Set(data.pretes.map(g => String(g.barcode || '').toUpperCase())), [data.pretes])
+
+  const statutVente = (glass: Glass): { text: string; tone: Tone } => {
+    const key = String(glass.barcode || '').toUpperCase()
+    if (metrics.livreesBarcodes.has(key)) return { text: 'Remise', tone: 'green' }
+    if (pretesBarcodes.has(key)) return { text: 'Prête', tone: 'cyan' }
+    if (laboBarcodes.has(key)) return { text: 'Au labo', tone: 'violet' }
+    return { text: 'Payée', tone: 'blue' }
+  }
+
+  /** Une ligne de fiche détail qui met deux périodes face à face. */
+  const comparaison = (label: string, current: number, previous: number): DetailLine => {
+    // Sans point de comparaison, un « +100 % » ne voudrait rien dire.
+    if (!previous) return { name: label, meta: 'Aucun point de comparaison', badge: { text: '—', tone: 'slate' } }
+    const pct = (((current - previous) / previous) * 100).toFixed(1)
+    const sens = current > previous ? 'Hausse' : current < previous ? 'Baisse' : 'Stable'
+    return {
+      name: label,
+      meta: `${sens} — ${fmtFCFA(previous)} sur la période précédente`,
+      badge: { text: `${pct}%`, tone: current > previous ? 'green' : current < previous ? 'red' : 'slate' },
+    }
+  }
 
   const glassRows = (list: Glass[], meta: (g: Glass) => string): DetailRowData[] =>
     list.map((glass, index) => ({
@@ -948,17 +1086,41 @@ function ResponsableMagasinPage() {
         icon: ic.doc,
         table: {
           title: 'Proformas créées aujourd’hui',
-          note: "Soldée se déduit des lignes : is_pending à false sur toutes. Le backend ne porte pas d'issue par ligne.",
+          note: "Soldée : la Caisse a tranché toutes les lignes, en vente ou en retour au présentoir.",
           rows: metrics.proformasToday.map(proforma => ({
+            id: String(proforma.id),
             title: proforma.code || `Proforma ${proforma.id}`,
             subtitle: proforma.client_name || 'Client non renseigné',
             cells: [
               { label: 'Montures', value: (proforma.items || []).length },
               { label: 'Total', value: fmtFCFA(proforma.total_amount) },
             ],
-            badge: <Badge tone={(proforma.items || []).every(i => i.is_pending === false) && (proforma.items || []).length > 0 ? 'green' : 'amber'}>
-              {(proforma.items || []).every(i => i.is_pending === false) && (proforma.items || []).length > 0 ? 'Soldée' : 'En attente'}
+            badge: <Badge tone={metrics.soldeesToday.includes(proforma) ? 'green' : 'amber'}>
+              {metrics.soldeesToday.includes(proforma) ? 'Soldée' : 'En attente'}
             </Badge>,
+          })),
+        },
+      },
+    },
+    {
+      label: 'Proformas soldés',
+      value: metrics.soldeesToday.length,
+      color: C.danger,
+      icon: ic.check,
+      desc: fmtFCFA(metrics.montantSoldeesToday),
+      detail: {
+        icon: ic.check,
+        description: "Proformas du jour dont la Caisse a tranché toutes les lignes, en vente ou en retour au présentoir.",
+        table: {
+          title: 'Proformas soldées aujourd’hui',
+          rows: metrics.soldeesToday.map(proforma => ({
+            id: String(proforma.id),
+            title: proforma.code || `Proforma ${proforma.id}`,
+            subtitle: proforma.client_name || 'Client non renseigné',
+            cells: [
+              { label: 'Montures', value: (proforma.items || []).length },
+              { label: 'Total', value: fmtFCFA(proforma.total_amount) },
+            ],
           })),
         },
       },
@@ -987,9 +1149,10 @@ function ResponsableMagasinPage() {
         icon: ic.pkg,
         table: {
           title: 'Montures en réserve',
-          rows: data.reserved.map(glass => {
+          rows: data.reserved.map((glass, index) => {
             const jours = daysSince(glass.updated_at || glass.created_at)
             return {
+              id: glass.barcode || `${glassRef(glass)}-${index}`,
               title: glassRef(glass),
               subtitle: clientOf(glass),
               cells: [
@@ -1005,6 +1168,40 @@ function ResponsableMagasinPage() {
       },
     },
     {
+      label: 'Carrés : Réserve → Labo',
+      value: metrics.reserveVersLabo.length,
+      color: C.violetDeep,
+      icon: ic.flask,
+      desc: 'Client venu payer après',
+      detail: {
+        icon: ic.flask,
+        description: "Paires retirées de la réserve pour partir au laboratoire : le client est venu payer avant la fin du délai. Relevé sur le journal — un envoi au labo qui suit immédiatement une mise en réserve.",
+        table: {
+          title: 'Sorties de réserve vers le laboratoire',
+          rows: movementRows(metrics.reserveVersLabo, 'En réserve pendant',
+            () => <Badge tone="violet">→ Labo</Badge>),
+        },
+      },
+    },
+    {
+      label: 'Carrés : Réserve → Stock',
+      value: metrics.reserveVersStock.length,
+      color: C.amber,
+      icon: ic.pkg,
+      desc: `Dépassement délai (>${RESERVE_LIMITE_JOURS}j)`,
+      detail: {
+        icon: ic.pkg,
+        description: `Paires revenues au magasin après un passage en réserve : le client ne s'est pas présenté dans les ${RESERVE_LIMITE_JOURS} jours, il perd son option. Relevé sur le journal — un rangement, un retour ou une remise en présentoir qui suit une mise en réserve.`,
+        table: {
+          title: 'Retours de réserve vers le stock',
+          rows: movementRows(metrics.reserveVersStock, 'En réserve pendant',
+            ({ joursReserve }) => <Badge tone={(joursReserve || 0) >= RESERVE_LIMITE_JOURS ? 'red' : 'amber'}>
+              {(joursReserve || 0) >= RESERVE_LIMITE_JOURS ? 'Expirée' : 'Rendue'}
+            </Badge>),
+        },
+      },
+    },
+    {
       label: 'Réserve à échéance',
       value: metrics.reserveProche.length,
       color: C.danger,
@@ -1015,9 +1212,10 @@ function ResponsableMagasinPage() {
         description: `Au-delà de ${RESERVE_LIMITE_JOURS} jours, la paire retourne au stock local et le client perd son option.`,
         table: {
           title: 'Réserves proches de la limite',
-          rows: metrics.reserveProche.map(glass => {
+          rows: metrics.reserveProche.map((glass, index) => {
             const jours = daysSince(glass.updated_at || glass.created_at)
             return {
+              id: glass.barcode || `${glassRef(glass)}-${index}`,
               title: glassRef(glass),
               subtitle: clientOf(glass),
               cells: [
@@ -1044,6 +1242,71 @@ function ResponsableMagasinPage() {
       },
     },
   ]
+
+  // Les quatre répartitions, définies une fois : le tableau de bord et l'onglet Stock
+  // affichent les mêmes cartes, elles ne doivent pas pouvoir diverger.
+  const repartitions: {
+    key: string; title: string; subtitle: string; icon: IconFn; tone: Tone
+    rows: { label: string; count: number }[]; color: string; total: number
+    empty?: string; description: string
+  }[] = [
+    {
+      key: 'formes', title: 'Formes', subtitle: 'Distribution des modèles', icon: ic.glasses, tone: 'blue',
+      rows: metrics.formes, color: C.primary, total: metrics.stockTotal.length,
+      description: 'Répartition des formes sur tout ce que le magasin détient, présentoir, réserve, laboratoire et stock local confondus.',
+    },
+    {
+      key: 'matieres', title: 'Matières', subtitle: 'Composition des montures', icon: ic.pkg, tone: 'cyan',
+      rows: metrics.matieres, color: C.cyan, total: metrics.stockTotal.length,
+      description: 'La matière est saisie à la main à l’enregistrement : les variantes d’orthographe sont regroupées, mais une monture sans matière renseignée ne compte nulle part.',
+    },
+    {
+      key: 'genres', title: 'Genres', subtitle: 'Catégories clients', icon: ic.users, tone: 'amber',
+      rows: metrics.genres, color: C.amber, total: metrics.stockTotal.length,
+      description: 'Répartition homme / femme / unisexe du stock détenu par le magasin.',
+    },
+    {
+      key: 'ventes', title: 'Ventes par monture', subtitle: 'Formes les plus vendues', icon: ic.chart, tone: 'green',
+      rows: metrics.ventesParForme, color: C.success, total: data.sold.length,
+      empty: 'Aucune vente enregistrée.',
+      description: 'Les formes qui se vendent, à rapprocher de la carte Formes : un modèle très stocké et peu vendu immobilise de la trésorerie.',
+    },
+  ]
+
+  const ouvrirRepartition = (carte: typeof repartitions[number]) => setSelectedDetail({
+    title: carte.title,
+    subtitle: carte.subtitle,
+    icon: carte.icon,
+    color: carte.color,
+    stats: [
+      { label: 'Valeurs distinctes', value: carte.rows.length },
+      { label: 'Montures comptées', value: carte.total },
+    ],
+    details: carte.rows.map(row => ({
+      name: row.label,
+      meta: `${carte.total > 0 ? Math.round((row.count / carte.total) * 100) : 0} % du total`,
+      badge: { text: `${row.count} monture${row.count > 1 ? 's' : ''}`, tone: carte.tone },
+    })),
+    description: carte.description,
+  })
+
+  const grilleRepartitions = (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {repartitions.map(carte => (
+        <Repartition
+          key={carte.key}
+          title={carte.title}
+          subtitle={carte.subtitle}
+          icon={carte.icon}
+          rows={carte.rows}
+          color={carte.color}
+          total={carte.total}
+          empty={carte.empty}
+          onClick={() => ouvrirRepartition(carte)}
+        />
+      ))}
+    </div>
+  )
 
   // Rien tant que /auth/me n'a pas répondu : afficher l'écran puis le retirer ferait
   // clignoter des chiffres devant quelqu'un qui n'y a peut-être pas droit.
@@ -1137,7 +1400,28 @@ function ResponsableMagasinPage() {
             {activeTab === 'tableau' && (
               <div>
                 {/* Chiffre d'affaires */}
-                <div className={CARD}>
+                <button
+                  onClick={() => setSelectedDetail({
+                    title: "Chiffre d'affaires",
+                    subtitle: `Analyse complète du ${new Date().toLocaleDateString('fr-FR')}`,
+                    icon: ic.cash,
+                    color: C.primary,
+                    stats: [
+                      { label: "Aujourd'hui", value: fmtFCFA(metrics.caToday) },
+                      { label: 'Hier', value: fmtFCFA(metrics.caYesterday) },
+                      { label: 'Ce mois-ci', value: fmtFCFA(metrics.caMonth) },
+                      { label: 'Cette année', value: fmtFCFA(metrics.caYear) },
+                    ],
+                    details: [
+                      comparaison('Aujourd’hui vs hier', metrics.caToday, metrics.caYesterday),
+                      comparaison('Ce mois-ci vs mois dernier', metrics.caMonth, metrics.caLastMonth),
+                      comparaison('Cette année vs an dernier', metrics.caYear, metrics.caLastYear),
+                      comparaison('Sept derniers jours vs semaine précédente', metrics.caWeek, metrics.caPrevWeek),
+                    ],
+                    description: "Le chiffre d'affaires compte les montures encaissées par la Caisse, pas celles remises au client : les deux dates diffèrent dès que le laboratoire intervient.",
+                  })}
+                  className={CARD_LINK}
+                >
                   <div className="grid gap-5 md:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))]">
                     <div>
                       <div className="flex items-center gap-2.5">
@@ -1148,22 +1432,24 @@ function ResponsableMagasinPage() {
                         {fmt(metrics.caToday)} <span className="text-lg">FCFA</span>
                       </p>
                       <p className="mt-1 text-xs text-slate-400 tabular-nums">
-                        {metrics.soldToday.length} monture{metrics.soldToday.length > 1 ? 's' : ''} remise{metrics.soldToday.length > 1 ? 's' : ''}
+                        {metrics.soldToday.length} monture{metrics.soldToday.length > 1 ? 's' : ''} encaissée{metrics.soldToday.length > 1 ? 's' : ''}
                       </p>
                     </div>
                     {[
-                      { label: 'Hier', value: metrics.caYesterday, compare: null },
-                      { label: 'Ce mois-ci', value: metrics.caMonth, compare: { previous: metrics.caLastMonth, label: 'vs mois dernier' } },
-                      { label: 'Cette année', value: metrics.caYear, compare: { previous: metrics.caLastYear, label: 'vs an dernier' } },
+                      // La colonne « Hier » compare aujourd'hui à hier, pas hier à avant-hier :
+                      // c'est la lecture attendue face au grand chiffre du jour.
+                      { label: 'Hier', value: metrics.caYesterday, current: metrics.caToday, previous: metrics.caYesterday, trend: 'vs hier' },
+                      { label: 'Ce mois-ci', value: metrics.caMonth, current: metrics.caMonth, previous: metrics.caLastMonth, trend: 'vs mois dernier' },
+                      { label: 'Cette année', value: metrics.caYear, current: metrics.caYear, previous: metrics.caLastYear, trend: 'vs an dernier' },
                     ].map(col => (
                       <div key={col.label} className="md:border-l md:border-slate-100 dark:md:border-slate-700 md:pl-5">
                         <p className="text-xs text-slate-400">{col.label}</p>
                         <p className="mt-1 text-sm font-bold tabular-nums text-slate-900 dark:text-white">{fmt(col.value)} FCFA</p>
-                        {col.compare && <Trend current={col.value} previous={col.compare.previous} label={col.compare.label} />}
+                        <Trend current={col.current} previous={col.previous} label={col.trend} />
                       </div>
                     ))}
                   </div>
-                </div>
+                </button>
 
                 {/* Résumé du jour */}
                 <SectionTitle>État du magasin</SectionTitle>
@@ -1194,11 +1480,7 @@ function ResponsableMagasinPage() {
 
                 {/* Répartitions */}
                 <SectionTitle>Composition du stock ({metrics.stockTotal.length} montures)</SectionTitle>
-                <div className="grid gap-3 lg:grid-cols-3">
-                  <Repartition title="Formes" rows={metrics.formes} color={C.primary} total={metrics.stockTotal.length} />
-                  <Repartition title="Matières" rows={metrics.matieres} color={C.cyan} total={metrics.stockTotal.length} />
-                  <Repartition title="Genres" rows={metrics.genres} color={C.amber} total={metrics.stockTotal.length} />
-                </div>
+                {grilleRepartitions}
               </div>
             )}
 
@@ -1208,21 +1490,81 @@ function ResponsableMagasinPage() {
                 <SectionTitle>Sept derniers jours</SectionTitle>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {[
-                    { label: 'Chiffre d’affaires', value: fmt(metrics.caWeek), unit: 'FCFA', color: C.primary, icon: ic.cash },
-                    { label: 'Ticket moyen', value: fmt(metrics.ticketMoyen), unit: 'FCFA', color: C.success, icon: ic.doc },
-                    { label: 'Montures remises', value: String(metrics.soldWeek.length), unit: '', color: C.amber, icon: ic.cart },
+                    {
+                      label: 'Chiffre d’affaires', value: fmt(metrics.caWeek), unit: 'FCFA',
+                      color: C.primary, icon: ic.cash,
+                      current: metrics.caWeek, previous: metrics.caPrevWeek,
+                      detail: {
+                        subtitle: 'Chiffre d’affaires sur sept jours',
+                        stats: [
+                          { label: 'Sept derniers jours', value: fmtFCFA(metrics.caWeek) },
+                          { label: 'Semaine précédente', value: fmtFCFA(metrics.caPrevWeek) },
+                        ],
+                        details: [
+                          comparaison('Semaine sur semaine', metrics.caWeek, metrics.caPrevWeek),
+                          { name: 'Montures encaissées', meta: 'Sur les sept jours', badge: { text: String(metrics.soldWeek.length), tone: 'blue' as Tone } },
+                          { name: 'Dont aujourd’hui', meta: 'Part du jour', badge: { text: fmtFCFA(metrics.caToday), tone: 'green' as Tone } },
+                        ],
+                        description: 'La semaine précédente s’arrête là où celle-ci commence : les deux périodes ne se chevauchent pas.',
+                      },
+                    },
+                    {
+                      label: 'Ticket moyen', value: fmt(metrics.ticketMoyen), unit: 'FCFA',
+                      color: C.success, icon: ic.doc,
+                      current: metrics.ticketMoyen, previous: metrics.ticketMoyenPrev,
+                      detail: {
+                        subtitle: 'Montant moyen par monture encaissée',
+                        stats: [
+                          { label: 'Sept derniers jours', value: fmtFCFA(metrics.ticketMoyen) },
+                          { label: 'Semaine précédente', value: fmtFCFA(metrics.ticketMoyenPrev) },
+                        ],
+                        details: [
+                          comparaison('Semaine sur semaine', metrics.ticketMoyen, metrics.ticketMoyenPrev),
+                          { name: 'Montures encaissées', meta: 'Diviseur du calcul', badge: { text: String(metrics.soldWeek.length), tone: 'blue' as Tone } },
+                        ],
+                        description: 'Moyenne par monture, pas par client : une proforma qui porte deux paires compte deux fois. Les verres et le montage voyagent dans la note de la proforma, ils n’entrent pas dans ce calcul.',
+                      },
+                    },
+                    {
+                      label: 'Montures encaissées', value: String(metrics.soldWeek.length), unit: '',
+                      color: C.amber, icon: ic.cart,
+                      current: metrics.soldWeek.length, previous: metrics.soldPrevWeek.length,
+                      detail: {
+                        subtitle: 'Volume des sept derniers jours',
+                        stats: [
+                          { label: 'Sept derniers jours', value: metrics.soldWeek.length },
+                          { label: 'Semaine précédente', value: metrics.soldPrevWeek.length },
+                        ],
+                        details: [
+                          comparaison('Semaine sur semaine', metrics.soldWeek.length, metrics.soldPrevWeek.length),
+                          { name: 'Encaissées aujourd’hui', meta: 'Part du jour', badge: { text: String(metrics.payeesToday.length), tone: 'blue' as Tone } },
+                          { name: 'Remises aujourd’hui', meta: 'Sorties du magasin', badge: { text: String(metrics.livreesToday.length), tone: 'green' as Tone } },
+                        ],
+                        description: 'Le compte porte sur l’encaissement. Une monture encaissée cette semaine peut n’être remise au client que la semaine suivante, une fois le laboratoire passé.',
+                      },
+                    },
                   ].map(tile => (
-                    <div key={tile.label} className={CARD}>
+                    <button
+                      key={tile.label}
+                      onClick={() => setSelectedDetail({
+                        ...tile.detail,
+                        title: tile.label,
+                        icon: tile.icon,
+                        color: tile.color,
+                      })}
+                      className={CARD_LINK}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-xs text-slate-400">{tile.label}</p>
                           <p className="mt-2 text-3xl font-black tabular-nums" style={{ color: tile.color }}>
                             {tile.value}{tile.unit && <span className="text-lg"> {tile.unit}</span>}
                           </p>
+                          <Trend current={tile.current} previous={tile.previous} label="vs semaine précédente" />
                         </div>
                         <Pastille color={tile.color}>{tile.icon()}</Pastille>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
 
@@ -1253,29 +1595,34 @@ function ResponsableMagasinPage() {
                   {data.sold.length === 0 ? (
                     <p className="text-xs text-slate-400">Aucune vente enregistrée.</p>
                   ) : (
-                    <table className="w-full text-sm min-w-[560px]">
+                    <table className="w-full text-sm min-w-[680px]">
                       <thead>
                         <tr className="border-b border-slate-100 dark:border-slate-700">
                           <th className="text-left py-2 pr-3 text-xs font-semibold text-slate-400">Référence</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Client</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Monture</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Montant</th>
-                          <th className="text-right py-2 pl-3 text-xs font-semibold text-slate-400">Remise le</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Statut</th>
+                          <th className="text-right py-2 pl-3 text-xs font-semibold text-slate-400">Encaissée le</th>
                         </tr>
                       </thead>
                       <tbody>
                         {[...data.sold]
                           .sort((a, b) => soldDay(b).localeCompare(soldDay(a)))
                           .slice(0, 15)
-                          .map(glass => (
-                            <tr key={glass.barcode} className="border-b border-slate-50 dark:border-slate-700/60 last:border-0">
-                              <td className="py-3 pr-3 font-medium text-slate-900 dark:text-white">{glassRef(glass)}</td>
-                              <td className="py-3 px-3 text-slate-400 truncate max-w-[160px]">{clientOf(glass)}</td>
-                              <td className="py-3 px-3 text-slate-400">{[glass.shape, glass.color].filter(Boolean).join(' · ') || '—'}</td>
-                              <td className="py-3 px-3 font-bold tabular-nums" style={{ color: C.primary }}>{fmtFCFA(glass.price)}</td>
-                              <td className="py-3 pl-3 text-right tabular-nums text-slate-400">{fmtDate(glass.sold_at || glass.updated_at)}</td>
-                            </tr>
-                          ))}
+                          .map(glass => {
+                            const statut = statutVente(glass)
+                            return (
+                              <tr key={glass.barcode} className="border-b border-slate-50 dark:border-slate-700/60 last:border-0">
+                                <td className="py-3 pr-3 font-medium text-slate-900 dark:text-white">{glassRef(glass)}</td>
+                                <td className="py-3 px-3 text-slate-400 truncate max-w-[160px]">{clientOf(glass)}</td>
+                                <td className="py-3 px-3 text-slate-400">{[glass.shape, glass.color].filter(Boolean).join(' · ') || '—'}</td>
+                                <td className="py-3 px-3 font-bold tabular-nums" style={{ color: C.primary }}>{fmtFCFA(glass.price)}</td>
+                                <td className="py-3 px-3"><Badge tone={statut.tone}>{statut.text}</Badge></td>
+                                <td className="py-3 pl-3 text-right tabular-nums text-slate-400">{fmtDate(glass.sold_at || glass.updated_at)}</td>
+                              </tr>
+                            )
+                          })}
                       </tbody>
                     </table>
                   )}
@@ -1295,29 +1642,47 @@ function ResponsableMagasinPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4">
-                    <label className="block text-xs font-medium text-slate-400 mb-1" htmlFor="refRemise">
-                      Code-barres ou référence
-                    </label>
-                    <input
-                      id="refRemise"
-                      type="text"
-                      value={scanRemise}
-                      onChange={e => {
-                        const value = e.target.value
-                        setScanRemise(value)
-                        // La douchette envoie le code d'un bloc : on valide dès qu'il correspond,
-                        // sans attendre un Entrée que tous les lecteurs n'émettent pas.
-                        const found = data.pretes.find(g => g.barcode === value.trim() || glassRef(g) === value.trim().toUpperCase())
-                        if (found && !scannedRemise.includes(found.barcode)) {
-                          setScannedRemise([...scannedRemise, found.barcode])
-                          setScanRemise('')
-                        }
-                      }}
-                      placeholder="Scanner ou saisir…"
-                      autoFocus
-                      className={INPUT_CLASS}
-                    />
+                  <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1" htmlFor="refRemise">
+                        Code-barres ou référence
+                      </label>
+                      <input
+                        id="refRemise"
+                        type="text"
+                        value={scanRemise}
+                        onChange={e => {
+                          const value = e.target.value
+                          setScanRemise(value)
+                          // La douchette envoie le code d'un bloc : on valide dès qu'il correspond,
+                          // sans attendre un Entrée que tous les lecteurs n'émettent pas.
+                          const found = data.pretes.find(g => g.barcode === value.trim() || glassRef(g) === value.trim().toUpperCase())
+                          if (found && !scannedRemise.includes(found.barcode)) {
+                            setScannedRemise([...scannedRemise, found.barcode])
+                            setScanRemise('')
+                          }
+                        }}
+                        placeholder="Scanner ou saisir…"
+                        autoFocus
+                        className={INPUT_CLASS}
+                      />
+                      <p className="mt-2 text-xs text-slate-400">
+                        La saisie se valide seule dès qu'elle correspond à une monture prête.
+                      </p>
+                    </div>
+
+                    {/* Le code se redessine à la frappe : il sert de contrôle visuel face à
+                        l'étiquette, et de code à présenter quand la douchette est en panne. */}
+                    <div className="flex flex-col items-center gap-1.5">
+                      <div className="w-full h-[92px] rounded-xl border-2 bg-white p-2 flex items-center justify-center" style={{ borderColor: C.cyan }}>
+                        {scanRemise.trim() ? (
+                          <Code128 value={scanRemise.trim()} height={44} />
+                        ) : (
+                          <span className="text-xs text-slate-400 text-center">En attente<br />d'un scan</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400">CODE128</p>
+                    </div>
                   </div>
 
                   <div className="mt-4 grid grid-cols-3 gap-3">
@@ -1366,6 +1731,7 @@ function ResponsableMagasinPage() {
                             client={clientOf(glass)}
                             meta={glass.barcode}
                             tinted={pointee}
+                            code
                             badge={
                               <Badge tone={pointee ? 'green' : 'amber'}>
                                 {pointee ? ic.check('w-3.5 h-3.5') : ic.clock('w-3.5 h-3.5')}
@@ -1379,81 +1745,30 @@ function ResponsableMagasinPage() {
                   </div>
                 </div>
 
-                {scannedRemise.length > 0 && (
-                  <button
-                    onClick={() => { setScannedRemise([]); setScanRemise('') }}
-                    className="w-full rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200 transition-colors"
-                  >
-                    Réinitialiser le pointage
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* ── MISE EN PRÉSENTOIR ───────────────────────────────────────── */}
-            {activeTab === 'presentoir' && (
-              <div className="space-y-3">
-                <div className={CARD}>
-                  <div className="flex items-center gap-2.5">
-                    <Pastille color={C.primary}>{ic.scan()}</Pastille>
-                    <div>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">Sortie du stock local</p>
-                      <p className="text-xs text-slate-400">Montures à placer en présentoir</p>
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <input
-                      type="text"
-                      placeholder="Code-barres ou référence…"
-                      value={scanPresentoir}
-                      onChange={e => {
-                        const value = e.target.value
-                        setScanPresentoir(value)
-                        const found = data.local.find(g => g.barcode === value.trim() || glassRef(g) === value.trim().toUpperCase())
-                        if (found && !scannedPresentoir.includes(found.barcode)) {
-                          setScannedPresentoir([...scannedPresentoir, found.barcode])
-                          setScanPresentoir('')
-                        }
-                      }}
-                      autoFocus
-                      className={INPUT_CLASS}
-                    />
-                  </div>
-                  <div className="mt-4">
-                    <Bar percent={data.local.length > 0 ? (scannedPresentoir.length / data.local.length) * 100 : 0} color={C.primary} />
-                    <p className="mt-2 text-xs text-slate-400 tabular-nums">
-                      {scannedPresentoir.length} / {data.local.length} pointée(s)
-                    </p>
-                  </div>
-                  <div className="mt-3">
-                    <Note tone="amber">
-                      Le pointage reste sur ce poste : le passage en <strong>EN_PRESENTOIR</strong> n'est pas encore
-                      envoyé au serveur.
-                    </Note>
-                  </div>
-                </div>
-
+                {/* La seconde liste ne redit pas la première : elle donne l'ordre des scans,
+                    le dernier en tête, pour vérifier d'un coup d'œil ce qui vient de passer. */}
                 <div className={`${CARD} p-0 overflow-hidden`}>
                   <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
                     <p className="text-sm font-bold text-slate-900 dark:text-white">
-                      Stock local <span className="tabular-nums text-slate-400">({data.local.length})</span>
+                      Montures pointées <span className="tabular-nums text-slate-400">({scannedRemise.length}/{data.pretes.length})</span>
                     </p>
                   </div>
                   <div className="max-h-[600px] overflow-y-auto divide-y divide-slate-50 dark:divide-slate-700/60">
-                    {loading && data.local.length === 0 ? (
-                      <Empty>Chargement…</Empty>
-                    ) : data.local.length === 0 ? (
-                      <Empty>Le stock local est vide.</Empty>
+                    {scannedRemise.length === 0 ? (
+                      <Empty>Aucune monture pointée pour l'instant.</Empty>
                     ) : (
-                      data.local.map(glass => {
-                        const pointee = scannedPresentoir.includes(glass.barcode)
+                      [...scannedRemise].reverse().map(barcode => {
+                        const glass = data.pretes.find(g => g.barcode === barcode)
+                        if (!glass) return null
                         return (
                           <GlassRow
-                            key={glass.barcode}
+                            key={barcode}
                             glass={glass}
-                            client={[glass.brand, glass.shape, glass.color].filter(Boolean).join(' · ') || glass.barcode}
-                            tinted={pointee}
-                            badge={glass.location_code ? <Badge tone={pointee ? 'green' : 'cyan'}>{glass.location_code}</Badge> : undefined}
+                            client={clientOf(glass)}
+                            meta={barcode}
+                            tinted
+                            code
+                            badge={<Badge tone="green">{ic.check('w-3.5 h-3.5')}Remise</Badge>}
                           />
                         )
                       })
@@ -1461,25 +1776,216 @@ function ResponsableMagasinPage() {
                   </div>
                 </div>
 
-                {scannedPresentoir.length > 0 && (
+                {scannedRemise.length > 0 && (
                   <button
-                    onClick={() => { setScannedPresentoir([]); setScanPresentoir('') }}
-                    className="w-full rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200 transition-colors"
+                    onClick={() => { setScannedRemise([]); setScanRemise('') }}
+                    className={scannedRemise.length === data.pretes.length
+                      ? 'w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90'
+                      : 'w-full rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200 transition-colors'}
+                    style={scannedRemise.length === data.pretes.length ? { background: C.success } : undefined}
                   >
-                    Réinitialiser le pointage
+                    {scannedRemise.length === data.pretes.length
+                      ? 'Remises terminées — nouvelle session'
+                      : 'Réinitialiser le pointage'}
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* ── MISE EN PRÉSENTOIR ───────────────────────────────────────── */}
+            {activeTab === 'presentoir' && (
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
+                <div className="space-y-3">
+                  <div className={CARD}>
+                    <div className="flex items-center gap-2.5">
+                      <Pastille color={C.primary}>{ic.scan()}</Pastille>
+                      <div>
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">Sortie du stock local</p>
+                        <p className="text-xs text-slate-400">Montures à placer en présentoir</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1" htmlFor="refPresentoir">
+                          Code-barres ou référence
+                        </label>
+                        <input
+                          id="refPresentoir"
+                          type="text"
+                          placeholder="Scanner ou saisir…"
+                          value={scanPresentoir}
+                          onChange={e => {
+                            const value = e.target.value
+                            setScanPresentoir(value)
+                            const found = data.local.find(g => g.barcode === value.trim() || glassRef(g) === value.trim().toUpperCase())
+                            if (found && !scannedPresentoir.includes(found.barcode)) {
+                              setScannedPresentoir([...scannedPresentoir, found.barcode])
+                              setScanPresentoir('')
+                            }
+                          }}
+                          autoFocus
+                          className={INPUT_CLASS}
+                        />
+                        <p className="mt-2 text-xs text-slate-400">
+                          La saisie se valide seule dès qu'elle correspond à une monture du stock local.
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className="w-full h-[92px] rounded-xl border-2 bg-white p-2 flex items-center justify-center" style={{ borderColor: C.primary }}>
+                          {scanPresentoir.trim() ? (
+                            <Code128 value={scanPresentoir.trim()} height={44} />
+                          ) : (
+                            <span className="text-xs text-slate-400 text-center">En attente<br />d'un scan</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400">CODE128</p>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <Bar percent={data.local.length > 0 ? (scannedPresentoir.length / data.local.length) * 100 : 0} color={C.primary} />
+                      <p className="mt-2 text-xs text-slate-400 tabular-nums">
+                        {scannedPresentoir.length} / {data.local.length} pointée(s)
+                      </p>
+                    </div>
+                    <div className="mt-3">
+                      {presentoirStationId ? (
+                        <Note tone="blue">
+                          Le pointage reste sur ce poste jusqu'à l'envoi. C'est le bouton
+                          <strong> Envoyer au présentoir </strong> qui expédie les montures et les fait passer
+                          en <strong>EN_PRESENTOIR</strong>.
+                        </Note>
+                      ) : (
+                        <Note tone="amber">
+                          Station « Présentoir » introuvable en base : le pointage reste possible, mais l'envoi
+                          sera refusé faute de destination.
+                        </Note>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={`${CARD} p-0 overflow-hidden`}>
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">
+                        Montures à scanner <span className="tabular-nums text-slate-400">({scannedPresentoir.length}/{data.local.length})</span>
+                      </p>
+                    </div>
+                    <div className="max-h-[600px] overflow-y-auto divide-y divide-slate-50 dark:divide-slate-700/60">
+                      {loading && data.local.length === 0 ? (
+                        <Empty>Chargement…</Empty>
+                      ) : data.local.length === 0 ? (
+                        <Empty>Le stock local est vide.</Empty>
+                      ) : (
+                        data.local.map(glass => {
+                          const pointee = scannedPresentoir.includes(glass.barcode)
+                          return (
+                            <GlassRow
+                              key={glass.barcode}
+                              glass={glass}
+                              client={[glass.brand, glass.shape, glass.color].filter(Boolean).join(' · ') || glass.barcode}
+                              tinted={pointee}
+                              code
+                              badge={
+                                <Badge tone={pointee ? 'green' : glass.location_code ? 'cyan' : 'amber'}>
+                                  {pointee && ic.check('w-3.5 h-3.5')}
+                                  {glass.location_code || (pointee ? 'Pointée' : 'En attente')}
+                                </Badge>
+                              }
+                            />
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Colonne de suivi : le compte et l'ordre des scans, visibles sans quitter
+                    la liste des yeux. */}
+                <div className="space-y-3">
+                  <div className={CARD}>
+                    <p className="text-xs text-slate-400">Pointées</p>
+                    <p
+                      className="mt-1 text-5xl font-black tabular-nums"
+                      style={{ color: scannedPresentoir.length === data.local.length && data.local.length > 0 ? C.success : C.primary }}
+                    >
+                      {scannedPresentoir.length}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400 tabular-nums">
+                      {Math.max(0, data.local.length - scannedPresentoir.length)} restante(s) sur {data.local.length}
+                    </p>
+                    <div className="mt-4">
+                      <Bar
+                        percent={data.local.length > 0 ? (scannedPresentoir.length / data.local.length) * 100 : 0}
+                        color={scannedPresentoir.length === data.local.length && data.local.length > 0 ? C.success : C.primary}
+                      />
+                    </div>
+                  </div>
+
+                  <div className={`${CARD} p-0 overflow-hidden`}>
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">Derniers scans</p>
+                    </div>
+                    <div className="max-h-[400px] overflow-y-auto divide-y divide-slate-50 dark:divide-slate-700/60">
+                      {scannedPresentoir.length === 0 ? (
+                        <Empty>Aucun scan.</Empty>
+                      ) : (
+                        [...scannedPresentoir].reverse().map(barcode => {
+                          const glass = data.local.find(g => g.barcode === barcode)
+                          if (!glass) return null
+                          return (
+                            <div key={barcode} className="flex items-center gap-3 px-4 py-3 bg-green-50/60 dark:bg-green-500/5">
+                              <Pastille color={C.success}>{ic.check()}</Pastille>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{glassRef(glass)}</p>
+                                <p className="text-xs text-slate-400 truncate">{glass.location_code || 'Emplacement non renseigné'}</p>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {envoiMessage && (
+                    <div
+                      className={envoiErreur
+                        ? 'rounded-xl bg-red-50 dark:bg-red-500/15 px-3 py-2.5 text-xs font-medium text-red-700 dark:text-red-300'
+                        : 'rounded-xl bg-green-50 dark:bg-green-500/15 px-3 py-2.5 text-xs font-medium text-green-700 dark:text-green-300'}
+                    >
+                      {envoiMessage}
+                    </div>
+                  )}
+
+                  {scannedPresentoir.length > 0 && (
+                    <div className="space-y-2">
+                      {/* Le pointage n'a de valeur qu'une fois expédié : c'est ce bouton, pas la
+                          fin du comptage, qui fait sortir les montures du stock local. */}
+                      <button
+                        onClick={() => void envoyerAuPresentoir()}
+                        disabled={envoiBusy}
+                        className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        style={{ background: C.success }}
+                      >
+                        {envoiBusy
+                          ? 'Envoi en cours…'
+                          : `Envoyer ${scannedPresentoir.length} monture${scannedPresentoir.length > 1 ? 's' : ''} au présentoir`}
+                      </button>
+                      <button
+                        onClick={() => { setScannedPresentoir([]); setScanPresentoir(''); setPresentoirDemarre(false); setEnvoiMessage('') }}
+                        disabled={envoiBusy}
+                        className="w-full rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50"
+                      >
+                        Réinitialiser le pointage
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
             {/* ── STOCK ────────────────────────────────────────────────────── */}
             {activeTab === 'stock' && (
               <div>
-                <div className="grid gap-3 lg:grid-cols-3">
-                  <Repartition title="Formes" rows={metrics.formes} color={C.primary} total={metrics.stockTotal.length} />
-                  <Repartition title="Matières" rows={metrics.matieres} color={C.cyan} total={metrics.stockTotal.length} />
-                  <Repartition title="Genres" rows={metrics.genres} color={C.amber} total={metrics.stockTotal.length} />
-                </div>
+                {grilleRepartitions}
 
                 {/* Références critiques */}
                 <div className="mt-3">
@@ -1583,8 +2089,81 @@ function ResponsableMagasinPage() {
           </div>
         </nav>
 
+        {/* ── Briefing de mise en présentoir ────────────────────────────────── */}
+        {/* Pas avant que la liste soit chargée : une modale « 0 monture » ne renseigne
+            personne et se referme aussitôt sur des données qui arrivent après. */}
+        {activeTab === 'presentoir' && !presentoirDemarre && !loading && data.local.length > 0 && (
+          <ReceptionBriefing
+            glasses={data.local}
+            onStart={() => setPresentoirDemarre(true)}
+          />
+        )}
+
         {/* ── Modale de détail ──────────────────────────────────────────────── */}
         {selectedDetail && <DetailModal detail={selectedDetail} onClose={() => setSelectedDetail(null)} />}
+      </div>
+    </div>
+  )
+}
+
+// ── Briefing de mise en présentoir ────────────────────────────────────────────
+
+/** La liste de ce qu'il y a à aller chercher, montrée avant le premier scan.
+ *  Elle couvre la navigation : sans croix, on ne pourrait plus quitter l'onglet. Fermer et
+ *  commencer mènent donc au même écran, la croix ne fait qu'éviter de lire la liste. */
+function ReceptionBriefing({ glasses, onStart }: { glasses: Glass[]; onStart: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={onStart}>
+      <div
+        className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3.5 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm border-b border-slate-100 dark:border-slate-700">
+          <Pastille color={C.primary}>{ic.pkg()}</Pastille>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-slate-900 dark:text-white">Réception du jour</p>
+            <p className="text-xs text-slate-400">Montures à prendre du stock local pour le présentoir</p>
+          </div>
+          <button
+            onClick={onStart}
+            className="flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+            aria-label="Fermer"
+          >
+            {ic.x('w-5 h-5')}
+          </button>
+        </div>
+
+        <div className="p-4 space-y-3">
+          <div className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+            <div className="max-h-[340px] overflow-y-auto divide-y divide-slate-50 dark:divide-slate-700/60">
+              {glasses.map(glass => (
+                <div key={glass.barcode} className="flex items-center gap-3 px-3 py-3">
+                  <Pastille color={C.primary}>{ic.glasses()}</Pastille>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{glassRef(glass)}</p>
+                    <p className="text-xs text-slate-400 truncate">
+                      {[glass.brand, glass.shape, glass.color].filter(Boolean).join(' · ') || glass.barcode}
+                    </p>
+                  </div>
+                  {glass.location_code && <Badge tone="cyan">{glass.location_code}</Badge>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Note>
+            <strong>{glasses.length} monture{glasses.length > 1 ? 's' : ''} à scanner.</strong> Chaque monture pointée
+            passe au vert dans la liste, et le compteur suit l'avancement.
+          </Note>
+
+          <button
+            onClick={onStart}
+            className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ background: C.primary }}
+          >
+            Commencer le scan
+          </button>
+        </div>
       </div>
     </div>
   )

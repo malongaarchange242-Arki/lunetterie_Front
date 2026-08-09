@@ -1817,6 +1817,20 @@ function ProformaScreen({ stationId, user, onDone }: {
       const proforma: Proforma = payload?.data?.proforma || payload?.data || {}
       let warning = ''
 
+      // Le serveur crée la proforma même quand les montures n'ont pas pu partir en caisse
+      // (seule une monture EN_PRESENTOIR y part — display_service.go SendToCaisse) et le
+      // dit dans `warning` / `skipped`. Les taire afficherait « envoyée en caisse » sur des
+      // montures restées en rayon, que la Caisse chercherait en vain au comptoir.
+      const skipped: { barcode?: string; reason?: string }[] = Array.isArray(payload?.data?.skipped) ? payload.data.skipped : []
+      if (payload?.data?.warning) {
+        warning = ` ${payload.data.warning}`
+      } else if (skipped.length) {
+        const detail = skipped
+          .map(item => `${item.barcode || '?'} — ${item.reason || 'refusée'}`)
+          .join(' · ')
+        warning = ` ${skipped.length} monture${skipped.length > 1 ? 's' : ''} non envoyée${skipped.length > 1 ? 's' : ''} en caisse : ${detail}.`
+      }
+
       if (destination === 'reserve') {
         // La proforma a déjà déplacé les montures vers la caisse ; la réserve est un
         // second geste. S'il échoue, la proforma existe quand même — on le dit plutôt
@@ -1827,7 +1841,9 @@ function ProformaScreen({ stationId, user, onDone }: {
             body: JSON.stringify({ station_id: stationId ? Number(stationId) : undefined, barcodes }),
           })
         } catch (error: any) {
-          warning = ` Mise en réserve refusée : ${error?.message || 'erreur serveur'}.`
+          // Ajouté, pas substitué : les deux déplacements peuvent échouer l'un après
+          // l'autre, et n'en montrer qu'un cacherait la moitié du problème.
+          warning += ` Mise en réserve refusée : ${error?.message || 'erreur serveur'}.`
         }
       }
 
@@ -1849,9 +1865,12 @@ function ProformaScreen({ stationId, user, onDone }: {
           is_pending: true,
         })),
       })
-      setMessage(
-        `Proforma ${proforma.code || ''} créée pour ${clientName.trim()} — ${destination === 'reserve' ? 'mise en réserve' : 'envoyée en caisse'}.${warning}`,
-      )
+      // Le sort annoncé suit ce qui s'est réellement passé : annoncer « envoyée en caisse »
+      // juste avant la liste des montures qui n'y sont pas parties se contredirait.
+      const acheminement = warning
+        ? 'acheminement incomplet'
+        : destination === 'reserve' ? 'mise en réserve' : 'envoyée en caisse'
+      setMessage(`Proforma ${proforma.code || ''} créée pour ${clientName.trim()} — ${acheminement}.${warning}`)
       setTone(warning ? 'error' : 'success')
       onDone()
     } catch (error: any) {

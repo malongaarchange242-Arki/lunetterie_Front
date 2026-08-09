@@ -1064,10 +1064,20 @@ function SavPage() {
         const me = (await response.json())?.data?.user
         if (!me) throw new Error('session invalide')
         // Le rôle est relu auprès du serveur, jamais cru sur parole depuis localStorage.
-        if (!ALLOWED_ROLES.includes(String(getRoleName(me)))) {
+        const role = String(getRoleName(me))
+        if (!ALLOWED_ROLES.includes(role)) {
           window.location.replace('/magasin.html')
           return
         }
+        // Second verrou, comme sur les autres postes : le passage par /magasin.html, qui
+        // pose `poste`. Sans lui, la vérification se contournerait en tapant l'URL.
+        // SUPER_ADMIN en est dispensé — il entre par la Direction, où rien ne pose `poste`,
+        // et n'aurait sinon aucun moyen d'ouvrir cet écran.
+        if (role !== 'SUPER_ADMIN' && window.localStorage.getItem('poste') !== 'sav') {
+          window.location.replace('/magasin.html')
+          return
+        }
+        window.localStorage.setItem('user', JSON.stringify(me))
         setUser(me)
         setReady(true)
       } catch {
