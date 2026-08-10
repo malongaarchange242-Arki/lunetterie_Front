@@ -7,8 +7,17 @@ import logoUrl from '../logo.jpeg'
 import { cameraUnavailableReason, createScanner, humanCameraError, openCamera, type Scanner } from './barcodeScanner'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
-// Aucun sélecteur de station sur cet écran : on réceptionne toujours au Stock Général.
+// Aucun sélecteur de station sur cet écran : on réceptionne là où le magasinier est
+// rattaché. Ce repli ne sert que si son compte n'a pas de station — l'identifiant 1 est
+// celui du Stock Général sur une base neuve, mais rien ne le garantit après une remise à
+// zéro : c'est `users.station_id` qui fait foi.
 const DEFAULT_STATION_ID = '1'
+
+/** La station du compte connecté, celle où atterrissent les montures qu'il réceptionne. */
+function stationIdOf(user: any) {
+  const id = Number(user?.station_id)
+  return Number.isFinite(id) && id > 0 ? String(id) : DEFAULT_STATION_ID
+}
 
 // ── Session ────────────────────────────────────────────────────────────────────
 function getToken() {
@@ -1399,10 +1408,12 @@ function commandSubtitle(command: ReceptionEntry) {
 }
 
 function ListesScreen({
-  lists, loading, commands, loadingCommands, commandsDenied, joiningCode, activeCode, onResume, onReload, onReturn, hasSession,
+  lists, loading, commands, loadingCommands, commandsDenied, joiningCode, activeCode, stationId, onResume, onReload, onReturn, hasSession,
 }: {
   lists: SendList[]
   loading: boolean
+  /** La station du compte, d'où part la liste réceptionnée. */
+  stationId: string
   commands: ReceptionEntry[]
   loadingCommands: boolean
   commandsDenied: boolean
@@ -1527,7 +1538,7 @@ function ListesScreen({
     try {
       const payload = await apiFetch('/inventory/send-lists/dispatch', {
         method: 'POST',
-        body: JSON.stringify({ id: Number(open.id), from_station_id: Number(DEFAULT_STATION_ID) }),
+        body: JSON.stringify({ id: Number(open.id), from_station_id: Number(stationId) }),
       })
       const result: Dispatch = payload?.data?.dispatch || {}
       setDispatch(result)
@@ -2258,7 +2269,7 @@ function ScanPage() {
     try {
       // Aperçu seulement : l'emplacement n'est pas réservé, celui réellement attribué
       // peut différer si un autre poste le prend entre-temps. Le serveur tranche.
-      const payload = await apiFetch(`/inventory/storage/next-free?station_id=${DEFAULT_STATION_ID}&zone=STOCK`)
+      const payload = await apiFetch(`/inventory/storage/next-free?station_id=${stationIdOf(user)}&zone=STOCK`)
       locationCode = payload.data?.code || '—'
     } catch (error: any) {
       window.alert(`Impossible de trouver un emplacement libre en stock : ${error?.message || 'erreur inconnue'}`)
@@ -2297,7 +2308,7 @@ function ScanPage() {
       const body = new FormData()
       body.append('image', dataURLtoBlob(finalData.photoMonture), 'monture.jpg')
       body.append('branche_image', dataURLtoBlob(finalData.photoBranche), 'branche.jpg')
-      body.append('station_id', DEFAULT_STATION_ID)
+      body.append('station_id', stationIdOf(user))
       body.append('price', String(finalData.prix))
       body.append('reception_command_code', session.code)
       body.append('reference', finalData.reference)
@@ -2773,6 +2784,7 @@ function ScanPage() {
               commandsDenied={commandsDenied}
               joiningCode={joiningCode}
               activeCode={session?.code || ''}
+              stationId={stationIdOf(user)}
               onResume={code => void resumeCommand(code)}
               onReload={() => { void loadLists(); void loadCommands() }}
               onReturn={() => {
