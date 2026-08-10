@@ -84,6 +84,25 @@ async function apiFetch(path: string, init?: RequestInit) {
   return payload
 }
 
+/** Comme apiFetch, mais rend `null` au lieu de déconnecter sur 401/403.
+ *
+ *  Réservé aux appels d'agrément. Le journal des expéditions et la liste des commandes
+ *  appartiennent à la Direction : rien ne garantit que le magasinier y ait droit, et un
+ *  refus doit vider une section, jamais éjecter quelqu'un au milieu d'une réception.
+ *  Une vraie expiration de jeton reste attrapée par les appels obligatoires de l'écran. */
+async function apiFetchOptional(path: string) {
+  try {
+    const response = await fetch(`${API_URL}${path}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+    if (!response.ok) return null
+    const payload = await response.json().catch(() => null)
+    return payload?.success === false ? null : payload
+  } catch {
+    return null
+  }
+}
+
 // ── Format ─────────────────────────────────────────────────────────────────────
 function fmtFCFA(value: unknown) {
   const n = Number(value)
@@ -313,6 +332,20 @@ const LABEL_CSS = `
   .lb .meta { display: flex; justify-content: space-between; width: 100%; font-size: 9px; font-variant-numeric: tabular-nums; }
 `
 
+/** Le gabarit de LABEL_CSS converti en pixels CSS à 96 dpi : 60 mm de large, 4 mm de
+ *  marge, 6 px entre les blocs, 2 mm autour du code-barres. */
+const LABEL_PX = { width: 227, pad: 15, gap: 6, barcodeMargin: 8 }
+
+const LABEL_FONT = {
+  shop: '800 10px Inter, system-ui, sans-serif',
+  marque: '700 13px Inter, system-ui, sans-serif',
+  ref: '10px ui-monospace, monospace',
+  meta: '9px Inter, system-ui, sans-serif',
+}
+
+/** Interlignes : le canvas ne connaît pas line-height, chaque ligne avance à la main. */
+const LABEL_LINE = { shop: 13, marque: 17, ref: 13, meta: 12 }
+
 // ── Code-barres ────────────────────────────────────────────────────────────────
 /** showValue=false : le texte intégré au SVG rétrécit avec les barres et devient
  *  illisible dans une carte étroite. On l'affiche alors séparément en HTML. */
@@ -346,6 +379,161 @@ function BarcodePreview({ value, className = '' }: { value: string; className?: 
   return <svg ref={ref} className={`max-w-full h-auto ${className}`} />
 }
 
+async function downloadDataUrl(dataUrl: string, filename: string) {
+  // Passage par un Blob plutôt que par le data: URL posé directement en href : Safari
+  // ignore l'attribut download sur un href data: et se contente d'ouvrir l'image.
+  const blob = await fetch(dataUrl).then(response => response.blob())
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  // Révocation différée : révoquer dans la foulée annule le téléchargement en cours.
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
+function loadImage(source: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error("Le code-barres n'a pas pu être converti en image."))
+    image.src = source
+  })
+}
+
+/** Découpe un texte trop large, comme le ferait le flux HTML de l'étiquette : un nom
+ *  de marque long doit descendre d'une ligne, pas déborder de l'image. */
+function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  const words = String(text || '').split(/\s+/).filter(Boolean)
+  if (words.length === 0) return ['—']
+
+  const lines: string[] = []
+  let line = words[0]
+  for (const word of words.slice(1)) {
+    const candidate = `${line} ${word}`
+    if (ctx.measureText(candidate).width <= maxWidth) line = candidate
+    else {
+      lines.push(line)
+      line = word
+    }
+  }
+  lines.push(line)
+  return lines
+}
+
+/** Redessine l'étiquette sur un canvas au lieu de photographier le HTML : sans
+ *  bibliothèque tierce, aucun navigateur ne convertit du HTML en image de façon
+ *  fiable — le détour par <foreignObject> rend de travers sur Safari.
+ *
+ *  Le tracé rejoue donc LABEL_CSS à la main : **toute retouche du gabarit imprimé
+ *  doit être reportée ici**, sinon l'image téléchargée et le papier divergent. */
+async function labelToPngDataUrl(data: FinalMonture, barcode: { svg: string; width: number; height: number }) {
+  const contentWidth = LABEL_PX.width - LABEL_PX.pad * 2
+
+  // Mesurer avant de dimensionner le canvas : la hauteur dépend du nombre de lignes,
+  // qui dépend de la police. Un contexte jetable sert de règle.
+  const ruler = document.createElement('canvas').getContext('2d')
+  if (!ruler) throw new Error('Canvas non supporté par ce navigateur.')
+
+  ruler.font = LABEL_FONT.marque
+  const marqueLines = wrapCanvasText(ruler, data.marque || '—', contentWidth)
+  ruler.font = LABEL_FONT.ref
+  const refLines = wrapCanvasText(ruler, data.reference || '—', contentWidth)
+
+  let barcodeImage: HTMLImageElement | null = null
+  let barcodeWidth = 0
+  let barcodeHeight = 0
+  if (barcode.svg && barcode.width > 0 && barcode.height > 0) {
+    // data: plutôt que blob: — une <img> qui charge un blob: SVG déclenche selon les
+    // navigateurs un contrôle d'origine qui échoue, et l'image n'arrive jamais.
+    barcodeImage = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(barcode.svg)}`)
+    const ratio = Math.min(1, contentWidth / barcode.width)
+    barcodeWidth = barcode.width * ratio
+    barcodeHeight = barcode.height * ratio
+  }
+
+  const height = LABEL_PX.pad
+    + LABEL_LINE.shop
+    + LABEL_PX.gap + marqueLines.length * LABEL_LINE.marque
+    + LABEL_PX.gap + refLines.length * LABEL_LINE.ref
+    + (barcodeHeight ? LABEL_PX.gap + LABEL_PX.barcodeMargin * 2 + barcodeHeight : 0)
+    + LABEL_PX.gap + LABEL_LINE.meta
+    + LABEL_PX.pad
+
+  // ×3 : une étiquette de 60 mm rendue à 96 dpi ressort floue dès qu'on la réimprime.
+  const scale = 3
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(LABEL_PX.width * scale)
+  canvas.height = Math.round(height * scale)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas non supporté par ce navigateur.')
+
+  ctx.scale(scale, scale)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, LABEL_PX.width, height)
+  ctx.textBaseline = 'top'
+
+  const center = LABEL_PX.width / 2
+  let y = LABEL_PX.pad
+
+  ctx.textAlign = 'center'
+  ctx.fillStyle = '#000000'
+  ctx.font = LABEL_FONT.shop
+  // letterSpacing manque au contexte 2D des navigateurs anciens : l'affectation passe
+  // par un cast pour qu'ils rendent sans interlettrage plutôt que de casser le tracé.
+  ;(ctx as any).letterSpacing = '0.5px'
+  ctx.fillText('LA LUNETTERIE', center, y)
+  ;(ctx as any).letterSpacing = '0px'
+  y += LABEL_LINE.shop + LABEL_PX.gap
+
+  ctx.font = LABEL_FONT.marque
+  for (const line of marqueLines) {
+    ctx.fillText(line, center, y)
+    y += LABEL_LINE.marque
+  }
+  y += LABEL_PX.gap
+
+  ctx.font = LABEL_FONT.ref
+  ctx.fillStyle = '#333333'
+  for (const line of refLines) {
+    ctx.fillText(line, center, y)
+    y += LABEL_LINE.ref
+  }
+  y += LABEL_PX.gap
+
+  if (barcodeImage) {
+    y += LABEL_PX.barcodeMargin
+    ctx.drawImage(barcodeImage, center - barcodeWidth / 2, y, barcodeWidth, barcodeHeight)
+    y += barcodeHeight + LABEL_PX.barcodeMargin + LABEL_PX.gap
+  }
+
+  ctx.font = LABEL_FONT.meta
+  ctx.fillStyle = '#000000'
+  ctx.textAlign = 'left'
+  ctx.fillText(data.emplacement || '—', LABEL_PX.pad, y)
+  ctx.textAlign = 'right'
+  ctx.fillText(fmtFCFA(data.prix), LABEL_PX.width - LABEL_PX.pad, y)
+
+  return canvas.toDataURL('image/png')
+}
+
+/** Une copie image part sur le disque en même temps que l'impression : la fenêtre
+ *  d'impression ne laisse rien derrière elle, et le magasinier doit pouvoir retrouver
+ *  l'étiquette d'une monture sans la réimprimer.
+ *
+ *  L'échec reste silencieux — une alerte surgirait par-dessus la boîte d'impression
+ *  déjà ouverte, et le papier, lui, est parti. */
+async function downloadMontureLabel(data: FinalMonture, barcode: { svg: string; width: number; height: number }) {
+  try {
+    const dataUrl = await labelToPngDataUrl(data, barcode)
+    await downloadDataUrl(dataUrl, `etiquette-${data.id || 'monture'}.png`)
+  } catch (error) {
+    console.error("Échec du téléchargement de l'étiquette", error)
+  }
+}
+
 /** L'étiquette part dans une fenêtre séparée plutôt qu'en masquant le reste de la
  *  page : le vanilla s'appuyait sur `body > *:not(.print-label)`, impossible ici où
  *  toute l'application vit sous un unique #root. */
@@ -359,16 +547,31 @@ async function printMontureLabel(data: FinalMonture) {
   document.body.appendChild(holder)
 
   let markup = ''
+  // Sérialisé pendant que le SVG est encore attaché, mais converti en image plus tard :
+  // la sérialisation est synchrone et ne retarde pas l'ouverture de la fenêtre, alors
+  // qu'un chargement d'image, lui, ferait passer le clic pour une popup non sollicitée.
+  const barcode = { svg: '', width: 0, height: 0 }
   try {
     await drawBarcode(svg, data.id, true)
     markup = svg.outerHTML
+
+    const clone = svg.cloneNode(true) as SVGSVGElement
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    barcode.svg = new XMLSerializer().serializeToString(clone)
+    barcode.width = Number(svg.getAttribute('width')) || 0
+    barcode.height = Number(svg.getAttribute('height')) || 0
   } finally {
     holder.remove()
   }
 
   const popup = window.open('', '_blank', 'width=420,height=560')
+
+  // Téléchargée dans tous les cas, impression bloquée comprise : c'est justement quand
+  // rien ne sort de l'imprimante que la copie image sert le plus.
+  void downloadMontureLabel(data, barcode)
+
   if (!popup) {
-    window.alert("L'impression a été bloquée par le navigateur. Autorisez les fenêtres surgissantes pour imprimer l'étiquette.")
+    window.alert("L'impression a été bloquée par le navigateur. L'étiquette part quand même en image dans vos téléchargements ; autorisez les fenêtres surgissantes pour l'imprimer.")
     return
   }
   const esc = (v: string) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -418,6 +621,83 @@ interface ReceptionSession {
   registered: number
   target: number
   status: string
+}
+
+/** Une ligne de « Commandes à réceptionner ».
+ *
+ *  Le corps vient de l'expédition (`/inventory/expeditions`, ouvert à tout compte) : numéro,
+ *  date, pays, quantité commandée. C'est ce qui s'affiche dès que la Direction a envoyé la
+ *  commande, grisé, avant tout scan.
+ *
+ *  Les champs de session — code, quota, avancement — n'arrivent qu'une fois l'étiquette
+ *  scannée sur ce poste. Tant qu'ils manquent, la ligne n'est pas reprenable. */
+interface ReceptionEntry {
+  key: string
+  orderId: number
+  orderDate?: string
+  supplier?: string
+  note?: string
+  quantity: number
+  code?: string
+  targetCount?: number
+  registeredCount?: number
+  status?: string
+  /** Cette session a été scannée par ce compte. Connaître son code ne suffit pas : c'est
+   *  le scan de l'étiquette qui ouvre une réception, et lui seul débloque la reprise. */
+  scanned?: boolean
+}
+
+/** Les codes de session scannés sur ce poste.
+ *
+ *  `GET /inventory/reception-commands` est réservé à la direction
+ *  (backend/cmd/api/main.go:454) : impossible de demander au serveur « lesquelles ai-je
+ *  ouvertes ». On retient donc les codes ici, et chacun se relit ensuite un par un sur
+ *  `/reception-commands/:code`, qui lui est ouvert à tout compte authentifié.
+ *
+ *  C'est ce qui permet de quitter la page et d'y revenir sans rescanner. La contrepartie :
+ *  la mémoire est celle du navigateur, pas celle du compte — changer de poste ou vider le
+ *  cache oblige à rescanner l'étiquette, ce qui reste le geste normal. */
+/** Au-delà, ce sont de vieilles réceptions : autant de requêtes inutiles au chargement. */
+const SCANNED_CODES_MAX = 20
+
+/** La clé est celle du compte, pas du poste : deux magasiniers se relaient souvent sur la
+ *  même tablette, et chacun ne doit retrouver que les sessions qu'il a lui-même scannées.
+ *
+ *  L'identité se relit dans localStorage plutôt que dans l'état React : la garde y écrit le
+ *  compte avant tout, et les fonctions ci-dessous sont appelées depuis des callbacks
+ *  mémoïsés qui, eux, garderaient l'utilisateur du premier rendu — c'est-à-dire aucun. */
+function scannedCodesKey() {
+  try {
+    const raw = window.localStorage.getItem('user')
+    const id = raw ? JSON.parse(raw)?.id : null
+    return id ? `scan.sessions.${id}` : 'scan.sessions.anon'
+  } catch {
+    return 'scan.sessions.anon'
+  }
+}
+
+function loadScannedCodes(): string[] {
+  try {
+    const raw = window.localStorage.getItem(scannedCodesKey())
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed.filter((code): code is string => typeof code === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function saveScannedCodes(codes: string[]) {
+  try {
+    window.localStorage.setItem(scannedCodesKey(), JSON.stringify(codes.slice(0, SCANNED_CODES_MAX)))
+  } catch {
+    // Stockage indisponible (navigation privée) : on perd la reprise, pas la réception.
+  }
+}
+
+function rememberScannedCode(code: string) {
+  const clean = String(code || '').trim().toUpperCase()
+  if (!clean) return
+  saveScannedCodes([clean, ...loadScannedCodes().filter(item => item !== clean)])
 }
 
 interface Movement {
@@ -1106,9 +1386,30 @@ function dispatchMessage(dispatch: Dispatch) {
 
 const LISTE_PAGE_SIZE = 10
 
-function ListesScreen({ lists, loading, onReload, onReturn, hasSession }: {
+/** « Pays: Dubai » quand la Direction n'a pas rempli de note : le fournisseur porte le
+ *  pays d'origine. Même repli que formatReceptionNote() de src/App.tsx:999, pour que les
+ *  deux écrans nomment une commande pareil. */
+function commandSubtitle(command: ReceptionEntry) {
+  const parts = String(command.note || '')
+    .split('|')
+    .map(part => part.trim())
+    .filter(Boolean)
+  if (parts.length > 0) return Array.from(new Set(parts)).join(' | ')
+  return command.supplier ? `Pays: ${command.supplier}` : 'Origine non renseignée'
+}
+
+function ListesScreen({
+  lists, loading, commands, loadingCommands, commandsDenied, joiningCode, activeCode, onResume, onReload, onReturn, hasSession,
+}: {
   lists: SendList[]
   loading: boolean
+  commands: ReceptionEntry[]
+  loadingCommands: boolean
+  commandsDenied: boolean
+  joiningCode: string
+  /** Le code de la session ouverte, s'il y en a une : sa carte se distingue des autres. */
+  activeCode: string
+  onResume: (code: string) => void
   onReload: () => void
   onReturn: () => void
   hasSession: boolean
@@ -1400,8 +1701,119 @@ function ListesScreen({ lists, loading, onReload, onReturn, hasSession }: {
         <p className="text-sm text-slate-400">
           {loading ? 'Chargement…' : `${lists.length} liste${lists.length > 1 ? 's' : ''} reçue${lists.length > 1 ? 's' : ''}`}
         </p>
-        <Btn onClick={onReload} disabled={loading}>{ic.refresh()} Actualiser</Btn>
+        <Btn onClick={onReload} disabled={loading || loadingCommands}>{ic.refresh()} Actualiser</Btn>
       </div>
+
+      {/* ── Commandes préparées par la Direction ──────────────────────────────── */}
+      <div className={CARD}>
+        <CardHead
+          icon={ic.tag()}
+          title="Commandes à réceptionner"
+          pill={commands.length > 0 ? <Pill tone="blue">{commands.length}</Pill> : undefined}
+        />
+        <div className="p-4">
+          {loadingCommands ? (
+            <p className="text-sm text-slate-400">Chargement des commandes…</p>
+          ) : commandsDenied && commands.length === 0 ? (
+            // Le refus ne se dit que s'il ne reste rien à montrer : une source sur deux
+            // suffit à remplir la liste, et masquer des cartes réelles serait pire.
+            <p className="text-sm text-slate-400">
+              Les commandes ne sont pas consultables depuis ce compte. Scannez l'étiquette de session
+              pour rejoindre une réception.
+            </p>
+          ) : commands.length === 0 ? (
+            <p className="text-sm text-slate-400">Aucune commande en attente de réception.</p>
+          ) : (
+            <>
+              <p className="mb-3 text-xs text-slate-400">
+                « Rejoindre la session » ouvre l'enregistrement sur cette commande, depuis
+                n'importe quel poste et sans rescanner l'étiquette. Le scan reste possible et
+                mène au même endroit.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+              {[...commands]
+                .sort((a, b) => String(b.orderDate || '').localeCompare(String(a.orderDate || '')))
+                .map(command => {
+                  // Une session connue du serveur se rejoint d'un clic, scannée ici ou non :
+                  // c'est tout l'intérêt d'avoir ouvert la liste au magasinier, il retrouve
+                  // ses réceptions depuis n'importe quel poste. Le scan de l'étiquette reste
+                  // l'autre chemin, pas un péage.
+                  const connue = Boolean(command.code)
+                  const scannee = Boolean(command.scanned)
+                  const cible = command.targetCount ?? command.quantity
+                  const faits = command.registeredCount ?? 0
+                  const restant = Math.max(0, cible - faits)
+                  const ouverte = !connue || command.status === 'active'
+                  const enCours = connue && joiningCode === command.code
+                  const estActive = Boolean(activeCode) && activeCode === command.code
+                  const reprenable = connue && ouverte && restant > 0
+
+                  return (
+                    <div
+                      key={command.key}
+                      className={`rounded-xl border p-4 transition-opacity ${estActive
+                        ? 'border-[#16a34a] ring-1 ring-[#16a34a]'
+                        : 'border-slate-200 dark:border-slate-700'} ${reprenable ? '' : 'opacity-60'}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+                          {command.orderId ? `EXP-${command.orderId}` : command.code}
+                        </p>
+                        {/* « Enregistré » est le mot de la Direction sur la même commande :
+                            tant que personne n'a rien scanné, on n'en sait pas plus qu'elle. */}
+                        <Pill tone={estActive ? 'green' : !ouverte ? 'slate' : (scannee || faits > 0) ? 'blue' : 'slate'}>
+                          {estActive ? 'Session ouverte'
+                            : !ouverte ? 'Clôturée'
+                              : (scannee || faits > 0) ? 'En cours' : 'Enregistré'}
+                        </Pill>
+                      </div>
+
+                      <p className="mt-1 text-xs text-slate-400">
+                        {dayLabel(command.orderDate)}
+                        {formatRecordTime(command.orderDate) !== '—' && ` à ${formatRecordTime(command.orderDate)}`}
+                      </p>
+                      <p className="truncate text-xs text-slate-400">{commandSubtitle(command)}</p>
+
+                      <div className="mt-3 flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-2xl font-black tabular-nums text-[#2563eb]">
+                            {connue ? faits : '—'}<span className="text-sm text-slate-400">/{cible}</span>
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {!connue
+                              ? `${cible} monture${cible > 1 ? 's' : ''} à scanner`
+                              : restant > 0 ? `${restant} restante${restant > 1 ? 's' : ''}` : 'quota atteint'}
+                          </p>
+                        </div>
+                        {/* Pas de bouton là où il n'y a rien à rejoindre — session close,
+                            quota atteint, ou commande dont la Direction n'a pas encore ouvert
+                            la session. Un bouton inerte ferait espérer une action. */}
+                        {reprenable ? (
+                          <Btn
+                            variant={estActive ? 'success' : 'primary'}
+                            disabled={Boolean(joiningCode)}
+                            onClick={() => command.code && onResume(command.code)}
+                          >
+                            {enCours ? 'Ouverture…' : 'Rejoindre la session'}
+                          </Btn>
+                        ) : (
+                          <span className="pb-1 text-xs font-semibold text-slate-400">
+                            {!connue ? 'Session non ouverte'
+                              : !ouverte ? 'Session clôturée'
+                                : 'Quota atteint'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <p className="pt-1 text-xs font-semibold uppercase tracking-widest text-slate-400">Listes reçues</p>
 
       {lists.length === 0 && !loading ? (
         <div className={`${CARD} flex flex-col items-center gap-2 p-8 text-center`}>
@@ -1625,6 +2037,12 @@ function ScanPage() {
   const [movements, setMovements] = useState<Movement[]>([])
   const [lists, setLists] = useState<SendList[]>([])
   const [loadingLists, setLoadingLists] = useState(false)
+  const [commands, setCommands] = useState<ReceptionEntry[]>([])
+  const [loadingCommands, setLoadingCommands] = useState(false)
+  // Si les expéditions sont refusées, on le dit plutôt que d'afficher un « aucune
+  // commande » qui ferait croire à un entrepôt vide.
+  const [commandsDenied, setCommandsDenied] = useState(false)
+  const [joiningCode, setJoiningCode] = useState('')
 
   // Assistant
   const [step, setStep] = useState<1 | 2 | 3>(1)
@@ -1963,6 +2381,10 @@ function ScanPage() {
         target: Number(command.target_count || 0),
         status: String(command.status),
       }
+      // Ce scan est la seule trace qu'on gardera de la session : l'état React ne survit pas
+      // au rechargement, et le serveur refuse de lister ses commandes au magasinier. Sans
+      // cette ligne, revenir sur la page obligerait à rescanner l'étiquette.
+      rememberScannedCode(active.code)
       setSession(active)
       setActivationError(false)
       setActivationStatus(`Session activée : ${active.target - active.registered} monture(s) restante(s).`)
@@ -2039,6 +2461,101 @@ function ScanPage() {
     }
   }, [])
 
+  /** Les commandes que la Direction a préparées, et l'avancement de celles déjà scannées.
+   *
+   *  Deux sources, parce que le magasinier n'a pas les mêmes droits sur les deux :
+   *  `/inventory/expeditions` est ouvert à tout compte et donne la commande telle que la
+   *  Direction l'a envoyée ; la session, elle, ne se relit que code par code, ceux qu'on a
+   *  retenus au scan. Croiser les deux sur `supplier_order_id` rattache l'avancement à sa
+   *  commande. */
+  const loadCommands = useCallback(async () => {
+    setLoadingCommands(true)
+    try {
+      const codes = loadScannedCodes()
+      const scannedSet = new Set(codes)
+
+      const [ordersPayload, listPayload] = await Promise.all([
+        apiFetchOptional('/inventory/expeditions'),
+        apiFetchOptional('/inventory/reception-commands'),
+      ])
+
+      // Les sessions ouvertes, indexées par la commande qu'elles servent.
+      const parCommande = new Map<number, any>()
+      const orphelines: any[] = []
+      const retenir = (command: any) => {
+        if (!command?.code || command.status !== 'active') return
+        const orderId = Number(command.supplier_order_id || 0)
+        if (orderId > 0) parCommande.set(orderId, command)
+        else orphelines.push(command)
+      }
+
+      if (listPayload) {
+        for (const command of listPayload.data?.commands || []) retenir(command)
+        // Les codes retenus localement dont la session est close n'ont plus rien à dire.
+        const vivants = codes.filter(code =>
+          (listPayload.data?.commands || []).some((c: any) => c.code === code && c.status === 'active'))
+        if (vivants.length !== codes.length) saveScannedCodes(vivants)
+      } else {
+        // Serveur pas encore redéployé, ou compte sans droit de lecture : on retombe sur le
+        // seul chemin qui reste ouvert, code par code, pour ce que ce poste a scanné.
+        const payloads = await Promise.all(
+          codes.map(code => apiFetchOptional(`/inventory/reception-commands/${encodeURIComponent(code)}`)),
+        )
+        const vivants: string[] = []
+        payloads.forEach((payload, index) => {
+          const command = payload?.data?.command || payload?.data
+          if (!command?.code || command.status !== 'active') return
+          vivants.push(codes[index])
+          retenir(command)
+        })
+        if (vivants.length !== codes.length) saveScannedCodes(vivants)
+      }
+
+      const orders = ordersPayload?.data?.orders || []
+      // Les expéditions sont refusées : sans elles il reste les sessions scannées, mais on
+      // ne peut plus annoncer les commandes que la Direction vient d'envoyer.
+      setCommandsDenied(!ordersPayload)
+
+      const entries: ReceptionEntry[] = orders.map((order: any): ReceptionEntry => {
+        const orderId = Number(order.id || 0)
+        const command = parCommande.get(orderId)
+        return {
+          key: `EXP-${orderId}`,
+          orderId,
+          orderDate: order.order_date || undefined,
+          supplier: order.supplier || undefined,
+          note: order.note || undefined,
+          quantity: Number(order.quantity || 0),
+          code: command?.code ? String(command.code) : undefined,
+          targetCount: command ? Number(command.target_count || 0) : undefined,
+          registeredCount: command ? Number(command.registered_count || 0) : undefined,
+          status: command ? String(command.status || '') : undefined,
+          scanned: Boolean(command?.code) && scannedSet.has(String(command.code)),
+        }
+      })
+
+      // Une session sans expédition rattachée garde sa ligne : elle est ouverte, donc
+      // reprenable, et la perdre bloquerait une réception en cours.
+      for (const command of orphelines) {
+        entries.push({
+          key: String(command.code),
+          orderId: 0,
+          orderDate: command.created_at || undefined,
+          quantity: Number(command.target_count || 0),
+          code: String(command.code),
+          targetCount: Number(command.target_count || 0),
+          registeredCount: Number(command.registered_count || 0),
+          status: String(command.status || ''),
+          scanned: scannedSet.has(String(command.code)),
+        })
+      }
+
+      setCommands(entries)
+    } finally {
+      setLoadingCommands(false)
+    }
+  }, [])
+
   // ── Garde ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!getToken()) {
@@ -2060,11 +2577,12 @@ function ScanPage() {
         setScreen('activation')
         void loadMovements(account.id)
         void loadLists()
+        void loadCommands()
       } catch {
         logoutToLogin()
       }
     })()
-  }, [loadMovements, loadLists])
+  }, [loadMovements, loadLists, loadCommands])
 
   // ── Réinitialisation ─────────────────────────────────────────────────────────
   function resetAll(skipConfirm = false) {
@@ -2106,6 +2624,76 @@ function ScanPage() {
     if (!cameraOn) void startCamera()
   }
 
+  /** « Continuer l'enregistrement » depuis la liste des commandes.
+   *
+   *  Ce n'est pas une activation. Une session s'ouvre en scannant son étiquette, comme
+   *  toujours — c'est ce scan qui coche « Reçu » côté Direction, et lui seul. Ce bouton ne
+   *  fait que reprendre une session déjà scannée.
+   *
+   *  Il existe parce que la session ouverte ne vit que dans l'état React : quitter la page
+   *  ou la recharger la perdait, et il fallait rescanner l'étiquette pour reprendre une
+   *  réception entamée. Le serveur, lui, garde `activated_at` sur la commande : c'est là
+   *  qu'on relit ce qui a déjà été activé. */
+  async function resumeCommand(code: string) {
+    if (joiningCode) return
+
+    // Déjà sur cette commande : rien à relire, on rouvre l'assistant.
+    if (session?.code === code) {
+      enterSession()
+      return
+    }
+
+    // Reprendre une autre commande referme celle en cours sur ce poste : compteur, quota et
+    // écran d'enregistrement basculent d'un coup. Personne ne doit perdre une réception
+    // entamée sur un clic mal placé.
+    if (session) {
+      const restant = Math.max(0, session.target - session.registered)
+      const confirme = window.confirm(
+        `La session ${session.code} est ouverte (${restant} monture(s) restante(s)).\n\n`
+        + 'Reprendre cette commande la fermera sur ce poste. Continuer ?',
+      )
+      if (!confirme) return
+    }
+
+    setJoiningCode(code)
+    try {
+      // On relit la commande plutôt que de se fier à la liste : les compteurs ont pu bouger
+      // depuis son chargement, et reprendre une session pleine échouerait au premier scan.
+      const payload = await apiFetch(`/inventory/reception-commands/${encodeURIComponent(code)}`)
+      const command = payload.data?.command || payload.data
+
+      if (!command || command.status !== 'active') {
+        setActivationStatus('Cette session est fermée. Scannez une nouvelle étiquette.')
+        setActivationError(true)
+        setScreen('activation')
+        return
+      }
+      if (Number(command.registered_count || 0) >= Number(command.target_count || 0)) {
+        setActivationStatus('Cette session a déjà atteint son nombre de montures.')
+        setActivationError(true)
+        setScreen('activation')
+        return
+      }
+
+      setSession({
+        code: String(command.code),
+        registered: Number(command.registered_count || 0),
+        target: Number(command.target_count || 0),
+        status: String(command.status),
+      })
+      setActivationError(false)
+      setActivationStatus('')
+      enterSession()
+    } catch (error) {
+      console.error('Reprise de session impossible', error)
+      setActivationStatus('Impossible de reprendre cette session pour le moment.')
+      setActivationError(true)
+      setScreen('activation')
+    } finally {
+      setJoiningCode('')
+    }
+  }
+
   /** Navigation de la barre latérale. Quitter l'assistant démonte la carte de capture,
    *  donc le <video> : sans arrêt explicite, la piste caméra resterait ouverte et la
    *  diode du téléphone allumée sur un écran qui ne filme plus. `enterSession` la
@@ -2117,6 +2705,10 @@ function ScanPage() {
       enterSession()
       return
     }
+    // Les compteurs de réception bougent à chaque monture enregistrée, ici comme sur les
+    // autres postes : la liste se relit à l'ouverture plutôt qu'au seul chargement de la
+    // page, sinon elle affiche l'avancement d'il y a une heure.
+    if (next === 'listes') void loadCommands()
     setScreen(next)
   }
 
@@ -2176,7 +2768,13 @@ function ScanPage() {
             <ListesScreen
               lists={lists}
               loading={loadingLists}
-              onReload={() => void loadLists()}
+              commands={commands}
+              loadingCommands={loadingCommands}
+              commandsDenied={commandsDenied}
+              joiningCode={joiningCode}
+              activeCode={session?.code || ''}
+              onResume={code => void resumeCommand(code)}
+              onReload={() => { void loadLists(); void loadCommands() }}
               onReturn={() => {
                 setActivationError(false)
                 setActivationStatus('La session est terminée. Scannez une nouvelle étiquette pour continuer.')
