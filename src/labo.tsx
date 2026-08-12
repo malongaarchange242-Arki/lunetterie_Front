@@ -5,6 +5,7 @@ import './index.css'
 // serait pas copié dans dist/ au build.
 import logoUrl from '../logo.jpeg'
 import type { ReactElement, ReactNode } from 'react'
+import { GlassTable } from './GlassTable'
 
 // Écran du poste Laboratoire (rôle LABORATOIRE).
 //
@@ -84,10 +85,12 @@ interface Glass {
   shape?: string
   color?: string
   material?: string
+  gender?: string
   price?: number | string
   status?: string
   station_id?: number
   location_code?: string
+  photo_monture_url?: string
   created_at?: string
   updated_at?: string
 }
@@ -130,7 +133,10 @@ function glassRef(glass: Glass) {
   return glass.reference || glass.barcode || '—'
 }
 
-function glassModel(glass: Glass) {
+/** Le repli sur le code-barres est propre à cet écran : les listes du labo montrent une
+ *  ligne par monture sans colonne code, il faut bien l'identifier quand ses attributs
+ *  manquent. Le tableau partagé, lui, a sa propre colonne et rend « — ». */
+function glassModelOrBarcode(glass: Glass) {
   return [glass.brand, glass.shape, glass.color].filter(Boolean).join(' · ') || glass.barcode
 }
 
@@ -196,12 +202,14 @@ const RETARD_JOURS = 7
 // ── Chargement ────────────────────────────────────────────────────────────────
 
 interface LaboData {
+  /** Expédiées vers le labo, pas encore scannées : EN_TRANSIT. */
+  enRoute: Glass[]
   aMonter: Glass[]
   pretes: Glass[]
   proformas: Proforma[]
 }
 
-const EMPTY_DATA: LaboData = { aMonter: [], pretes: [], proformas: [] }
+const EMPTY_DATA: LaboData = { enRoute: [], aMonter: [], pretes: [], proformas: [] }
 
 function useLaboData(stationId: number | null, enabled: boolean) {
   const [data, setData] = useState<LaboData>(EMPTY_DATA)
@@ -220,14 +228,32 @@ function useLaboData(stationId: number | null, enabled: boolean) {
       apiFetch(`/inventory/glasses?${scope}status=EN_LABORATOIRE`),
       apiFetch(`/inventory/glasses?${scope}status=PRETE_A_LIVRER`),
       apiFetch('/inventory/proformas'),
+      // Les montures encore en route. Deux appels sont nécessaires, et aucun ne suffit
+      // seul : une monture EN_TRANSIT garde la station d'où elle part — filtrer sur celle
+      // du labo n'en ramènerait aucune — et le mouvement d'expédition, lui, sait où elle
+      // va mais pas si elle est déjà arrivée. On croise donc les deux.
+      apiFetch('/inventory/glasses?status=EN_TRANSIT'),
+      stationId
+        ? apiFetch(`/inventory/movements?to_station_id=${stationId}&action=EXPEDITION&limit=300`)
+        : Promise.resolve({}),
     ])
 
-    const [monterR, pretesR, proformasR] = results
+    const [monterR, pretesR, proformasR, transitR, expeditionsR] = results
     const glasses = (r: PromiseSettledResult<any>): Glass[] => {
       const list: Glass[] = r.status === 'fulfilled' ? (r.value?.data?.glasses || []) : []
       if (!stationId) return list
       return list.filter(g => g.station_id == null || Number(g.station_id) === stationId)
     }
+
+    // Sans le filtre par station : une monture en transit porte encore celle de son
+    // expéditeur, `glasses()` la jetterait.
+    const enTransit: Glass[] = transitR.status === 'fulfilled' ? (transitR.value?.data?.glasses || []) : []
+    const versLabo = new Set<string>(
+      (expeditionsR.status === 'fulfilled' ? (expeditionsR.value?.data?.movements || []) : [])
+        .map((movement: any) => String(movement?.barcode || ''))
+        .filter(Boolean),
+    )
+    const enRoute = enTransit.filter(glass => versLabo.has(glass.barcode))
 
     const listees: Proforma[] = proformasR.status === 'fulfilled' ? (proformasR.value?.data?.proformas || []) : []
 
@@ -243,7 +269,7 @@ function useLaboData(stationId: number | null, enabled: boolean) {
       return complete ? { ...proforma, ...complete } : proforma
     })
 
-    setData({ aMonter: glasses(monterR), pretes: glasses(pretesR), proformas })
+    setData({ enRoute, aMonter: glasses(monterR), pretes: glasses(pretesR), proformas })
 
     const failed = results.filter(r => r.status === 'rejected').length
     if (failed === results.length) setError("Aucune donnée n'a pu être chargée.")
@@ -337,7 +363,7 @@ function GlassRow({ glass, client, badge, selected, onToggle }: {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{glassRef(glass)}</p>
         <p className="text-xs text-slate-400 truncate">{client}</p>
-        <p className="text-xs text-slate-400 truncate">{glassModel(glass)}</p>
+        <p className="text-xs text-slate-400 truncate">{glassModelOrBarcode(glass)}</p>
       </div>
       <div className="flex flex-col items-end gap-1 flex-shrink-0">
         {badge}
@@ -432,7 +458,9 @@ function LaboPage() {
   )
 
   const TABS: { id: TabId; label: string; short: string; icon: IconFn; count?: number }[] = [
-    { id: 'arrivees', label: 'Arrivées', short: 'Arrivées', icon: ic.flask, count: aMonter.length },
+    // Le compteur inclut les montures en route : ce sont elles qui appellent un geste,
+    // les afficher sans les compter reviendrait à les cacher dans la navigation.
+    { id: 'arrivees', label: 'Arrivées', short: 'Arrivées', icon: ic.flask, count: aMonter.length + data.enRoute.length },
     { id: 'stock', label: 'Stock Labo', short: 'Stock', icon: ic.scan, count: aMonter.length },
     { id: 'afaire', label: 'À faire', short: 'À faire', icon: ic.clock, count: aMonter.length },
     { id: 'prete', label: 'Montures prêtes', short: 'Prêtes', icon: ic.hand, count: data.pretes.length },
@@ -628,36 +656,59 @@ function LaboPage() {
             )}
 
             {/* ── ARRIVÉES ───────────────────────────────────────────────────── */}
+            {/* Une seule table, deux états. Les montures en route y figurent grisées avant
+                même d'être scannées : c'est la page des arrivées, elle doit annoncer ce qui
+                arrive, pas seulement constater ce qui est arrivé. Sans elles, l'opérateur
+                voyait un écran vide et n'avait aucune raison de sortir sa douchette — la
+                monture pouvait rester EN_TRANSIT indéfiniment. */}
             {tab === 'arrivees' && (
               <div className={`${CARD} overflow-x-auto`}>
-                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-bold text-slate-900 dark:text-white">Arrivées au laboratoire</p>
+                  {data.enRoute.length > 0 && (
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${TONE.amber}`}>
+                      {data.enRoute.length} en route · à scanner
+                    </span>
+                  )}
                 </div>
-                {loading && aMonter.length === 0 ? (
+                {loading && aMonter.length === 0 && data.enRoute.length === 0 ? (
                   <Empty>Chargement…</Empty>
-                ) : aMonter.length === 0 ? (
-                  <Empty>Aucune monture arrivée.</Empty>
                 ) : (
-                  <table className="w-full text-sm min-w-[560px]">
-                    <thead>
-                      <tr className="border-b border-slate-100 dark:border-slate-700">
-                        <th className="text-left py-2 pr-3 text-xs font-semibold text-slate-400">Client</th>
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Modèle</th>
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Code</th>
-                        <th className="text-right py-2 pl-3 text-xs font-semibold text-slate-400">Arrivée</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {aMonter.map(glass => (
-                        <tr key={glass.barcode} className="border-b border-slate-50 dark:border-slate-700/60 last:border-0">
-                          <td className="py-3 pr-3 font-medium text-slate-900 dark:text-white truncate max-w-[160px]">{clientOf(glass)}</td>
-                          <td className="py-3 px-3 text-slate-400">{glassModel(glass)}</td>
-                          <td className="py-3 px-3 font-mono text-xs text-slate-500 dark:text-slate-300">{glass.barcode}</td>
-                          <td className="py-3 pl-3 text-right text-xs text-slate-400">{fmtDate(glass.created_at)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <GlassTable
+                    emptyLabel="Aucune monture arrivée ni attendue."
+                    // Le labo travaille sur une commande client, pas sur une référence : son
+                    // nom passe juste après la réf, devant tout le reste.
+                    title="arrivees-labo"
+                    before={[{ header: 'Client' }, { header: 'Code-barres', mono: true }]}
+                    rows={[
+                      // En route d'abord : c'est la seule partie qui appelle un geste.
+                      ...data.enRoute.map(glass => ({
+                        key: `transit-${glass.barcode}`,
+                        photo: glass.photo_monture_url,
+                        reference: glassRef(glass),
+                        brand: glass.brand,
+                        gender: glass.gender,
+                        shape: glass.shape,
+                        location: glass.location_code,
+                        entry: glass.created_at,
+                        muted: true,
+                        before: [clientOf(glass), glass.barcode],
+                        status: { label: 'en route', tone: 'amber' as const },
+                      })),
+                      ...aMonter.map(glass => ({
+                        key: glass.barcode,
+                        photo: glass.photo_monture_url,
+                        reference: glassRef(glass),
+                        brand: glass.brand,
+                        gender: glass.gender,
+                        shape: glass.shape,
+                        location: glass.location_code,
+                        entry: glass.created_at,
+                        before: [clientOf(glass), glass.barcode],
+                        status: { label: 'reçue', tone: 'green' as const },
+                      })),
+                    ]}
+                  />
                 )}
               </div>
             )}
@@ -688,7 +739,7 @@ function LaboPage() {
                         <tr key={glass.barcode} className="border-b border-slate-50 dark:border-slate-700/60 last:border-0">
                           <td className="py-3 pr-3 font-medium text-slate-900 dark:text-white">{index + 1}</td>
                           <td className="py-3 px-3 text-slate-400 truncate max-w-[160px]">{clientOf(glass)}</td>
-                          <td className="py-3 px-3 text-slate-400">{glassModel(glass)}</td>
+                          <td className="py-3 px-3 text-slate-400">{glassModelOrBarcode(glass)}</td>
                           <td className="py-3 px-3 font-mono text-xs text-slate-500 dark:text-slate-300">{glass.barcode}</td>
                           <td className="py-3 pl-3 text-right text-xs text-slate-400">{fmtDate(glass.updated_at || glass.created_at)}</td>
                         </tr>
@@ -835,7 +886,7 @@ function LaboPage() {
                         {data.pretes.map(glass => (
                           <tr key={glass.barcode} className="border-b border-slate-50 dark:border-slate-700/60 last:border-0">
                             <td className="py-3 pr-3 font-medium text-slate-900 dark:text-white truncate max-w-[160px]">{clientOf(glass)}</td>
-                            <td className="py-3 px-3 text-slate-400">{glassModel(glass)}</td>
+                            <td className="py-3 px-3 text-slate-400">{glassModelOrBarcode(glass)}</td>
                             <td className="py-3 px-3 font-mono text-xs text-slate-500 dark:text-slate-300">{glass.barcode}</td>
                             <td className="py-3 px-3 tabular-nums text-slate-400">{fmtDate(glass.updated_at || glass.created_at)}</td>
                             <td className="py-3 pl-3 text-right font-bold tabular-nums" style={{ color: C.primary }}>{fmtFCFA(glass.price)}</td>

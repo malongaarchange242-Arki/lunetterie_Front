@@ -164,6 +164,30 @@ interface ProformaItem {
   [key: string]: any
 }
 
+/** L'ordonnance en colonnes, telle que le serveur la renvoie sur `/proformas/:id`.
+ *
+ *  Les valeurs optiques sont nullables et doivent le rester : une sphère à 0 est une
+ *  correction valide, la confondre avec « non renseigné » ferait lire une ordonnance fausse. */
+interface Prescription {
+  foyer?: string
+  teinte?: string
+  od_sphere?: number
+  od_cylindre?: number
+  od_axe?: number
+  od_addition?: number
+  od_prix?: number
+  og_sphere?: number
+  og_cylindre?: number
+  og_axe?: number
+  og_addition?: number
+  og_prix?: number
+  accessoires_label?: string
+  accessoires_prix?: number
+  montage_prix?: number
+  remise_pct?: number
+  note_libre?: string
+}
+
 interface Proforma {
   id: number
   code?: string
@@ -171,6 +195,9 @@ interface Proforma {
   client_phone?: string
   status?: string
   note?: string
+  /** Absente sur les proformas antérieures à la migration 027 : leur ordonnance ne vit
+   *  que dans `note`, en texte. */
+  prescription?: Prescription
   created_at?: string
   total_amount?: number | string
   items?: ProformaItem[]
@@ -264,6 +291,137 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
     <div className={`bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4 ${className}`}>
       {children}
     </div>
+  )
+}
+
+// ── Ordonnance ─────────────────────────────────────────────────────────────────
+/** Une correction se lit signée. « +1.00 » et « -1.00 » désignent deux défauts opposés —
+ *  hypermétropie et myopie — et un nombre nu, sur un devis d'opticien, se lit mal. Les deux
+ *  décimales sont la convention du métier : une sphère se prescrit au quart de dioptrie. */
+function fmtDioptrie(value: unknown) {
+  if (value === null || value === undefined || value === '') return '—'
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '—'
+  return `${n > 0 ? '+' : ''}${n.toFixed(2)}`
+}
+
+/** L'axe est un angle, entre 0 et 180. Le degré le distingue au premier coup d'œil des
+ *  dioptries qui l'entourent dans le tableau. */
+function fmtAxe(value: unknown) {
+  if (value === null || value === undefined || value === '') return '—'
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '—'
+  return `${Math.round(n)}°`
+}
+
+/** L'ordonnance du client, en grille.
+ *
+ *  Elle s'affichait jusqu'ici en texte brut — « OD : sph +1.00 · cyl -0.50 · axe 60 · add 1
+ *  · prix 40000 » — repris tel quel de la note. Illisible pour ce qu'on en fait : le caissier
+ *  contrôle le devis ligne à ligne avant d'encaisser, et comparer deux yeux dans deux phrases
+ *  oblige à compter les points médians. La grille aligne les colonnes, comme le document
+ *  imprimé que le client a sous les yeux.
+ *
+ *  Les proformas antérieures à la migration 027 n'ont pas d'ordonnance en colonnes : on
+ *  retombe alors sur la note, qui porte le même contenu en texte. */
+function Ordonnance({ proforma }: { proforma: Proforma }) {
+  const p = proforma.prescription
+
+  if (!p) {
+    if (!proforma.note) return null
+    return (
+      <Card>
+        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Ordonnance</p>
+        <p className="mt-1.5 whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">{proforma.note}</p>
+      </Card>
+    )
+  }
+
+  const yeux = [
+    { oeil: 'OD', libelle: 'Œil droit', sphere: p.od_sphere, cylindre: p.od_cylindre, axe: p.od_axe, addition: p.od_addition, prix: p.od_prix },
+    { oeil: 'OG', libelle: 'Œil gauche', sphere: p.og_sphere, cylindre: p.og_cylindre, axe: p.og_axe, addition: p.og_addition, prix: p.og_prix },
+  ]
+  const verres = Number(p.od_prix || 0) + Number(p.og_prix || 0)
+  const extras = [
+    p.accessoires_label || Number(p.accessoires_prix || 0) > 0
+      ? { label: p.accessoires_label ? `Accessoires · ${p.accessoires_label}` : 'Accessoires', value: fmtFCFA(p.accessoires_prix || 0) }
+      : null,
+    Number(p.montage_prix || 0) > 0 ? { label: 'Montage', value: fmtFCFA(p.montage_prix) } : null,
+    Number(p.remise_pct || 0) > 0 ? { label: 'Remise', value: `${p.remise_pct} %` } : null,
+  ].filter(Boolean) as { label: string; value: string }[]
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Ordonnance</p>
+        <div className="flex flex-wrap gap-1.5">
+          {p.foyer && (
+            <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
+              {p.foyer}
+            </span>
+          )}
+          {p.teinte && (
+            <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-[11px] font-bold text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300">
+              {p.teinte}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[440px] text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 dark:border-slate-700">
+              <th className="py-2 pr-3 text-left text-xs font-semibold text-slate-400">Œil</th>
+              <th className="py-2 px-3 text-right text-xs font-semibold text-slate-400">Sphère</th>
+              <th className="py-2 px-3 text-right text-xs font-semibold text-slate-400">Cylindre</th>
+              <th className="py-2 px-3 text-right text-xs font-semibold text-slate-400">Axe</th>
+              <th className="py-2 px-3 text-right text-xs font-semibold text-slate-400">Addition</th>
+              <th className="py-2 pl-3 text-right text-xs font-semibold text-slate-400">Prix du verre</th>
+            </tr>
+          </thead>
+          <tbody>
+            {yeux.map(oeil => (
+              <tr key={oeil.oeil} className="border-b border-slate-50 last:border-0 dark:border-slate-700/60">
+                <td className="py-2.5 pr-3">
+                  <span className="font-bold text-slate-900 dark:text-white">{oeil.oeil}</span>
+                  <span className="ml-1.5 text-xs text-slate-400">{oeil.libelle}</span>
+                </td>
+                <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-900 dark:text-white">{fmtDioptrie(oeil.sphere)}</td>
+                <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-900 dark:text-white">{fmtDioptrie(oeil.cylindre)}</td>
+                <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-300">{fmtAxe(oeil.axe)}</td>
+                <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-300">{fmtDioptrie(oeil.addition)}</td>
+                <td className="py-2.5 pl-3 text-right font-bold tabular-nums text-slate-900 dark:text-white">{fmtFCFA(oeil.prix || 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={5} className="py-2 pr-3 text-right text-xs font-semibold text-slate-400">Total verres</td>
+              <td className="py-2 pl-3 text-right font-black tabular-nums" style={{ color: '#16a34a' }}>{fmtFCFA(verres)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {extras.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-slate-100 pt-3 dark:border-slate-700">
+          {extras.map(extra => (
+            <span key={extra.label} className="text-xs text-slate-500 dark:text-slate-400">
+              {extra.label} : <strong className="text-slate-900 dark:text-white">{extra.value}</strong>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Ce que la vendeuse a écrit hors grille — « retrait prévu vendredi ». C'est souvent
+          là que se cache l'engagement pris au client. */}
+      {p.note_libre && (
+        <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-900/50 dark:text-slate-300">
+          {p.note_libre}
+        </p>
+      )}
+    </Card>
   )
 }
 
@@ -539,9 +697,14 @@ function ProformaDetail({ proforma, stationId, onBack, onSettled }: {
       const sold = result.sold || []
       const returned = result.returned || []
       const parts: string[] = []
-      if (sold.length) parts.push(`${sold.length} monture${sold.length > 1 ? 's' : ''} encaissée${sold.length > 1 ? 's' : ''}`)
+      if (sold.length) parts.push(`${sold.length} monture${sold.length > 1 ? 's' : ''} encaissée${sold.length > 1 ? 's' : ''} et expédiée${sold.length > 1 ? 's' : ''} au Laboratoire`)
       if (returned.length) parts.push(`${returned.length} rendue${returned.length > 1 ? 's' : ''} au présentoir`)
       if ((result.return_failures || []).length) parts.push(`sans emplacement au présentoir : ${result.return_failures.join(', ')}`)
+      // L'encaissement a réussi mais le voyage vers le montage n'a pas eu lieu : la monture
+      // est vendue et immobile. Le caissier est le seul à pouvoir alerter à temps.
+      if ((result.lab_failures || []).length) {
+        parts.push(`⚠ NON expédiée${result.lab_failures.length > 1 ? 's' : ''} au Laboratoire (${result.lab_failures.join(', ')}) — prévenez l'administrateur`)
+      }
       if ((result.already_settled || []).length) parts.push(`${result.already_settled.length} ligne(s) déjà tranchée(s) ailleurs`)
       if (result.status) parts.push(`proforma ${result.status === 'REGLEE' ? 'réglée' : 'annulée'}`)
 
@@ -580,14 +743,9 @@ function ProformaDetail({ proforma, stationId, onBack, onSettled }: {
         <p className="mt-2 text-xs text-slate-400">{fmtDate(proforma.created_at)} · {fmtTime(proforma.created_at)}</p>
       </Card>
 
-      {/* L'ordonnance transite dans la note faute de champs dédiés côté serveur : la
-          caisse la réaffiche telle quelle, c'est ici que le caissier la lit. */}
-      {proforma.note && (
-        <Card>
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Ordonnance</p>
-          <p className="mt-1.5 whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">{proforma.note}</p>
-        </Card>
-      )}
+      {/* C'est ici que le caissier contrôle le devis avant d'encaisser : la grille lui rend
+          les colonnes du document imprimé que le client a en main. */}
+      <Ordonnance proforma={proforma} />
 
       <div>
         <SectionTitle action={<span className="text-xs text-slate-500 dark:text-slate-400">{chosen} / {pending.length} tranchée{chosen > 1 ? 's' : ''}</span>}>

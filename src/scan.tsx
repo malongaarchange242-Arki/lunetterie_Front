@@ -5,6 +5,7 @@ import './index.css'
 // serait pas copié dans dist/ au build.
 import logoUrl from '../logo.jpeg'
 import { cameraUnavailableReason, createScanner, humanCameraError, openCamera, type Scanner } from './barcodeScanner'
+import { GlassTable, fmtPrix } from './GlassTable'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 // Aucun sélecteur de station sur cet écran : on réceptionne là où le magasinier est
@@ -432,13 +433,34 @@ function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: n
   return lines
 }
 
+/** Le contenu d'une étiquette, détaché de ce qu'elle décrit.
+ *
+ *  Deux étiquettes sortent de cet écran — celle d'une monture et celle d'un carton
+ *  d'envoi — et elles partagent tout : 60 mm de large, les mêmes polices, le même
+ *  code-barres CODE128, la même ligne de pied. Seuls les textes changent. Dupliquer le
+ *  tracé pour la seconde condamnerait les deux gabarits à diverger à la première retouche. */
+interface PrintableLabel {
+  /** Ligne principale, en gras : la marque de la monture, ou « Carton d'envoi ». */
+  title: string
+  /** Sous-titre en chasse fixe : la référence de la monture, ou celle du colis. */
+  reference: string
+  /** La valeur encodée dans le code-barres — et le nom du fichier téléchargé. */
+  barcodeValue: string
+  /** Pied de page, aligné à gauche : l'emplacement, ou la ville de destination. */
+  metaLeft: string
+  /** Pied de page, aligné à droite : le prix, ou le nombre de montures. */
+  metaRight: string
+  /** Préfixe du PNG déposé sur le disque : `etiquette-…` ou `carton-…`. */
+  filePrefix: string
+}
+
 /** Redessine l'étiquette sur un canvas au lieu de photographier le HTML : sans
  *  bibliothèque tierce, aucun navigateur ne convertit du HTML en image de façon
  *  fiable — le détour par <foreignObject> rend de travers sur Safari.
  *
  *  Le tracé rejoue donc LABEL_CSS à la main : **toute retouche du gabarit imprimé
  *  doit être reportée ici**, sinon l'image téléchargée et le papier divergent. */
-async function labelToPngDataUrl(data: FinalMonture, barcode: { svg: string; width: number; height: number }) {
+async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; width: number; height: number }) {
   const contentWidth = LABEL_PX.width - LABEL_PX.pad * 2
 
   // Mesurer avant de dimensionner le canvas : la hauteur dépend du nombre de lignes,
@@ -447,7 +469,7 @@ async function labelToPngDataUrl(data: FinalMonture, barcode: { svg: string; wid
   if (!ruler) throw new Error('Canvas non supporté par ce navigateur.')
 
   ruler.font = LABEL_FONT.marque
-  const marqueLines = wrapCanvasText(ruler, data.marque || '—', contentWidth)
+  const marqueLines = wrapCanvasText(ruler, data.title || '—', contentWidth)
   ruler.font = LABEL_FONT.ref
   const refLines = wrapCanvasText(ruler, data.reference || '—', contentWidth)
 
@@ -521,9 +543,9 @@ async function labelToPngDataUrl(data: FinalMonture, barcode: { svg: string; wid
   ctx.font = LABEL_FONT.meta
   ctx.fillStyle = '#000000'
   ctx.textAlign = 'left'
-  ctx.fillText(data.emplacement || '—', LABEL_PX.pad, y)
+  ctx.fillText(data.metaLeft || '—', LABEL_PX.pad, y)
   ctx.textAlign = 'right'
-  ctx.fillText(fmtFCFA(data.prix), LABEL_PX.width - LABEL_PX.pad, y)
+  ctx.fillText(data.metaRight || '—', LABEL_PX.width - LABEL_PX.pad, y)
 
   return canvas.toDataURL('image/png')
 }
@@ -534,10 +556,10 @@ async function labelToPngDataUrl(data: FinalMonture, barcode: { svg: string; wid
  *
  *  L'échec reste silencieux — une alerte surgirait par-dessus la boîte d'impression
  *  déjà ouverte, et le papier, lui, est parti. */
-async function downloadMontureLabel(data: FinalMonture, barcode: { svg: string; width: number; height: number }) {
+async function downloadLabel(data: PrintableLabel, barcode: { svg: string; width: number; height: number }) {
   try {
     const dataUrl = await labelToPngDataUrl(data, barcode)
-    await downloadDataUrl(dataUrl, `etiquette-${data.id || 'monture'}.png`)
+    await downloadDataUrl(dataUrl, `${data.filePrefix}-${data.barcodeValue || 'etiquette'}.png`)
   } catch (error) {
     console.error("Échec du téléchargement de l'étiquette", error)
   }
@@ -546,7 +568,7 @@ async function downloadMontureLabel(data: FinalMonture, barcode: { svg: string; 
 /** L'étiquette part dans une fenêtre séparée plutôt qu'en masquant le reste de la
  *  page : le vanilla s'appuyait sur `body > *:not(.print-label)`, impossible ici où
  *  toute l'application vit sous un unique #root. */
-async function printMontureLabel(data: FinalMonture) {
+async function printLabel(data: PrintableLabel) {
   // Le SVG est dessiné attaché au document — JsBarcode mesure le rendu, un nœud
   // détaché ressort sans dimensions — puis retiré aussitôt.
   const holder = document.createElement('div')
@@ -561,7 +583,7 @@ async function printMontureLabel(data: FinalMonture) {
   // qu'un chargement d'image, lui, ferait passer le clic pour une popup non sollicitée.
   const barcode = { svg: '', width: 0, height: 0 }
   try {
-    await drawBarcode(svg, data.id, true)
+    await drawBarcode(svg, data.barcodeValue, true)
     markup = svg.outerHTML
 
     const clone = svg.cloneNode(true) as SVGSVGElement
@@ -577,7 +599,7 @@ async function printMontureLabel(data: FinalMonture) {
 
   // Téléchargée dans tous les cas, impression bloquée comprise : c'est justement quand
   // rien ne sort de l'imprimante que la copie image sert le plus.
-  void downloadMontureLabel(data, barcode)
+  void downloadLabel(data, barcode)
 
   if (!popup) {
     window.alert("L'impression a été bloquée par le navigateur. L'étiquette part quand même en image dans vos téléchargements ; autorisez les fenêtres surgissantes pour l'imprimer.")
@@ -586,17 +608,47 @@ async function printMontureLabel(data: FinalMonture) {
   const esc = (v: string) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   popup.document.write(
     `<!doctype html><html lang="fr"><head><meta charset="utf-8" />`
-    + `<title>Étiquette ${esc(data.id)}</title><style>${LABEL_CSS}</style></head><body>`
+    + `<title>Étiquette ${esc(data.barcodeValue)}</title><style>${LABEL_CSS}</style></head><body>`
     + `<div class="lb">`
     + `<div class="shop">La Lunetterie</div>`
-    + `<div class="marque">${esc(data.marque || '—')}</div>`
+    + `<div class="marque">${esc(data.title || '—')}</div>`
     + `<div class="ref">${esc(data.reference || '—')}</div>`
     + markup
-    + `<div class="meta"><span>${esc(data.emplacement || '—')}</span><span>${esc(fmtFCFA(data.prix))}</span></div>`
+    + `<div class="meta"><span>${esc(data.metaLeft || '—')}</span><span>${esc(data.metaRight || '—')}</span></div>`
     + `</div>`
     + `<script>window.onload=function(){window.print();}<\/script></body></html>`,
   )
   popup.document.close()
+}
+
+/** L'étiquette d'une monture : celle qui part sur la branche. */
+function printMontureLabel(data: FinalMonture) {
+  return printLabel({
+    title: data.marque,
+    reference: data.reference,
+    barcodeValue: data.id,
+    metaLeft: data.emplacement,
+    metaRight: fmtFCFA(data.prix),
+    filePrefix: 'etiquette',
+  })
+}
+
+/** L'étiquette du carton d'envoi : celle qu'on colle sur le colis.
+ *
+ *  Le code-barres porte `box_code` — c'est lui que la station destinataire scannera à la
+ *  réception — et `box_reference` reste lisible en clair dessous. Le pied rappelle où va
+ *  le colis et ce qu'il contient, les deux informations qu'on cherche sur un carton
+ *  empilé parmi d'autres. */
+function printBoxLabel(dispatch: Dispatch) {
+  const count = Number(dispatch.sent_count || 0)
+  return printLabel({
+    title: "Carton d'envoi",
+    reference: dispatch.box_reference || dispatch.reference || '—',
+    barcodeValue: dispatch.box_code || dispatch.box_reference || dispatch.code || '',
+    metaLeft: dispatch.station_name || dispatch.city || '—',
+    metaRight: `${count} monture${count > 1 ? 's' : ''}`,
+    filePrefix: 'carton',
+  })
 }
 
 /** Trois notes montantes après un enregistrement : le magasinier a les mains
@@ -651,6 +703,10 @@ interface ReceptionEntry {
   targetCount?: number
   registeredCount?: number
   status?: string
+  /** Horodatage du scan de l'étiquette, quand le serveur sait le poser. Toutes les
+   *  versions déployées ne le renvoient pas : `scanned` et `registeredCount` prennent le
+   *  relais, jamais l'inverse. */
+  activatedAt?: string | null
   /** Cette session a été scannée par ce compte. Connaître son code ne suffit pas : c'est
    *  le scan de l'étiquette qui ouvre une réception, et lui seul débloque la reprise. */
   scanned?: boolean
@@ -1038,10 +1094,103 @@ function ActivationGate({ status, isError, onActivate }: {
 }
 
 // ── Écran des sessions ─────────────────────────────────────────────────────────
-function SessionsGate({ user, session, movements, onEnter }: {
+/** Une réception entamée se reprend d'ici, sans rescanner l'étiquette.
+ *
+ *  L'avancement affiché vient du serveur (`registered_count` / `target_count`), jamais du
+ *  navigateur : la même commande peut avancer depuis deux tablettes, et un compteur local
+ *  serait faux dès la première monture enregistrée ailleurs. Le localStorage ne sert plus
+ *  qu'à retenir quelles sessions *ce poste* a ouvertes.
+ *
+ *  Une session active mais jamais entamée n'est pas reprenable : c'est le scan de
+ *  l'étiquette qui coche « Reçu » côté Direction, et lui seul. Elle renvoie donc à
+ *  l'écran d'activation plutôt que d'offrir un raccourci qui sauterait ce jalon. */
+function isResumable(entry: ReceptionEntry) {
+  if (entry.status !== 'active' || !entry.code) return false
+  return Boolean(entry.activatedAt) || Number(entry.registeredCount || 0) > 0 || Boolean(entry.scanned)
+}
+
+function SessionCard({ entry, isActive, joining, onResume, onActivate }: {
+  entry: ReceptionEntry
+  /** La session déjà ouverte sur ce poste : y « revenir » ne relit rien. */
+  isActive: boolean
+  joining: boolean
+  onResume: (code: string) => void
+  onActivate: () => void
+}) {
+  // `targetCount` vient de la session, `quantity` de la commande d'expédition : la
+  // seconde couvre les lignes que la Direction a envoyées avant tout scan.
+  const target = Number(entry.targetCount || entry.quantity || 0)
+  const done = Number(entry.registeredCount || 0)
+  const percent = target > 0 ? Math.min(100, Math.round((done / target) * 100)) : 0
+  const resumable = isResumable(entry)
+
+  return (
+    <div className={`${CARD} p-4 ${isActive ? 'ring-2 ring-[#2563eb]' : ''}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{entry.code || entry.key}</p>
+          <p className="mt-0.5 truncate text-xs text-slate-400">
+            {entry.orderId > 0 ? `Commande EXP-${entry.orderId} · ` : ''}{commandSubtitle(entry)}
+          </p>
+        </div>
+        {resumable
+          ? <Pill tone={done > 0 ? 'blue' : 'green'}>{done > 0 ? 'En cours' : 'Ouverte'}</Pill>
+          : <Pill tone="slate">À scanner</Pill>}
+      </div>
+
+      {target > 0 && (
+        <div className="mt-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-sm font-bold tabular-nums text-slate-900 dark:text-white">{done} / {target}</span>
+            <span className="text-xs tabular-nums text-slate-400">{percent} %</span>
+          </div>
+          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+            <div className="h-full rounded-full bg-[#2563eb] transition-all" style={{ width: `${percent}%` }} />
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">
+            {Math.max(0, target - done)} monture{Math.max(0, target - done) > 1 ? 's' : ''} restante{Math.max(0, target - done) > 1 ? 's' : ''}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-3">
+        {resumable
+          ? (
+            <Btn
+              variant="primary"
+              className="w-full justify-center"
+              disabled={joining}
+              onClick={() => onResume(String(entry.code))}
+            >
+              {ic.camera()}
+              {joining ? 'Reprise…' : isActive ? "Revenir à l'enregistrement" : "Continuer l'enregistrement"}
+            </Btn>
+          )
+          : (
+            <Btn className="w-full justify-center" onClick={onActivate}>
+              {ic.tag()} Scanner l'étiquette pour ouvrir
+            </Btn>
+          )}
+      </div>
+    </div>
+  )
+}
+
+function SessionsGate({
+  user, session, movements, commands, loading, denied, joiningCode, onResume, onActivate, onReload, onEnter,
+}: {
   user: any
   session: ReceptionSession | null
   movements: Movement[]
+  commands: ReceptionEntry[]
+  loading: boolean
+  /** Les commandes de la Direction sont refusées : on le dit plutôt que d'afficher un
+   *  « aucune réception » qui ferait croire à un entrepôt vide. */
+  denied: boolean
+  joiningCode: string
+  onResume: (code: string) => void
+  onActivate: () => void
+  onReload: () => void
   onEnter: () => void
 }) {
   const [detailDate, setDetailDate] = useState<string | null>(null)
@@ -1094,12 +1243,18 @@ function SessionsGate({ user, session, movements, onEnter }: {
     )
   }
 
+  // Le serveur fait foi : ces lignes sont celles qu'il déclare encore ouvertes, pas
+  // celles que ce navigateur croit se rappeler.
+  const ouvertes = commands.filter(entry => entry.status === 'active' && entry.code)
+  const reprenables = ouvertes.filter(isResumable)
+  const aScanner = ouvertes.filter(entry => !isResumable(entry))
+
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-5 text-center">
+    <div className="mx-auto max-w-3xl space-y-6">
+      <div className="text-center">
         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Bonjour, {name}</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Nous sommes le {todayLabel}. Choisissez la session du jour pour commencer, ou consultez une session précédente.
+          Nous sommes le {todayLabel}. Reprenez une réception en cours, ou consultez une journée passée.
         </p>
         {session && (
           <div className="mt-3 inline-flex">
@@ -1108,31 +1263,106 @@ function SessionsGate({ user, session, movements, onEnter }: {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {keys.map(key => {
-          const isToday = key === today
-          const count = counts.get(key) || 0
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => (isToday ? onEnter() : setDetailDate(key))}
-              className={`${CARD} flex flex-col items-center gap-1 p-4 text-center transition-all hover:-translate-y-0.5 ${isToday ? 'ring-2 ring-[#2563eb]' : ''}`}
-            >
-              <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${isToday ? 'bg-[#2563eb]/10 text-[#2563eb]' : 'bg-slate-100 text-slate-400 dark:bg-slate-700/50'}`}>
-                {isToday ? ic.plus('w-5 h-5') : ic.calendar('w-5 h-5')}
-              </span>
-              <span className="text-3xl font-black tabular-nums text-slate-900 dark:text-white">{count}</span>
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                {isToday ? `Aujourd'hui · ${formatDayLabel(key)}` : formatDayLabel(key)}
-              </span>
-              <span className="text-[11px] text-slate-400">
-                {isToday ? 'ouvrir la session' : count > 1 ? 'montures' : 'monture'}
-              </span>
-            </button>
-          )
-        })}
-      </div>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            Réceptions en cours
+            {reprenables.length > 0 && (
+              <span className="ml-2 text-xs font-semibold tabular-nums text-slate-400">{reprenables.length}</span>
+            )}
+          </h3>
+          <Btn onClick={onReload} disabled={loading}>{ic.refresh()} Actualiser</Btn>
+        </div>
+
+        {loading && ouvertes.length === 0 && (
+          <div className={`${CARD} p-6 text-center text-sm text-slate-400`}>Chargement des réceptions…</div>
+        )}
+
+        {!loading && ouvertes.length === 0 && (
+          <div className={`${CARD} flex flex-col items-center gap-2 p-8 text-center`}>
+            <span className="text-slate-300 dark:text-slate-600">{ic.tag('w-7 h-7')}</span>
+            <p className="text-sm text-slate-400">
+              {denied
+                ? "Les commandes de la Direction ne sont pas accessibles depuis ce compte."
+                : 'Aucune réception ouverte pour le moment.'}
+            </p>
+            <Btn variant="primary" className="mt-1" onClick={onActivate}>{ic.camera()} Activer une session</Btn>
+          </div>
+        )}
+
+        {reprenables.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {reprenables.map(entry => (
+              <SessionCard
+                key={entry.key}
+                entry={entry}
+                isActive={Boolean(session?.code) && session?.code === entry.code}
+                joining={joiningCode === entry.code}
+                onResume={onResume}
+                onActivate={onActivate}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Envoyées par la Direction mais jamais scannées : elles se voient, elles ne se
+            reprennent pas — l'étiquette reste le seul moyen de les ouvrir. */}
+        {aScanner.length > 0 && (
+          <>
+            <p className="pt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">En attente de scan</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {aScanner.map(entry => (
+                <SessionCard
+                  key={entry.key}
+                  entry={entry}
+                  isActive={false}
+                  joining={joiningCode === entry.code}
+                  onResume={onResume}
+                  onActivate={onActivate}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {ouvertes.length > 0 && (
+          <div className="flex justify-center pt-1">
+            <Btn onClick={onActivate}>{ic.tag()} Activer une autre session</Btn>
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Journées d'enregistrement</h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {keys.map(key => {
+            const isToday = key === today
+            const count = counts.get(key) || 0
+            // Sans session ouverte, la carte du jour ne peut pas mener à l'assistant :
+            // elle montre le détail, comme les autres journées.
+            const opensWizard = isToday && Boolean(session)
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => (opensWizard ? onEnter() : setDetailDate(key))}
+                className={`${CARD} flex flex-col items-center gap-1 p-4 text-center transition-all hover:-translate-y-0.5 ${isToday ? 'ring-2 ring-[#2563eb]' : ''}`}
+              >
+                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${isToday ? 'bg-[#2563eb]/10 text-[#2563eb]' : 'bg-slate-100 text-slate-400 dark:bg-slate-700/50'}`}>
+                  {opensWizard ? ic.plus('w-5 h-5') : ic.calendar('w-5 h-5')}
+                </span>
+                <span className="text-3xl font-black tabular-nums text-slate-900 dark:text-white">{count}</span>
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  {isToday ? `Aujourd'hui · ${formatDayLabel(key)}` : formatDayLabel(key)}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {opensWizard ? 'ouvrir la session' : count > 1 ? 'montures' : 'monture'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </section>
     </div>
   )
 }
@@ -1340,6 +1570,9 @@ interface SendListItem {
   reference?: string
   brand?: string
   status?: string
+  /** Où la monture est rangée dans ce stock : la case à ouvrir pour la sortir. Vient de la
+   *  fiche que `openListe` vient chercher, pas de la ligne de liste. */
+  location_code?: string
   [key: string]: any
 }
 
@@ -1407,20 +1640,18 @@ function commandSubtitle(command: ReceptionEntry) {
   return command.supplier ? `Pays: ${command.supplier}` : 'Origine non renseignée'
 }
 
+/** Les listes que la Direction adresse à ce magasin : le magasinier les ouvre, pointe
+ *  chaque monture au code-barres, puis déclenche l'envoi du colis. Rien à voir avec les
+ *  commandes fournisseur, qui vivent sur l'écran Réceptions. */
 function ListesScreen({
-  lists, loading, commands, loadingCommands, commandsDenied, joiningCode, activeCode, stationId, onResume, onReload, onReturn, hasSession,
+  lists, loading, hidden, stationId, onReload, onReturn, hasSession,
 }: {
   lists: SendList[]
   loading: boolean
-  /** La station du compte, d'où part la liste réceptionnée. */
+  /** Nombre de listes écartées parce qu'elles visent un autre magasin. */
+  hidden: number
+  /** La station du compte, d'où part le colis. */
   stationId: string
-  commands: ReceptionEntry[]
-  loadingCommands: boolean
-  commandsDenied: boolean
-  joiningCode: string
-  /** Le code de la session ouverte, s'il y en a une : sa carte se distingue des autres. */
-  activeCode: string
-  onResume: (code: string) => void
   onReload: () => void
   onReturn: () => void
   hasSession: boolean
@@ -1436,6 +1667,9 @@ function ListesScreen({
   const [dispatch, setDispatch] = useState<Dispatch | null>(null)
   const [page, setPage] = useState(1)
   const codeRef = useRef<HTMLInputElement>(null)
+  /** Verrou de la recherche directe : la vérification passe par le réseau, et sans lui un
+   *  second déclenchement sur le même code pointerait la monture deux fois. */
+  const verifyingRef = useRef(false)
 
   async function openListe(list: SendList) {
     setOpen(list)
@@ -1476,9 +1710,11 @@ function ListesScreen({
     }
   }
 
-  async function verify() {
-    const value = code.trim()
-    if (!value || !open) return
+  /** `raw` laisse la recherche directe passer la valeur qu'elle vient de reconnaître :
+   *  entre le déclenchement de l'effet et l'exécution, le champ a pu être vidé. */
+  async function verify(raw?: string) {
+    const value = String(raw ?? code).trim()
+    if (!value || !open || verifyingRef.current) return
     const needle = value.toLowerCase()
 
     const match = items.find(item =>
@@ -1498,6 +1734,9 @@ function ListesScreen({
       return
     }
 
+    // Verrou posé avant l'aller-retour réseau seulement : les refus ci-dessus sont
+    // synchrones et n'ont rien à protéger.
+    verifyingRef.current = true
     try {
       // Sans station_id, pour ne rien déplacer : on confirme seulement l'existence.
       await apiFetch(`/inventory/glasses/${encodeURIComponent(match.barcode || value)}`)
@@ -1506,6 +1745,8 @@ function ListesScreen({
       setTone('error')
       codeRef.current?.select()
       return
+    } finally {
+      verifyingRef.current = false
     }
 
     const next = new Set(verified)
@@ -1526,6 +1767,42 @@ function ListesScreen({
     setCode('')
     codeRef.current?.focus()
   }
+
+  /** Recherche directe : la saisie se vérifie d'elle-même, sans bouton.
+   *
+   *  Un lecteur de code-barres se comporte comme un clavier — il écrit la trame d'un coup.
+   *  Dès qu'elle désigne exactement une monture de la liste, la vérification part : le
+   *  magasinier a une monture dans une main et le lecteur dans l'autre, lui réclamer un
+   *  appui de plus à chaque pièce n'apporte rien.
+   *
+   *  L'égalité est stricte, jamais un « commence par » : `LUN-CNG-0002` ne doit pas être
+   *  validée en passant devant `LUN-CNG-00021`. Une saisie partielle ne déclenche donc
+   *  rien tant qu'elle est incomplète.
+   *
+   *  Le code inconnu, lui, attend la fin de la frappe avant d'être signalé — annoncer
+   *  l'échec à chaque caractère ferait clignoter une erreur sous chaque lettre tapée. */
+  useEffect(() => {
+    const value = code.trim()
+    if (!value || !open || loadingItems || listDispatched(open)) return
+
+    const needle = value.toLowerCase()
+    const found = items.some(item =>
+      String(item.barcode || '').toLowerCase() === needle
+      || String(item.reference || '').toLowerCase() === needle)
+
+    if (found) {
+      void verify(value)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setMessage(`« ${value} » ne figure pas dans cette liste.`)
+      setTone('error')
+    }, 800)
+    return () => window.clearTimeout(timer)
+    // `verify` est recréée à chaque rendu : la lister relancerait l'effet en boucle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, items, open, loadingItems])
 
   /** Envoie le colis. Le serveur déduit la station de destination de la ville de la
    *  liste — aucun choix manuel ici — déplace les montures et clôt la liste. */
@@ -1595,12 +1872,14 @@ function ListesScreen({
             <strong className="text-sm font-bold text-slate-900 dark:text-white">Confirmation des montures</strong>
             <span className="flex-shrink-0 text-xs tabular-nums text-slate-400">{done} / {items.length} vérifiée{done > 1 ? 's' : ''}</span>
           </div>
-          <p className="mt-1 text-xs text-slate-400">Scannez le code-barres de chaque monture avant l'envoi.</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Scannez le code-barres de chaque monture : la validation est automatique.
+          </p>
 
-          <form
-            onSubmit={e => { e.preventDefault(); void verify() }}
-            className="mt-3 flex flex-col gap-2 sm:flex-row"
-          >
+          {/* Plus de bouton : la vérification part dès que la saisie désigne une monture.
+              Le <form> ne sert plus qu'à absorber l'Entrée que la plupart des lecteurs
+              envoient en fin de trame — sans lui, elle rechargerait la page. */}
+          <form onSubmit={e => { e.preventDefault(); void verify() }} className="mt-3">
             <input
               ref={codeRef}
               type="text"
@@ -1609,11 +1888,8 @@ function ListesScreen({
               disabled={dispatched || loadingItems}
               autoComplete="off"
               placeholder="Scannez ou saisissez le code-barres"
-              className={`${INPUT} flex-1 disabled:opacity-50`}
+              className={`${INPUT} disabled:opacity-50`}
             />
-            <Btn variant="primary" type="submit" disabled={dispatched || loadingItems || !code.trim()}>
-              {ic.check()} Valider
-            </Btn>
           </form>
 
           {message && <p className={`mt-2 text-xs ${toneClass}`}>{message}</p>}
@@ -1624,32 +1900,37 @@ function ListesScreen({
         ) : items.length === 0 ? (
           <div className={`${CARD} p-8 text-center text-sm text-slate-400`}>Cette liste est vide.</div>
         ) : (
-          <div className="space-y-2">
-            {rows.map(item => {
-              const ok = verified.has(item.id)
-              const photo = recordPhoto(item)
-              return (
-                <div
-                  key={item.id}
-                  className={`${CARD} flex items-center gap-3 p-3 ${ok ? 'border-green-200 dark:border-green-800' : ''}`}
-                >
-                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-700">
-                    {photo
-                      ? <img src={photo} alt="" loading="lazy" className="h-full w-full object-cover" />
-                      : <span className="text-slate-300 dark:text-slate-600">{ic.glasses()}</span>}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
-                      {item.reference || item.barcode || '—'}
-                    </p>
-                    <p className="truncate text-xs text-slate-400">{item.barcode || '—'}</p>
-                  </div>
-                  {ok
-                    ? <span className="flex-shrink-0 text-[#16a34a]">{ic.checkCircle('w-5 h-5')}</span>
-                    : <span className="flex-shrink-0 text-[11px] text-slate-400">à vérifier</span>}
-                </div>
-              )
-            })}
+          // Tableau plutôt qu'une pile de cartes : le magasinier pointe une liste, il compare
+          // des lignes entre elles. Même gabarit que le contenu d'un carton côté Responsable
+          // et que le présentoir côté Vendeuse — un seul tableau à apprendre pour tout le monde.
+          <div className={`${CARD} p-0`}>
+            <GlassTable
+              // Le code-barres est ce qu'on scanne ici : il mérite sa colonne, à côté de la
+              // référence. Le prix ferme la ligne, il ne sert qu'au contrôle de valeur.
+              title={`liste-${open.session_code || open.id}`}
+              before={[{ header: 'Code-barres', mono: true }]}
+              after={[{ header: 'Prix', align: 'right' }]}
+              rows={rows.map(item => {
+                const ok = verified.has(item.id)
+                return {
+                  key: item.id,
+                  photo: recordPhoto(item),
+                  reference: item.reference || item.barcode,
+                  brand: item.brand,
+                  gender: item.gender,
+                  shape: item.shape,
+                  // Ici, l'emplacement est celui d'où il faut SORTIR la monture.
+                  location: item.location_code,
+                  entry: item.created_at,
+                  before: [item.barcode],
+                  after: [fmtPrix(item.price)],
+                  done: ok,
+                  status: ok
+                    ? { label: '✓ vérifiée', tone: 'green' as const }
+                    : { label: 'à vérifier', tone: 'slate' as const },
+                }
+              })}
+            />
           </div>
         )}
 
@@ -1690,9 +1971,18 @@ function ListesScreen({
                 <span className="mt-1 text-[11px] text-slate-400">{dispatch.box_reference || dispatch.reference || 'Colis d’expédition'}</span>
               </div>
 
-              <Btn variant="primary" className="mt-4 w-full justify-center" onClick={() => { setDispatch(null); setOpen(null) }}>
-                Fermer
-              </Btn>
+              {/* Imprimer d'abord, fermer ensuite : la boîte disparaît avec la liste, et
+                  le code du carton n'est réaffiché nulle part. L'impression dépose aussi
+                  le PNG dans les téléchargements — même filet que l'étiquette de monture,
+                  pour le cas où l'imprimante est absente ou la fenêtre bloquée. */}
+              <div className="mt-4 flex flex-col gap-2">
+                <Btn variant="primary" className="w-full justify-center" onClick={() => void printBoxLabel(dispatch)}>
+                  {ic.printer()} Imprimer l'étiquette du carton
+                </Btn>
+                <Btn className="w-full justify-center" onClick={() => { setDispatch(null); setOpen(null) }}>
+                  Fermer
+                </Btn>
+              </div>
             </div>
           </div>
         )}
@@ -1709,122 +1999,20 @@ function ListesScreen({
         </div>
       )}
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-400">
-          {loading ? 'Chargement…' : `${lists.length} liste${lists.length > 1 ? 's' : ''} reçue${lists.length > 1 ? 's' : ''}`}
-        </p>
-        <Btn onClick={onReload} disabled={loading || loadingCommands}>{ic.refresh()} Actualiser</Btn>
-      </div>
-
-      {/* ── Commandes préparées par la Direction ──────────────────────────────── */}
-      <div className={CARD}>
-        <CardHead
-          icon={ic.tag()}
-          title="Commandes à réceptionner"
-          pill={commands.length > 0 ? <Pill tone="blue">{commands.length}</Pill> : undefined}
-        />
-        <div className="p-4">
-          {loadingCommands ? (
-            <p className="text-sm text-slate-400">Chargement des commandes…</p>
-          ) : commandsDenied && commands.length === 0 ? (
-            // Le refus ne se dit que s'il ne reste rien à montrer : une source sur deux
-            // suffit à remplir la liste, et masquer des cartes réelles serait pire.
-            <p className="text-sm text-slate-400">
-              Les commandes ne sont pas consultables depuis ce compte. Scannez l'étiquette de session
-              pour rejoindre une réception.
+        <div>
+          <p className="text-sm text-slate-400">
+            {loading ? 'Chargement…' : `${lists.length} liste${lists.length > 1 ? 's' : ''} reçue${lists.length > 1 ? 's' : ''}`}
+          </p>
+          {/* Rien ne disparaît en silence : si le tri par magasin a écarté des lignes, on
+              le dit, sinon un colis manquant resterait inexplicable. */}
+          {hidden > 0 && (
+            <p className="text-xs text-slate-400">
+              {hidden} liste{hidden > 1 ? 's' : ''} destinée{hidden > 1 ? 's' : ''} à un autre magasin, masquée{hidden > 1 ? 's' : ''}.
             </p>
-          ) : commands.length === 0 ? (
-            <p className="text-sm text-slate-400">Aucune commande en attente de réception.</p>
-          ) : (
-            <>
-              <p className="mb-3 text-xs text-slate-400">
-                « Rejoindre la session » ouvre l'enregistrement sur cette commande, depuis
-                n'importe quel poste et sans rescanner l'étiquette. Le scan reste possible et
-                mène au même endroit.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-              {[...commands]
-                .sort((a, b) => String(b.orderDate || '').localeCompare(String(a.orderDate || '')))
-                .map(command => {
-                  // Une session connue du serveur se rejoint d'un clic, scannée ici ou non :
-                  // c'est tout l'intérêt d'avoir ouvert la liste au magasinier, il retrouve
-                  // ses réceptions depuis n'importe quel poste. Le scan de l'étiquette reste
-                  // l'autre chemin, pas un péage.
-                  const connue = Boolean(command.code)
-                  const scannee = Boolean(command.scanned)
-                  const cible = command.targetCount ?? command.quantity
-                  const faits = command.registeredCount ?? 0
-                  const restant = Math.max(0, cible - faits)
-                  const ouverte = !connue || command.status === 'active'
-                  const enCours = connue && joiningCode === command.code
-                  const estActive = Boolean(activeCode) && activeCode === command.code
-                  const reprenable = connue && ouverte && restant > 0
-
-                  return (
-                    <div
-                      key={command.key}
-                      className={`rounded-xl border p-4 transition-opacity ${estActive
-                        ? 'border-[#16a34a] ring-1 ring-[#16a34a]'
-                        : 'border-slate-200 dark:border-slate-700'} ${reprenable ? '' : 'opacity-60'}`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
-                          {command.orderId ? `EXP-${command.orderId}` : command.code}
-                        </p>
-                        {/* « Enregistré » est le mot de la Direction sur la même commande :
-                            tant que personne n'a rien scanné, on n'en sait pas plus qu'elle. */}
-                        <Pill tone={estActive ? 'green' : !ouverte ? 'slate' : (scannee || faits > 0) ? 'blue' : 'slate'}>
-                          {estActive ? 'Session ouverte'
-                            : !ouverte ? 'Clôturée'
-                              : (scannee || faits > 0) ? 'En cours' : 'Enregistré'}
-                        </Pill>
-                      </div>
-
-                      <p className="mt-1 text-xs text-slate-400">
-                        {dayLabel(command.orderDate)}
-                        {formatRecordTime(command.orderDate) !== '—' && ` à ${formatRecordTime(command.orderDate)}`}
-                      </p>
-                      <p className="truncate text-xs text-slate-400">{commandSubtitle(command)}</p>
-
-                      <div className="mt-3 flex items-end justify-between gap-3">
-                        <div>
-                          <p className="text-2xl font-black tabular-nums text-[#2563eb]">
-                            {connue ? faits : '—'}<span className="text-sm text-slate-400">/{cible}</span>
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            {!connue
-                              ? `${cible} monture${cible > 1 ? 's' : ''} à scanner`
-                              : restant > 0 ? `${restant} restante${restant > 1 ? 's' : ''}` : 'quota atteint'}
-                          </p>
-                        </div>
-                        {/* Pas de bouton là où il n'y a rien à rejoindre — session close,
-                            quota atteint, ou commande dont la Direction n'a pas encore ouvert
-                            la session. Un bouton inerte ferait espérer une action. */}
-                        {reprenable ? (
-                          <Btn
-                            variant={estActive ? 'success' : 'primary'}
-                            disabled={Boolean(joiningCode)}
-                            onClick={() => command.code && onResume(command.code)}
-                          >
-                            {enCours ? 'Ouverture…' : 'Rejoindre la session'}
-                          </Btn>
-                        ) : (
-                          <span className="pb-1 text-xs font-semibold text-slate-400">
-                            {!connue ? 'Session non ouverte'
-                              : !ouverte ? 'Session clôturée'
-                                : 'Quota atteint'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
           )}
         </div>
+        <Btn onClick={onReload} disabled={loading}>{ic.refresh()} Actualiser</Btn>
       </div>
-
-      <p className="pt-1 text-xs font-semibold uppercase tracking-widest text-slate-400">Listes reçues</p>
 
       {lists.length === 0 && !loading ? (
         <div className={`${CARD} flex flex-col items-center gap-2 p-8 text-center`}>
@@ -1878,14 +2066,15 @@ type Screen = 'loading' | 'activation' | 'sessions' | 'wizard' | 'historique' | 
 const NAV: {
   id: Screen; label: string; short: string
   icon: (c?: string) => React.ReactElement
-  /** Enregistrer et consulter ses sessions n'ont de sens qu'une session ouverte ;
-   *  les listes et l'historique se consultent à tout moment. */
+  /** Seul l'assistant exige une session ouverte : on ne photographie pas une monture
+   *  sans réception pour l'accueillir. « Mes sessions » est au contraire l'écran par
+   *  lequel on en ouvre ou en reprend une — le verrouiller fermerait la seule porte. */
   needsSession?: boolean
 }[] = [
   { id: 'wizard', label: 'Enregistrement', short: 'Scan', icon: ic.camera, needsSession: true },
   { id: 'listes', label: 'Listes reçues', short: 'Listes', icon: ic.send },
   { id: 'historique', label: 'Historique', short: 'Histo.', icon: ic.checkCircle },
-  { id: 'sessions', label: 'Mes sessions', short: 'Sessions', icon: ic.calendar, needsSession: true },
+  { id: 'sessions', label: 'Mes sessions', short: 'Sessions', icon: ic.calendar },
 ]
 
 function Sidebar({ current, onNavigate, dark, onToggleDark, user, hasSession, newLists }: {
@@ -2112,6 +2301,20 @@ function ScanPage() {
 
   // Le flux survit aux changements d'étape mais pas au démontage de la page.
   useEffect(() => () => stopCamera(), [stopCamera])
+
+  /** Ouvre la caméra en arrivant sur la prise de vue.
+   *
+   *  Un effet plutôt qu'un appel direct dans `activateSession` : React démonte l'écran
+   *  d'activation — et avec lui le lecteur de code-barres, qui relâche le capteur — avant
+   *  d'exécuter les effets du nouvel écran. Réclamer la caméra plus tôt la demanderait
+   *  pendant qu'elle est encore prise.
+   *
+   *  `cameraOn` est délibérément absent des dépendances : l'inclure relancerait le flux
+   *  aussitôt que le magasinier appuie sur « Arrêter ». `startCamera` se garde lui-même
+   *  des appels redondants. */
+  useEffect(() => {
+    if (screen === 'wizard' && step === 1) void startCamera()
+  }, [screen, step, startCamera])
 
   function snapshot() {
     const video = videoRef.current
@@ -2398,8 +2601,21 @@ function ScanPage() {
       rememberScannedCode(active.code)
       setSession(active)
       setActivationError(false)
-      setActivationStatus(`Session activée : ${active.target - active.registered} monture(s) restante(s).`)
-      setScreen('sessions')
+      setActivationStatus('')
+
+      // Scanner l'étiquette EST le geste qui ouvre la réception : on enchaîne sur
+      // l'assistant. Repasser par « Mes sessions » renverrait le magasinier sur la liste
+      // qu'il vient de quitter, une monture déjà en main.
+      //
+      // La caméra n'est volontairement pas démarrée ici : le lecteur de code-barres tient
+      // encore le capteur — `createScanner` n'appelle `stop()` qu'après le retour de
+      // `onDetect`, donc après cette ligne — et plusieurs Android refusent le second flux
+      // (NotReadableError). C'est l'effet d'entrée dans l'assistant qui s'en charge, une
+      // fois l'écran d'activation démonté.
+      const restant = Math.max(0, active.target - active.registered)
+      showToast(`Session ${active.code} ouverte — ${restant} monture${restant > 1 ? 's' : ''} à enregistrer`)
+      setStep(1)
+      setScreen('wizard')
       return true
     } catch (error) {
       // 404 / 400 : c'est le code qui ne vaut rien, pas le serveur. Le magasinier
@@ -2490,14 +2706,16 @@ function ScanPage() {
         apiFetchOptional('/inventory/reception-commands'),
       ])
 
-      // Les sessions ouvertes, indexées par la commande qu'elles servent.
+      // Les sessions ouvertes, indexées par la commande qu'elles servent. `actives` les
+      // garde aussi à plat : c'est lui qui fait foi pour « Mes sessions », l'index par
+      // commande ne sert qu'à rattacher une session à sa ligne d'expédition.
       const parCommande = new Map<number, any>()
-      const orphelines: any[] = []
+      const actives: any[] = []
       const retenir = (command: any) => {
         if (!command?.code || command.status !== 'active') return
+        actives.push(command)
         const orderId = Number(command.supplier_order_id || 0)
         if (orderId > 0) parCommande.set(orderId, command)
-        else orphelines.push(command)
       }
 
       if (listPayload) {
@@ -2541,23 +2759,30 @@ function ScanPage() {
           targetCount: command ? Number(command.target_count || 0) : undefined,
           registeredCount: command ? Number(command.registered_count || 0) : undefined,
           status: command ? String(command.status || '') : undefined,
+          activatedAt: command?.activated_at || null,
           scanned: Boolean(command?.code) && scannedSet.has(String(command.code)),
         }
       })
 
-      // Une session sans expédition rattachée garde sa ligne : elle est ouverte, donc
-      // reprenable, et la perdre bloquerait une réception en cours.
-      for (const command of orphelines) {
+      // Toute session ouverte que le croisement n'a pas placée garde sa ligne : celles
+      // sans expédition rattachée, mais aussi celles dont la commande manque au journal
+      // des expéditions. Elles sont ouvertes, donc reprenables, et les perdre ici
+      // bloquerait une réception en cours — c'est exactement ce que cet écran répare.
+      const rattachees = new Set(entries.map(entry => entry.code).filter(Boolean))
+      for (const command of actives) {
+        const code = String(command.code)
+        if (rattachees.has(code)) continue
         entries.push({
-          key: String(command.code),
-          orderId: 0,
+          key: code,
+          orderId: Number(command.supplier_order_id || 0),
           orderDate: command.created_at || undefined,
           quantity: Number(command.target_count || 0),
-          code: String(command.code),
+          code,
           targetCount: Number(command.target_count || 0),
           registeredCount: Number(command.registered_count || 0),
           status: String(command.status || ''),
-          scanned: scannedSet.has(String(command.code)),
+          activatedAt: command.activated_at || null,
+          scanned: scannedSet.has(code),
         })
       }
 
@@ -2585,7 +2810,11 @@ function ScanPage() {
         }
         window.localStorage.setItem('user', JSON.stringify(account))
         setUser(account)
-        setScreen('activation')
+        // On atterrit sur « Mes sessions », pas sur l'activation : au rechargement comme
+        // le lendemain, le magasinier doit voir ses réceptions en cours et choisir
+        // laquelle reprendre. Rouvrir une session d'office serait pire que l'activation —
+        // avec plusieurs réceptions ouvertes, ce serait la mauvaise une fois sur deux.
+        setScreen('sessions')
         void loadMovements(account.id)
         void loadLists()
         void loadCommands()
@@ -2612,19 +2841,35 @@ function ScanPage() {
     setFinalData(null)
     setSaved(false)
 
-    // Quota atteint : la session ne peut plus rien recevoir, on renvoie à l'activation
-    // plutôt que de laisser rouvrir un flux qui échouerait à l'enregistrement.
+    // Quota atteint : la session ne peut plus rien recevoir. On renvoie à « Mes sessions »
+    // plutôt qu'à l'activation — c'est là que le magasinier voit la réception qu'il vient
+    // de terminer et celles qui l'attendent encore, au lieu d'un écran qui ne sait que
+    // réclamer une étiquette. `loadCommands` relit l'avancement au passage : la carte doit
+    // montrer la monture tout juste enregistrée.
     if (!session || session.registered >= session.target) {
+      if (session) showToast(`Réception ${session.code} terminée — ${session.registered}/${session.target}`)
       setSession(null)
-      setScreen('activation')
       setActivationError(false)
-      setActivationStatus('La session est terminée. Scannez une nouvelle étiquette pour continuer.')
+      setActivationStatus('')
+      setScreen('sessions')
+      void loadCommands()
       return
     }
 
     setStep(1)
     setScreen('wizard')
     void startCamera()
+  }
+
+  /** Quitter l'assistant pour « Mes sessions » sans refermer la réception en cours.
+   *
+   *  La caméra s'arrête — la carte de capture est démontée, sa piste resterait ouverte —
+   *  et l'avancement se relit, sinon la carte de la session afficherait un compteur
+   *  d'avant la dernière monture. */
+  function goToSessions() {
+    stopCamera()
+    setScreen('sessions')
+    void loadCommands()
   }
 
   function enterSession() {
@@ -2719,7 +2964,7 @@ function ScanPage() {
     // Les compteurs de réception bougent à chaque monture enregistrée, ici comme sur les
     // autres postes : la liste se relit à l'ouverture plutôt qu'au seul chargement de la
     // page, sinon elle affiche l'avancement d'il y a une heure.
-    if (next === 'listes') void loadCommands()
+    if (next === 'listes' || next === 'sessions') void loadCommands()
     setScreen(next)
   }
 
@@ -2727,6 +2972,10 @@ function ScanPage() {
   // Le compteur ne retient que ce qui reste à traiter : une liste déjà partie n'appelle
   // plus aucun geste.
   const newLists = lists.filter(list => !listDispatched(list)).length
+
+  // Le quota est épuisé : plus rien ne peut être enregistré sur cette session, la sortie
+  // n'est donc plus une option mais la seule suite possible.
+  const sessionFull = !session || session.registered >= session.target
 
   return (
     <div className={dark ? 'dark' : ''}>
@@ -2759,18 +3008,30 @@ function ScanPage() {
           )}
 
           {screen === 'sessions' && (
-            <SessionsGate user={user} session={session} movements={movements} onEnter={enterSession} />
+            <SessionsGate
+              user={user}
+              session={session}
+              movements={movements}
+              commands={commands}
+              loading={loadingCommands}
+              denied={commandsDenied}
+              joiningCode={joiningCode}
+              onResume={code => void resumeCommand(code)}
+              onActivate={() => {
+                setActivationError(false)
+                setActivationStatus('')
+                setScreen('activation')
+              }}
+              onReload={() => void loadCommands()}
+              onEnter={enterSession}
+            />
           )}
 
           {screen === 'historique' && (
             <HistoriqueScreen
               movements={movements}
               onPrint={record => void printMontureLabel(recordToLabel(record))}
-              onReturn={() => {
-                setActivationError(false)
-                setActivationStatus('La session est terminée. Scannez une nouvelle étiquette pour continuer.')
-                setScreen('activation')
-              }}
+              onReturn={goToSessions}
               hasSession={Boolean(session)}
             />
           )}
@@ -2779,19 +3040,12 @@ function ScanPage() {
             <ListesScreen
               lists={lists}
               loading={loadingLists}
-              commands={commands}
-              loadingCommands={loadingCommands}
-              commandsDenied={commandsDenied}
-              joiningCode={joiningCode}
-              activeCode={session?.code || ''}
+              // Le serveur ne renvoie que les listes de ce magasin : rien n'est écarté
+              // ici. La reprise des réceptions, elle, vit désormais dans « Mes sessions ».
+              hidden={0}
               stationId={stationIdOf(user)}
-              onResume={code => void resumeCommand(code)}
               onReload={() => { void loadLists(); void loadCommands() }}
-              onReturn={() => {
-                setActivationError(false)
-                setActivationStatus('La session est terminée. Scannez une nouvelle étiquette pour continuer.')
-                setScreen('activation')
-              }}
+              onReturn={goToSessions}
               hasSession={Boolean(session)}
             />
           )}
@@ -3008,8 +3262,24 @@ function ScanPage() {
                     ) : (
                       <>
                         <Btn onClick={() => void printMontureLabel(finalData)}>{ic.printer()} Réimprimer l'étiquette</Btn>
-                        <Btn variant="primary" className="ml-auto" onClick={() => resetAll(true)}>
-                          {ic.plus()} Enregistrer une autre monture
+
+                        {/* Une réception se quitte en cours de route : le magasinier peut
+                            reprendre plus tard, ou passer à une autre commande. */}
+                        {!sessionFull && (
+                          <Btn onClick={goToSessions}>{ic.calendar()} Mes sessions</Btn>
+                        )}
+
+                        {/* `resetAll` sait déjà distinguer les deux cas : relancer la
+                            caméra tant qu'il reste du quota, sortir vers « Mes sessions »
+                            quand il est épuisé. Seul le libellé change. */}
+                        <Btn
+                          variant={sessionFull ? 'success' : 'primary'}
+                          className="ml-auto"
+                          onClick={() => resetAll(true)}
+                        >
+                          {sessionFull
+                            ? <>{ic.check()} Réception terminée → Mes sessions</>
+                            : <>{ic.plus()} Enregistrer une autre monture</>}
                         </Btn>
                       </>
                     )}

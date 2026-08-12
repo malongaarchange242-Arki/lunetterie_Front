@@ -4,6 +4,7 @@ import './index.css'
 // Importé plutôt que référencé par URL : sans dossier public/, un chemin littéral ne
 // serait pas copié dans dist/ au build.
 import logoUrl from '../logo.jpeg'
+import { GlassTable, downloadCSV } from './GlassTable'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 
@@ -175,6 +176,7 @@ interface Glass {
   station_id?: number
   station_name?: string
   location_code?: string
+  photo_monture_url?: string
   created_at?: string
   updated_at?: string
   sold_at?: string
@@ -629,6 +631,36 @@ function DataTable<T>({ columns, rows, filename, empty }: {
   )
 }
 
+/** Le présentoir, sur le tableau commun à tous les postes (src/GlassTable.tsx).
+ *
+ *  La vendeuse conseille : elle a besoin du prix sous les yeux à chaque monture, et du
+ *  code-barres pour la porter sur une proforma. */
+function PresentoirTable({ glasses }: { glasses: Glass[] }) {
+  return (
+    <div className="rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+      <GlassTable
+        emptyLabel="Aucune monture au présentoir."
+        title="presentoir"
+        before={[{ header: 'Code-barres', mono: true }]}
+        after={[{ header: 'Prix', align: 'right' }]}
+        rows={glasses.map((glass, index) => ({
+          key: glass.barcode || `presentoir-${index}`,
+          photo: glass.photo_monture_url,
+          reference: glassRef(glass),
+          brand: glass.brand,
+          gender: glass.gender,
+          shape: glass.shape,
+          location: glass.location_code || glass.station_name,
+          entry: glass.created_at,
+          before: [glass.barcode],
+          after: [fmtFCFA(glass.price)],
+          status: { label: 'en rayon', tone: 'green' as const },
+        }))}
+      />
+    </div>
+  )
+}
+
 function GlassRow({ glass, selected, onToggle }: { glass: Glass; selected?: boolean; onToggle?: () => void }) {
   const interactive = Boolean(onToggle)
   return (
@@ -662,8 +694,21 @@ function GlassRow({ glass, selected, onToggle }: { glass: Glass; selected?: bool
 }
 
 // ── Données du poste ───────────────────────────────────────────────────────────
+/** Une monture expédiée vers ce poste mais pas encore arrivée.
+ *
+ *  Le magasin qui l'envoie n'a fait que l'expédier : elle est EN_TRANSIT, sortie de son stock
+ *  et absente du présentoir. Il faut la scanner ici pour qu'elle arrive — sans cette liste,
+ *  rien n'annonce qu'elle attend, et elle peut rester en transit indéfiniment. */
+interface IncomingGlass {
+  barcode: string
+  transferId: number
+  since?: string
+}
+
 interface StoreData {
   presentoir: Glass[]
+  /** Expédiées vers ce poste, en attente du scan qui les fera arriver. */
+  incoming: IncomingGlass[]
   reserved: Glass[]
   sold: Glass[]
   proformas: Proforma[]
@@ -671,7 +716,7 @@ interface StoreData {
   claims: Claim[]
 }
 
-const EMPTY_DATA: StoreData = { presentoir: [], reserved: [], sold: [], proformas: [], movements: [], claims: [] }
+const EMPTY_DATA: StoreData = { presentoir: [], incoming: [], reserved: [], sold: [], proformas: [], movements: [], claims: [] }
 
 /** Les ventes reconstituées depuis les proformas encaissées.
  *
@@ -742,9 +787,18 @@ function useStoreData(stationId: number | null) {
       apiFetch('/inventory/glasses?status=VENDUE'),
       apiFetch('/inventory/proformas'),
       apiFetch('/inventory/movements?limit=300&offset=0'),
+      // TOUS les transferts en cours, pas seulement ceux qui visent ce poste : une monture
+      // peut traîner une vieille ligne jamais réceptionnée puis repartir ailleurs, et seul
+      // son transfert le plus récent dit où elle va vraiment.
+      apiFetch('/inventory/transfers?status=IN_TRANSIT'),
+      // Les montures réellement en voyage. Le transfert seul ne suffit pas : sa ligne reste
+      // IN_TRANSIT pour toujours si personne ne la scanne à l'arrivée, y compris après que
+      // la monture a été vendue et est passée à tout autre chose. C'est le statut de la
+      // monture qui dit si elle voyage, le transfert seulement vers où.
+      apiFetch('/inventory/glasses?status=EN_TRANSIT'),
     ])
 
-    const [presentoirR, reservedR, soldR, proformasR, movementsR] = results
+    const [presentoirR, reservedR, soldR, proformasR, movementsR, transfersR, transitR] = results
     const glasses = (r: PromiseSettledResult<any>): Glass[] =>
       r.status === 'fulfilled' ? (r.value?.data?.glasses || []) : []
 
@@ -795,8 +849,41 @@ function useStoreData(stationId: number | null) {
         : '',
     )
 
+    // Pour chaque monture encore en transit, seul son DERNIER transfert dit où elle va. Une
+    // ligne ancienne jamais réceptionnée reste IN_TRANSIT indéfiniment : la prendre pour
+    // destination ferait attendre ici une monture repartie ailleurs depuis longtemps.
+    const transferts: any[] = transfersR.status === 'fulfilled'
+      ? (transfersR.value?.data?.transfers || transfersR.value?.data || [])
+      : []
+    const dernier = new Map<string, { to: number; transferId: number; since?: string }>()
+    for (const transfert of Array.isArray(transferts) ? transferts : []) {
+      const quand = String(transfert?.created_at || '')
+      for (const item of transfert?.items || []) {
+        if (String(item?.status || '').toUpperCase() !== 'IN_TRANSIT') continue
+        const barcode = String(item?.barcode || '')
+        if (!barcode) continue
+        const connu = dernier.get(barcode)
+        if (connu && String(connu.since || '') >= quand) continue
+        dernier.set(barcode, { to: Number(transfert.to_station_id), transferId: Number(transfert.id), since: quand })
+      }
+    }
+    // Deux conditions, et il faut les deux : la monture est EN_TRANSIT (elle voyage
+    // vraiment), et son dernier transfert vise ce poste (elle vient ici).
+    const enTransit = new Set<string>(
+      (transitR.status === 'fulfilled' ? (transitR.value?.data?.glasses || []) : [])
+        .map((glass: any) => String(glass?.barcode || ''))
+        .filter(Boolean),
+    )
+    const incoming: IncomingGlass[] = []
+    for (const [barcode, voyage] of dernier) {
+      if (voyage.to !== stationId) continue
+      if (!enTransit.has(barcode)) continue
+      incoming.push({ barcode, transferId: voyage.transferId, since: voyage.since })
+    }
+
     setData({
       presentoir: glasses(presentoirR),
+      incoming,
       reserved: glasses(reservedR),
       sold: [...vendues, ...encaissees],
       proformas,
@@ -996,19 +1083,69 @@ function DashboardScreen({ data, user, onNavigate, onOpenTable }: {
         </div>
       </div>
 
+      {/* Rien n'annonçait qu'une monture était en route : le magasin l'expédie, elle sort de
+          son stock, et elle n'apparaît ici qu'une fois scannée. Entre les deux, personne ne
+          savait qu'il y avait un geste à faire — et elle pouvait rester en transit des jours. */}
+      {data.incoming.length > 0 && (
+        <div>
+          <SectionTitle
+            action={
+              <button
+                onClick={() => onNavigate('scan')}
+                className="text-xs font-semibold text-amber-700 hover:underline dark:text-amber-400"
+              >
+                Scanner →
+              </button>
+            }
+          >
+            En route vers le présentoir
+          </SectionTitle>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+              {data.incoming.length} monture{data.incoming.length > 1 ? 's' : ''} expédiée{data.incoming.length > 1 ? 's' : ''} vers ce poste,
+              en attente de scan
+            </p>
+            <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-300/80">
+              Elles ne sont ni dans le stock du magasin ni au présentoir tant qu'elles n'ont pas été
+              scannées ici. Un passage par « Scanner une monture » termine leur voyage.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {data.incoming.map(item => (
+                <span
+                  key={`${item.transferId}-${item.barcode}`}
+                  className="rounded-lg bg-white px-2.5 py-1.5 font-mono text-xs font-semibold text-amber-900 dark:bg-slate-900 dark:text-amber-200"
+                >
+                  {item.barcode}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
-        <SectionTitle>Présentoir</SectionTitle>
+        <SectionTitle
+          action={
+            data.presentoir.length > 6
+              ? (
+                <button
+                  onClick={() => onNavigate('scan')}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                >
+                  Voir les {data.presentoir.length} montures →
+                </button>
+              )
+              : <span className="text-xs text-slate-500 dark:text-slate-400">{data.presentoir.length} monture{data.presentoir.length > 1 ? 's' : ''}</span>
+          }
+        >
+          Présentoir
+        </SectionTitle>
         {data.presentoir.length === 0 ? (
           <EmptyState>Aucune monture au présentoir.</EmptyState>
         ) : (
-          <div className="space-y-2">
-            {data.presentoir.slice(0, 6).map(glass => <GlassRow key={glass.barcode} glass={glass} />)}
-            {data.presentoir.length > 6 && (
-              <button onClick={() => onNavigate('scan')} className="w-full text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 py-2">
-                Voir les {data.presentoir.length} montures →
-              </button>
-            )}
-          </div>
+          // Le tableau de bord n'en montre que les six premières : la liste complète vit sur
+          // l'écran Scan, où elle a la place de dérouler.
+          <PresentoirTable glasses={data.presentoir.slice(0, 6)} />
         )}
       </div>
     </div>
@@ -1396,7 +1533,6 @@ function GlassDetail({ barcode, data, stationId }: { barcode: string; data: Stor
           <DetailField label="Couleur" value={glass.color} />
           <DetailField label="Matière" value={glass.material} />
           <DetailField label="Genre" value={glass.gender} />
-          <DetailField label="Taille" value={glass.size} />
           <DetailField label="Gamme" value={getGamme(glass.price)} />
           <DetailField label="Statut" value={String(glass.status || '').replace(/_/g, ' ')} />
           <DetailField label="Emplacement" value={glass.location_code} />
@@ -1932,31 +2068,6 @@ function ProformaScreen({ stationId, user, onDone }: {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[1fr_22rem] gap-4 items-start">
       <div className="space-y-4">
-        {/* En tête de formulaire : la cliente revient avec sa facture, on la scanne
-            avant de commencer plutôt que de tout ressaisir puis de s'en apercevoir. */}
-        <Card>
-          <p className="mb-3 text-sm font-bold text-slate-900 dark:text-white">Reprendre une facture</p>
-          <form onSubmit={e => { e.preventDefault(); void reuseInvoice() }} className="flex flex-col gap-2 sm:flex-row">
-            <input
-              type="text"
-              value={reuseCode}
-              onChange={e => { setReuseCode(e.target.value); setReuseMessage('') }}
-              placeholder="Scannez le code-barres de la facture ou saisissez son numéro"
-              autoComplete="off"
-              className={FIELD}
-            />
-            <button
-              type="submit"
-              disabled={reuseBusy || !reuseCode.trim()}
-              className="flex-shrink-0 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700/50"
-            >
-              {reuseBusy ? 'Recherche…' : 'Reprendre'}
-            </button>
-          </form>
-          <p className={`mt-2 text-xs ${reuseTone === 'error' ? 'text-red-600 dark:text-red-400' : reuseTone === 'success' ? 'text-green-700 dark:text-green-400' : 'text-slate-400'}`}>
-            {reuseMessage || "Remplit le client et l'ordonnance. Les montures restent à scanner."}
-          </p>
-        </Card>
 
         <Card>
           <p className="text-sm font-bold text-slate-900 dark:text-white mb-3">Client</p>
@@ -2755,7 +2866,14 @@ function VentesScreen({ data, user }: { data: StoreData; user: any }) {
 }
 
 // ── Scan monture / présentoir ──────────────────────────────────────────────────
-function ScanScreen({ data, stationId }: { data: StoreData; stationId: number | null }) {
+function ScanScreen({ data, stationId, onReceived }: {
+  data: StoreData
+  stationId: number | null
+  /** Le scan d'une monture en transit vaut réception : elle entre au présentoir et quitte
+   *  la liste « en route ». Sans ce rappel, le tableau de bord continuerait de réclamer un
+   *  scan déjà fait — précisément le genre de mensonge qu'on essaie d'éliminer. */
+  onReceived: () => void
+}) {
   const [code, setCode] = useState('')
   const [found, setFound] = useState<Glass | null>(null)
   const [status, setStatus] = useState('Prêt à scanner.')
@@ -2805,7 +2923,16 @@ function ScanScreen({ data, stationId }: { data: StoreData; stationId: number | 
       const glass = payload?.data?.glass || payload?.data || null
       if (!glass || !glass.barcode) throw new Error('Monture introuvable.')
       setFound(glass)
-      setStatus(`${glassRef(glass)} trouvée.`)
+      // Le serveur a pu réceptionner la monture au passage : le scan avec `station_id`
+      // déclenche PlaceOnDisplay, qui clôt un transfert en cours. On le dit, et on relit
+      // les listes du poste pour que « en route » et « présentoir » suivent.
+      const attendue = data.incoming.some(item => item.barcode === glass.barcode)
+      if (attendue) {
+        setStatus(`${glassRef(glass)} reçue au présentoir.`)
+        onReceived()
+      } else {
+        setStatus(`${glassRef(glass)} trouvée.`)
+      }
       setTone('success')
       setCode('')
     } catch (error: any) {
@@ -2893,7 +3020,29 @@ function ScanScreen({ data, stationId }: { data: StoreData; stationId: number | 
               <p className="text-lg font-bold text-slate-900 dark:text-white truncate">{glassRef(found)}</p>
               <p className="text-xs text-slate-400">{found.barcode}</p>
             </div>
-            <p className="text-lg font-black tabular-nums flex-shrink-0" style={{ color: '#2563eb' }}>{fmtFCFA(found.price)}</p>
+            <div className="flex flex-shrink-0 items-center gap-3">
+              <p className="text-lg font-black tabular-nums" style={{ color: '#2563eb' }}>{fmtFCFA(found.price)}</p>
+              <button
+                type="button"
+                onClick={() => downloadCSV(
+                  `monture-${found.barcode || glassRef(found)}`,
+                  ['Référence', 'Code-barres', 'Marque', 'Forme', 'Couleur', 'Matière', 'Genre',
+                    'Gamme', 'Statut', 'Emplacement', 'Station', 'Prix', 'Enregistrée le'],
+                  [[
+                    glassRef(found), found.barcode || '', found.brand || '', found.shape || '',
+                    found.color || '', found.material || '', found.gender || '',
+                    getGamme(found.price), String(found.status || ''), found.location_code || '',
+                    found.station_name || '', String(found.price ?? ''), fmtDate(found.created_at),
+                  ]],
+                )}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3v12M7 11l5 5 5-5M4 21h16" />
+                </svg>
+                Télécharger en excel
+              </button>
+            </div>
           </div>
           <div className="mt-5 flex flex-col lg:flex-row gap-4">
             <div className="flex-1 flex flex-col gap-4">
@@ -2901,18 +3050,32 @@ function ScanScreen({ data, stationId }: { data: StoreData; stationId: number | 
               <Photo src={branchePhoto(found)} label="Branche" />
             </div>
 
-            <div className="w-full lg:w-[45%] grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
-              {[
-                ['Marque', found.brand], ['Forme', found.shape], ['Couleur', found.color],
-                ['Matière', found.material], ['Genre', found.gender], ['Taille', found.size],
-                ['Gamme', getGamme(found.price)], ['Statut', found.status], ['Emplacement', found.location_code],
-                ['Station', found.station_name],
-              ].map(([label, value]) => (
-                <div key={String(label)}>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500">{label}</p>
-                  <p className="text-sm text-slate-700 dark:text-slate-200 break-words">{value || '—'}</p>
-                </div>
-              ))}
+            <div className="w-full lg:w-[45%]">
+              {/* L'emplacement sort de la grille : c'est le seul champ qui déclenche un
+                  déplacement — la vendeuse le lit pour aller chercher la monture. Noyé
+                  parmi dix attributs descriptifs, il se cherchait à chaque fois. */}
+              <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900/50">
+                <p className="text-[11px] text-slate-400 dark:text-slate-500">Emplacement</p>
+                <p className="font-mono text-sm font-bold leading-tight text-slate-900 break-words dark:text-white">
+                  {found.location_code || '—'}
+                </p>
+                {found.station_name && (
+                  <p className="mt-0.5 text-[11px] text-slate-400">{found.station_name}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
+                {[
+                  ['Marque', found.brand], ['Forme', found.shape], ['Couleur', found.color],
+                  ['Matière', found.material], ['Genre', found.gender],
+                  ['Gamme', getGamme(found.price)], ['Statut', found.status],
+                ].map(([label, value]) => (
+                  <div key={String(label)}>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500">{label}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200 break-words">{value || '—'}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -2945,15 +3108,24 @@ function ScanScreen({ data, stationId }: { data: StoreData; stationId: number | 
       )}
 
       <div>
-        <SectionTitle action={<span className="text-xs text-slate-500 dark:text-slate-400">{data.presentoir.length} monture{data.presentoir.length > 1 ? 's' : ''}</span>}>
+        <SectionTitle
+          action={
+            <div className="text-right">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {data.presentoir.length} monture{data.presentoir.length > 1 ? 's' : ''}
+              </span>
+              <span className="block text-xs text-slate-400 dark:text-slate-500">
+                {new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+              </span>
+            </div>
+          }
+        >
           Présentoir
         </SectionTitle>
         {data.presentoir.length === 0 ? (
           <EmptyState>Aucune monture au présentoir.</EmptyState>
         ) : (
-          <div className="space-y-2">
-            {data.presentoir.map(glass => <GlassRow key={glass.barcode} glass={glass} />)}
-          </div>
+          <PresentoirTable glasses={data.presentoir} />
         )}
       </div>
     </div>
@@ -3312,7 +3484,7 @@ function VendeusePage() {
                 {screen === 'dashboard' && <DashboardScreen data={data} user={user} onNavigate={navigate} onOpenTable={setTable} />}
                 {screen === 'proforma' && <ProformaScreen stationId={stationId} user={user} onDone={() => void reload()} />}
                 {screen === 'ventes' && <VentesScreen data={data} user={user} />}
-                {screen === 'scan' && <ScanScreen data={data} stationId={stationId} />}
+                {screen === 'scan' && <ScanScreen data={data} stationId={stationId} onReceived={() => void reload()} />}
                 {screen === 'reclamation' && <ReclamationScreen stationId={stationId} onDone={() => void reload()} />}
                 {screen === 'stats' && <StatsScreen data={data} user={user} />}
               </>

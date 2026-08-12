@@ -154,7 +154,7 @@ if (typeof window !== 'undefined' && window.fetch) {
 
 const COUNTRIES: CountryItem[] = []
 
-const REVENUE_ROWS: Record<string, { ref: string; montant: number; date: string; client: string; status: string }[]> = {}
+type RevenueRow = { ref: string; montant: number; date: string; client: string; status: string }
 
 function normalizeShapeName(value?: string) {
   const raw = String(value || '').trim()
@@ -841,6 +841,91 @@ function buildCityStockCounts(
   return counts
 }
 
+/** Le chiffre d'affaires ne se lit pas sur les montures. Un encaissement les passe en
+ *  VENDUE puis les expédie aussitôt au laboratoire (EN_TRANSIT), si bien que
+ *  `/glasses?status=VENDUE` ne renvoie presque jamais une vente : compter dessus affichait
+ *  0 FCFA face à des proformas réglées. Il se lit sur les proformas, seules à porter le
+ *  montant encaissé — verres, accessoires et montage compris, que la fiche monture ignore.
+ *
+ *  `total_amount` est le montant du devis, figé à l'émission (proforma_repository.go:72).
+ *  Si la Caisse a rendu une monture au présentoir, la proforma reste comptée à son montant
+ *  d'origine et le CA est donc majoré d'autant. La corriger demanderait de charger les
+ *  lignes une proforma à la fois (`/proformas/:id` ne les renvoie qu'une par une), soit une
+ *  requête par document sur tout l'historique — trop cher pour un tableau de bord. */
+function buildCityRevenue(
+  stations: Array<{ id?: number; name?: string; city?: string; type?: string }>,
+  proformas: Array<{
+    id?: number
+    code?: string
+    station_id?: number | string
+    client_name?: string
+    total_amount?: number | string
+    status?: string
+    settled_at?: string
+    created_at?: string
+  }>
+) {
+  const cityByStationId = new Map<number, string>()
+  stations.forEach(station => {
+    if (station?.id == null) return
+    const cityName = normalizeStationCityName(station)
+    if (!cityName) return
+    if (isStoreStation(station) || /présentoir|presentoir|laboratoire|labo/i.test(String(station.name || ''))) {
+      cityByStationId.set(Number(station.id), cityName)
+    }
+  })
+
+  const revenueByCity: Record<string, number> = {}
+  const rowsByCity: Record<string, RevenueRow[]> = {}
+
+  proformas.forEach(proforma => {
+    // REGLEE et non EN_ATTENTE : un devis en attente n'a rien encaissé, et le serveur ne
+    // règle une proforma que si une monture au moins a été vendue.
+    if (String(proforma?.status || '').trim().toUpperCase() !== 'REGLEE') return
+
+    const stationId = Number(proforma.station_id)
+    const city = (Number.isFinite(stationId) ? cityByStationId.get(stationId) : undefined) || 'Pointe-Noire'
+    const montant = Number(proforma.total_amount) || 0
+
+    revenueByCity[city] = (revenueByCity[city] || 0) + montant
+
+    if (!rowsByCity[city]) rowsByCity[city] = []
+    rowsByCity[city].push({
+      // Le code sert de clé de liste : sans lui, deux proformas se recouvriraient à
+      // l'affichage. L'identifiant prend le relais quand il manque.
+      ref: proforma.code || `#${proforma.id ?? rowsByCity[city].length + 1}`,
+      montant,
+      // La date de règlement prime sur celle d'émission : c'est le jour où l'argent est
+      // entré, et c'est sur elle que filtre le calendrier de l'écran ville.
+      date: String(proforma.settled_at || proforma.created_at || '').slice(0, 10),
+      client: proforma.client_name || '—',
+      status: 'Réglée',
+    })
+  })
+
+  Object.values(rowsByCity).forEach(rows => rows.sort((a, b) => b.date.localeCompare(a.date)))
+
+  return { revenueByCity, rowsByCity }
+}
+
+/** Le stock et le CA se comptent sur deux sources séparées, et une ville peut n'apparaître
+ *  que dans l'une : un magasin qui a tout vendu n'a plus de monture à compter, mais son
+ *  chiffre d'affaires existe. Sans cette entrée créée au besoin, il disparaîtrait du total. */
+function mergeRevenueIntoCityCounts(
+  counts: Record<string, CityStats>,
+  revenueByCity: Record<string, number>
+): Record<string, CityStats> {
+  const merged: Record<string, CityStats> = { ...counts }
+
+  Object.entries(revenueByCity).forEach(([city, revenue]) => {
+    merged[city] = merged[city]
+      ? { ...merged[city], revenue }
+      : { local: 0, presentoir: 0, labo: 0, reserve: 0, vendues: 0, transit: 0, color: '#16a34a', revenue }
+  })
+
+  return merged
+}
+
 function getFlagEmoji(code?: string) {
   if (!code) return '🌍'
   const normalized = code.toUpperCase()
@@ -861,6 +946,9 @@ const STATUS_COLOR: Record<string, string> = {
   'En stock': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   'Réservé': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   'Vendu': 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  // Statut d'une proforma encaissée, pas d'une monture : c'est lui que portent les lignes
+  // du chiffre d'affaires, qui se lit sur les documents et non sur le stock.
+  'Réglée': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   'Payé': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   'Actif': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   'Inactif': 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
@@ -1153,6 +1241,9 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
   const montureDenominator = `sur ${summary.totalUnits.toLocaleString('fr-FR')} monture${summary.totalUnits > 1 ? 's' : ''}`
   const referenceDenominator = `sur ${summary.totalReferences.toLocaleString('fr-FR')} référence${summary.totalReferences > 1 ? 's' : ''}`
 
+  const totalRevenue = Object.values(cityStockCounts).reduce((sum, stats) => sum + (stats?.revenue || 0), 0)
+  const revenueCities = Object.values(cityStockCounts).filter(stats => (stats?.revenue || 0) > 0).length
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-3">
@@ -1161,10 +1252,16 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
           { block: 'ca' as Block, label: "Chiffre d'affaire", color: '#16a34a', bg: 'border-green-200 dark:border-green-800', icon: ic.chart },
           { block: 'suivi' as Block, label: 'Suivi des lunettes', color: '#9333ea', bg: 'border-purple-200 dark:border-purple-800', icon: ic.map },
         ].map(item => {
-          const value = item.block === 'total' && summary.hasData ? summary.totalUnits.toLocaleString('fr-FR')
+          // Le CA a sa propre somme : il vient des proformas réglées, quand `summary` ne
+          // compte que des montures. Les deux autres tuiles ne pouvaient donc pas le servir.
+          // À zéro, on garde « — » plutôt qu'un « 0 FCFA » : un chargement en échec et une
+          // journée sans vente donnent le même chiffre, et l'un des deux serait un mensonge.
+          const value = item.block === 'ca' ? (totalRevenue > 0 ? fmtFCFA(totalRevenue) : '—')
+            : item.block === 'total' && summary.hasData ? summary.totalUnits.toLocaleString('fr-FR')
             : item.block === 'suivi' && summary.hasData ? summary.totalUnits.toLocaleString('fr-FR')
             : '—'
-          const note = item.block === 'total' && summary.hasData ? `${summary.totalUnits.toLocaleString('fr-FR')} monture${summary.totalUnits > 1 ? 's' : ''}`
+          const note = item.block === 'ca' ? (totalRevenue > 0 ? `${revenueCities} ville${revenueCities > 1 ? 's' : ''} avec des ventes` : 'Aucune donnée disponible')
+            : item.block === 'total' && summary.hasData ? `${summary.totalUnits.toLocaleString('fr-FR')} monture${summary.totalUnits > 1 ? 's' : ''}`
             : item.block === 'suivi' && summary.hasData ? `${summary.totalUnits.toLocaleString('fr-FR')} monture${summary.totalUnits > 1 ? 's' : ''}`
             : 'Aucune donnée disponible'
 
@@ -1342,7 +1439,9 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
   // Le bandeau annonce le parc complet enregistré en base, pas seulement ce qui est déjà
   // arrivé en magasin : les lignes en dessous n'en sont qu'une répartition.
   const totalFrames = summary.hasData ? summary.totalUnits : computedCityTotal
-  const totalRevenue = summary.hasData && computedCityRevenue === 0 ? 0 : computedCityRevenue
+  // Les deux branches d'origine rendaient la même valeur : le CA est la somme des villes,
+  // sans condition. Contrairement au total des montures, aucune autre source ne l'annonce.
+  const totalRevenue = computedCityRevenue
   // Tout ce qui n'est pas encore parti vers un magasin est resté à l'entrepôt central. On le
   // déduit par soustraction plutôt que de le lire d'une autre source : ainsi la somme affichée
   // (pays + stock général) retombe toujours sur le total annoncé, même si les deux requêtes
@@ -2071,8 +2170,8 @@ function SuiviDetailScreen({ pays, city, section, cityStockCounts, framesByCity,
 }
 
 // ── City detail screen ────────────────────────────────────────────────────────
-function CityDetailScreen({ block, pays, city, onNavigate, cityStockCounts, framesByCity }: {
-  block: 'total' | 'ca'; pays: string; city: string; onNavigate: (s: NavScreen) => void; cityStockCounts: Record<string, CityStats>; framesByCity: Record<string, FrameRecord[]>
+function CityDetailScreen({ block, pays, city, onNavigate, cityStockCounts, framesByCity, revenueByCity }: {
+  block: 'total' | 'ca'; pays: string; city: string; onNavigate: (s: NavScreen) => void; cityStockCounts: Record<string, CityStats>; framesByCity: Record<string, FrameRecord[]>; revenueByCity: Record<string, RevenueRow[]>
 }) {
   const [calYear, setCalYear] = useState(2026)
   const [calMonth, setCalMonth] = useState(7)
@@ -2186,7 +2285,7 @@ function CityDetailScreen({ block, pays, city, onNavigate, cityStockCounts, fram
   }
 
   if (block === 'ca') {
-    const rows = (REVENUE_ROWS[city] || []).filter(r =>
+    const rows = (revenueByCity[city] || []).filter(r =>
       filterByDate(r.date) && (search === '' || r.ref.toLowerCase().includes(search.toLowerCase()) || r.client.toLowerCase().includes(search.toLowerCase()))
     )
     const total = rows.reduce((s, r) => s + r.montant, 0)
@@ -5584,6 +5683,7 @@ export default function App() {
   const [cityStockCounts, setCityStockCounts] = useState<Record<string, CityStats>>({})
   const [stationCities, setStationCities] = useState<string[]>([])
   const [framesByCity, setFramesByCity] = useState<Record<string, FrameRecord[]>>({})
+  const [revenueByCity, setRevenueByCity] = useState<Record<string, RevenueRow[]>>({})
   const [chatButtonPos, setChatButtonPos] = useState<{ x: number; y: number } | null>(null)
   const chatButtonDragRef = useRef({ active: false, startX: 0, startY: 0, originX: 0, originY: 0, moved: false })
   const preventChatButtonClickRef = useRef(false)
@@ -5617,8 +5717,18 @@ export default function App() {
         return payload?.data?.glasses || []
       })
 
-    Promise.allSettled([stockSummaryPromise, stationsPromise, activeGlassesPromise])
-      .then(([stockResult, stationsResult, glassesResult]) => {
+    // Les proformas portent le chiffre d'affaires — les montures, non : voir buildCityRevenue.
+    // La liste suffit, ses en-têtes contiennent déjà `total_amount` et `station_id` ; charger
+    // les lignes coûterait une requête par document.
+    const proformasPromise = fetch(`${API_URL}/inventory/proformas`, { headers })
+      .then(async response => {
+        if (!response.ok) throw new Error('proformas unavailable')
+        const payload = await response.json().catch(() => ({}))
+        return payload?.data?.proformas || []
+      })
+
+    Promise.allSettled([stockSummaryPromise, stationsPromise, activeGlassesPromise, proformasPromise])
+      .then(([stockResult, stationsResult, glassesResult, proformasResult]) => {
         const summary = stockResult.status === 'fulfilled' ? summarizeStockSummary(stockResult.value) : { totalUnits: 0, hasData: false }
 
         if (stockResult.status === 'fulfilled') {
@@ -5645,6 +5755,13 @@ export default function App() {
           setStationCities([])
         }
 
+        // Le CA vient des proformas, le stock des montures : que l'une des deux listes
+        // tombe ne doit pas emporter l'autre.
+        const revenue = stationsResult.status === 'fulfilled' && proformasResult.status === 'fulfilled'
+          ? buildCityRevenue(stationsResult.value, proformasResult.value)
+          : { revenueByCity: {}, rowsByCity: {} }
+        setRevenueByCity(revenue.rowsByCity)
+
         if (stationsResult.status === 'fulfilled' && glassesResult.status === 'fulfilled') {
           const stationMap = new Map<number, string>()
           ;(stationsResult.value || []).forEach((station: any) => {
@@ -5657,10 +5774,11 @@ export default function App() {
           })
 
           const builtCounts = buildCityStockCounts(stationsResult.value, glassesResult.value)
-          setCityStockCounts(Object.keys(builtCounts).length > 0 ? builtCounts : fallbackCounts)
+          const counts = Object.keys(builtCounts).length > 0 ? builtCounts : fallbackCounts
+          setCityStockCounts(mergeRevenueIntoCityCounts(counts, revenue.revenueByCity))
           setFramesByCity(buildFrameRowsFromGlasses(glassesResult.value, stationMap))
         } else {
-          setCityStockCounts(fallbackCounts)
+          setCityStockCounts(mergeRevenueIntoCityCounts(fallbackCounts, revenue.revenueByCity))
           setFramesByCity({})
         }
       })
@@ -5668,6 +5786,7 @@ export default function App() {
         setStockSummary([])
         setCityStockCounts({})
         setStationCities([])
+        setRevenueByCity({})
       })
   }, [])
 
@@ -5740,7 +5859,7 @@ export default function App() {
     switch (current.type) {
       case 'dashboard': return <DashboardScreen onNavigate={navigate} stockSummary={stockSummary} cityStockCounts={cityStockCounts} stationCities={stationCities} />
       case 'pays': return <PaysScreen block={current.block} onNavigate={navigate} cityStockCounts={cityStockCounts} stationCities={stationCities} stockSummary={stockSummary} />
-      case 'city': return <CityDetailScreen block={current.block} pays={current.pays} city={current.city} onNavigate={navigate} cityStockCounts={cityStockCounts} framesByCity={framesByCity} />
+      case 'city': return <CityDetailScreen block={current.block} pays={current.pays} city={current.city} onNavigate={navigate} cityStockCounts={cityStockCounts} framesByCity={framesByCity} revenueByCity={revenueByCity} />
       case 'suivi-detail': return <SuiviDetailScreen pays={current.pays} city={current.city} section={current.section} cityStockCounts={cityStockCounts} framesByCity={framesByCity} onNavigate={navigate} />
       case 'stock-general': return <StockGeneralScreen onNavigate={navigate} />
       case 'frame': return <FrameDetailScreen frameRef={current.ref} city={current.city} framesByCity={framesByCity} />

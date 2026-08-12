@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 // Importé plutôt que référencé par URL : sans dossier public/, un chemin littéral ne
 // serait pas copié dans dist/ au build.
 import logoUrl from '../logo.jpeg'
 import type { ReactElement, ReactNode } from 'react'
+import { GlassTable, fmtPrix } from './GlassTable'
 
 // Écran du poste Responsable magasin (rôle RESPONSABLE_STATION).
 // Tout ce qui s'affiche vient de l'API, dans le périmètre de la station du compte.
@@ -87,6 +88,7 @@ interface Glass {
   status?: string
   station_id?: number
   location_code?: string
+  photo_monture_url?: string
   created_at?: string
   updated_at?: string
   sold_at?: string
@@ -220,6 +222,8 @@ const ic = {
   hand: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v7M10 10.5V6a2 2 0 0 0-4 0v9"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2a8 8 0 0 1-8-8"/></svg>,
   x: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
   refresh: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6"/></svg>,
+  // Carton aux rabats ouverts : le colis qui arrive, distinct du cube plein de « Stock ».
+  carton: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M4 9.5V19a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9.5"/><path d="M2.5 6.5 5 3.5h14l2.5 3-2 3H4.5z"/><path d="M9.5 13h5"/></svg>,
   sun: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>,
   moon: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>,
 } satisfies Record<string, IconFn>
@@ -253,18 +257,65 @@ const TONE = {
 }
 
 type Tone = keyof typeof TONE
-type TabId = 'tableau' | 'ventes' | 'remise' | 'presentoir' | 'stock'
+type TabId = 'tableau' | 'ventes' | 'cartons' | 'remise' | 'presentoir' | 'stock'
 
 // Les libellés sont ceux de la maquette. Les identifiants, eux, disent ce que l'onglet
 // fait côté métier — « remise » remet au client, « presentoir » expédie au Présentoir —
 // et servent au code qui envoie les transferts : les renommer brouillerait la lecture.
+//
+// « Réception » a été renommé « Remise client » : il porte la sortie du cycle, pas l'entrée.
+// L'entrée, c'est « Cartons reçus », qui pointe les colis venus du stock général — les deux
+// portaient le même nom, et c'était le meilleur moyen de chercher l'un en ouvrant l'autre.
 const TABS: { id: TabId; label: string; short: string; icon: IconFn }[] = [
   { id: 'tableau', label: 'Tableau de bord', short: 'Bord', icon: ic.home },
   { id: 'ventes', label: 'Ventes', short: 'Ventes', icon: ic.chart },
-  { id: 'remise', label: 'Réception', short: 'Réception', icon: ic.hand },
+  { id: 'cartons', label: 'Cartons reçus', short: 'Cartons', icon: ic.carton },
+  { id: 'remise', label: 'Remise client', short: 'Remise', icon: ic.hand },
   { id: 'presentoir', label: 'Scanner', short: 'Scanner', icon: ic.scan },
   { id: 'stock', label: 'Stock', short: 'Stock', icon: ic.pkg },
 ]
+
+// ── Cartons reçus ─────────────────────────────────────────────────────────────
+/** Un colis parti du stock général vers ce magasin.
+ *
+ *  `item_count` est ce que le carton annonce, figé au départ. Ce qui est réellement arrivé se
+ *  lit dans le transfert qu'il transporte, jamais dans le navigateur : deux postes peuvent
+ *  pointer le même carton, et une reprise après rechargement doit retrouver l'avancement réel. */
+interface SendBox {
+  id: number
+  code: string
+  reference: string
+  city: string
+  session_code?: string
+  item_count: number
+  status: string
+  transfer_id?: number
+  missing_count?: number
+  created_at?: string
+}
+
+interface SendBoxItem {
+  id: number
+  glass_id?: number
+  barcode?: string
+  reference?: string
+  /** D'où la monture est partie : une case du stock général, sans usage ici. */
+  location_code?: string
+  /** Où la ranger dans CE magasin, attribué au pointage. Nul tant qu'elle est en transit. */
+  stock_location_code?: string
+  /** Repris de la fiche monture : on reconnaît une monture en main à sa photo et à sa
+   *  marque avant son code-barres. */
+  photo_monture_url?: string
+  price?: number | string
+  brand?: string
+  shape?: string
+  color?: string
+  gender?: string
+  /** Date d'enregistrement de la monture, distincte de celle de la ligne de carton. */
+  glass_created_at?: string
+  /** Cette monture est entrée en stock. Vient du serveur, pas du pointage local. */
+  received: boolean
+}
 
 /** Au-delà, la paire retourne au stock local (règle métier du magasin). */
 const RESERVE_LIMITE_JOURS = 10
@@ -767,6 +818,152 @@ function ResponsableMagasinPage() {
     })()
   }, [ready])
 
+  // ── Cartons reçus ───────────────────────────────────────────────────────────
+  // Les montures d'un carton voyagent EN_TRANSIT : elles n'entrent au stock du magasin qu'au
+  // scan de leur code-barres ici. Rien n'est donc pointé localement — chaque scan part au
+  // serveur, et c'est sa réponse qui fait foi.
+  const [cartonsAttendus, setCartonsAttendus] = useState<SendBox[]>([])
+  const [cartonsLoading, setCartonsLoading] = useState(false)
+  const [cartonsErreur, setCartonsErreur] = useState('')
+  const [carton, setCarton] = useState<SendBox | null>(null)
+  const [cartonItems, setCartonItems] = useState<SendBoxItem[]>([])
+  const [scanCarton, setScanCarton] = useState('')
+  const [scanMonture, setScanMonture] = useState('')
+  const [cartonBusy, setCartonBusy] = useState(false)
+  const [cartonMessage, setCartonMessage] = useState('')
+  const [cartonTone, setCartonTone] = useState<Tone>('blue')
+  const [cartonManquantes, setCartonManquantes] = useState<SendBoxItem[]>([])
+  const montureRef = useRef<HTMLInputElement>(null)
+  /** Un carton ne s'ouvre que par le scan de son étiquette : la liste des colis attendus
+   *  n'ouvre donc rien, elle renvoie la douchette vers ce champ. */
+  const cartonRef = useRef<HTMLInputElement>(null)
+
+  const chargerCartons = useCallback(async () => {
+    if (!stationId) return
+    setCartonsLoading(true)
+    setCartonsErreur('')
+    try {
+      const payload = await apiFetch(`/inventory/send-boxes/pending?station_id=${stationId}`)
+      setCartonsAttendus(payload?.data?.boxes || [])
+    } catch (err) {
+      // Un échec ne doit pas se déguiser en « aucun colis » : les deux mènent à une liste
+      // vide, mais l'un demande d'attendre le camion et l'autre d'appeler l'administrateur.
+      // Le scan direct du code-barres reste possible dans les deux cas.
+      setCartonsAttendus([])
+      setCartonsErreur(err instanceof Error ? err.message : 'Liste des colis indisponible.')
+    } finally {
+      setCartonsLoading(false)
+    }
+  }, [stationId])
+
+  useEffect(() => { void chargerCartons() }, [chargerCartons])
+
+  /** Ouvre — ou reprend — le pointage d'un carton. Le serveur renvoie le contenu annoncé et
+   *  ce qui est déjà entré en stock : rouvrir après un rechargement ne fait rien perdre. */
+  async function ouvrirCarton(code: string) {
+    const propre = String(code || '').trim()
+    if (!propre || cartonBusy || !stationId) return
+
+    setCartonBusy(true)
+    try {
+      const payload = await apiFetch('/inventory/send-boxes/open', {
+        method: 'POST',
+        body: JSON.stringify({ code: propre, station_id: stationId }),
+      })
+      const ouvert: SendBox = payload?.data?.box
+      const items: SendBoxItem[] = payload?.data?.items || []
+      setCarton(ouvert)
+      setCartonItems(items)
+      setCartonManquantes([])
+      setScanCarton('')
+      setScanMonture('')
+      const restant = items.filter(item => !item.received).length
+      setCartonMessage(restant === 0
+        ? 'Toutes les montures de ce carton sont déjà reçues : vous pouvez le clôturer.'
+        : `Carton ouvert : ${restant} monture${restant > 1 ? 's' : ''} à scanner.`)
+      setCartonTone(restant === 0 ? 'green' : 'blue')
+      window.setTimeout(() => montureRef.current?.focus(), 0)
+    } catch (err) {
+      setCartonMessage(err instanceof Error ? err.message : "Impossible d'ouvrir ce carton.")
+      setCartonTone('red')
+    } finally {
+      setCartonBusy(false)
+    }
+  }
+
+  /** Un scan = une monture qui entre réellement au stock. L'état local n'est pas deviné : on
+   *  reprend la ligne renvoyée par le serveur, seule à savoir si le transfert s'est clos. */
+  async function recevoirMonture(barcode: string) {
+    const propre = String(barcode || '').trim()
+    if (!propre || cartonBusy || !carton || !stationId) return
+
+    setCartonBusy(true)
+    try {
+      const payload = await apiFetch('/inventory/send-boxes/receive', {
+        method: 'POST',
+        body: JSON.stringify({ code: carton.code, barcode: propre, station_id: stationId }),
+      })
+      // L'emplacement attribué est le seul renseignement qui compte à cet instant : le
+      // magasinier a la monture en main et cherche où la poser.
+      const emplacement: string = payload?.data?.location?.code || ''
+      const cible = propre.toLowerCase()
+      setCartonItems(items => items.map(item =>
+        String(item.barcode || '').toLowerCase() === cible || String(item.reference || '').toLowerCase() === cible
+          ? { ...item, received: true, stock_location_code: emplacement || item.stock_location_code }
+          : item))
+      setCartonMessage(emplacement
+        ? `« ${propre} » reçue — à ranger en ${emplacement}`
+        : `« ${propre} » reçue et rangée en stock.`)
+      setCartonTone('green')
+      setScanMonture('')
+      // Le stock local vient de changer : les compteurs des autres onglets sont périmés.
+      void reload()
+    } catch (err) {
+      setCartonMessage(err instanceof Error ? err.message : 'Monture refusée.')
+      setCartonTone('red')
+      montureRef.current?.select()
+    } finally {
+      setCartonBusy(false)
+    }
+  }
+
+  /** Clôt le pointage, même incomplet : un carton arrive parfois amputé, et le laisser ouvert
+   *  indéfiniment n'y changerait rien. Les manquantes restent EN_TRANSIT — hors du stock. */
+  async function cloturerCarton() {
+    if (!carton || cartonBusy || !stationId) return
+
+    const manquantes = cartonItems.filter(item => !item.received).length
+    if (manquantes > 0 && !window.confirm(
+      `${manquantes} monture(s) n'ont pas été scannées.\n\n`
+      + "Elles resteront en transit et n'entreront pas dans votre stock. Clôturer quand même ?",
+    )) return
+
+    setCartonBusy(true)
+    try {
+      const payload = await apiFetch('/inventory/send-boxes/close', {
+        method: 'POST',
+        body: JSON.stringify({ code: carton.code, station_id: stationId }),
+      })
+      const absentes: SendBoxItem[] = payload?.data?.missing || []
+      setCartonManquantes(absentes)
+      setCarton(null)
+      setCartonItems([])
+      setCartonMessage(absentes.length === 0
+        ? `Carton ${carton.code} clôturé : tout le contenu est en stock.`
+        : `Carton ${carton.code} clôturé avec ${absentes.length} manquante${absentes.length > 1 ? 's' : ''}.`)
+      setCartonTone(absentes.length === 0 ? 'green' : 'amber')
+      void chargerCartons()
+      void reload()
+    } catch (err) {
+      setCartonMessage(err instanceof Error ? err.message : 'Clôture impossible.')
+      setCartonTone('red')
+    } finally {
+      setCartonBusy(false)
+    }
+  }
+
+  const cartonRecues = cartonItems.filter(item => item.received).length
+
   const [envoiBusy, setEnvoiBusy] = useState(false)
   const [envoiMessage, setEnvoiMessage] = useState('')
   const [envoiErreur, setEnvoiErreur] = useState(false)
@@ -826,9 +1023,14 @@ function ResponsableMagasinPage() {
       await apiFetch(`/inventory/transfers/${transferId}/dispatch`, { method: 'POST' })
 
       const envoyees = pointees.length - refuses.length
+      // « expédiée », pas « envoyée » : le transfert s'arrête au départ. Les montures sont
+      // EN_TRANSIT, hors du stock local et pas encore au présentoir — il reste un scan à
+      // faire là-bas pour qu'elles y apparaissent. Annoncer une arrivée ferait chercher au
+      // présentoir des montures que personne n'y a encore reçues.
       setEnvoiMessage(
-        `${envoyees} monture${envoyees > 1 ? 's' : ''} envoyée${envoyees > 1 ? 's' : ''} au présentoir.`
-        + (refuses.length ? ` Non envoyées : ${refuses.join(', ')}.` : ''),
+        `${envoyees} monture${envoyees > 1 ? 's' : ''} expédiée${envoyees > 1 ? 's' : ''} au présentoir.`
+        + ` À scanner là-bas pour finaliser l'arrivée.`
+        + (refuses.length ? ` Non expédiées : ${refuses.join(', ')}.` : ''),
       )
       setEnvoiErreur(refuses.length > 0)
       setScannedPresentoir([])
@@ -1630,6 +1832,328 @@ function ResponsableMagasinPage() {
               </div>
             )}
 
+            {/* ── CARTONS REÇUS ────────────────────────────────────────────── */}
+            {activeTab === 'cartons' && (
+              <div className="space-y-3">
+                {!stationId && (
+                  <Note tone="red">
+                    <strong>Aucune station rattachée à ce compte.</strong> Le serveur déduit de votre
+                    station la ville des cartons qui vous sont destinés : sans elle, aucun colis ne
+                    peut être ni listé ni ouvert. Demandez le rattachement à l'administrateur.
+                  </Note>
+                )}
+
+                {cartonMessage && (
+                  <Note tone={cartonTone}>{cartonMessage}</Note>
+                )}
+
+                {/* Les manquantes ne survivent qu'à l'écran, le temps d'être notées pour le
+                    transporteur : une fois le carton clos, plus rien ne les rappellera ici. */}
+                {cartonManquantes.length > 0 && (
+                  <div className={`${CARD} p-0 overflow-hidden`}>
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between gap-3">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">
+                        Montures manquantes <span className="tabular-nums text-slate-400">({cartonManquantes.length})</span>
+                      </p>
+                      <button
+                        onClick={() => setCartonManquantes([])}
+                        className="text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                      >
+                        Masquer
+                      </button>
+                    </div>
+                    <div className="divide-y divide-slate-50 dark:divide-slate-700/60">
+                      {cartonManquantes.map(item => (
+                        <div key={item.id} className="px-4 py-2.5 flex items-center gap-3">
+                          <Pastille color={C.amber}>{ic.alert('w-4 h-4')}</Pastille>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                              {item.reference || item.barcode || '—'}
+                            </p>
+                            <p className="text-xs text-slate-400 truncate">{item.barcode || '—'} · restée en transit</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Aucun carton ouvert : on liste ce qui est attendu, on scanne pour ouvrir */}
+                {!carton && (
+                  <>
+                    <div className={CARD}>
+                      <div className="flex items-center gap-2.5">
+                        <Pastille color={C.violet}>{ic.carton()}</Pastille>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">Ouvrir un carton</p>
+                          <p className="text-xs text-slate-400">
+                            Scannez l'étiquette collée sur le colis pour démarrer — ou reprendre — son pointage
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1" htmlFor="refCarton">
+                            Code du carton
+                          </label>
+                          {/* Un bouton explicite en plus de l'Entrée : ouvrir un carton écrit en
+                              base, on ne le déclenche donc pas à chaque frappe. L'ouverture
+                              automatique ne vaut que pour un code qui désigne un colis attendu —
+                              sans elle, un magasinier dont la liste est vide resterait devant un
+                              champ qui ne réagit pas. */}
+                          <form
+                            onSubmit={e => { e.preventDefault(); void ouvrirCarton(scanCarton) }}
+                            className="flex gap-2"
+                          >
+                            <input
+                              id="refCarton"
+                              ref={cartonRef}
+                              type="text"
+                              autoFocus
+                              value={scanCarton}
+                              onChange={e => {
+                                const value = e.target.value
+                                setScanCarton(value)
+                                // La douchette écrit la trame d'un bloc : dès qu'elle désigne un
+                                // colis attendu, on ouvre sans attendre d'Entrée.
+                                const trouve = cartonsAttendus.find(box =>
+                                  box.code.toLowerCase() === value.trim().toLowerCase()
+                                  || box.reference.toLowerCase() === value.trim().toLowerCase())
+                                if (trouve) void ouvrirCarton(trouve.code)
+                              }}
+                              disabled={cartonBusy || !stationId}
+                              placeholder="CB-EXP-…"
+                              autoComplete="off"
+                              className={`${INPUT_CLASS} flex-1 disabled:opacity-50`}
+                            />
+                            <button
+                              type="submit"
+                              disabled={cartonBusy || !stationId || !scanCarton.trim()}
+                              className="flex-shrink-0 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {cartonBusy ? 'Ouverture…' : 'Ouvrir'}
+                            </button>
+                          </form>
+                          <p className="mt-2 text-xs text-slate-400">
+                            C'est le seul moyen d'ouvrir un carton : le colis doit être devant vous,
+                            étiquette scannée. Le code du carton comme sa référence sont acceptés, et un
+                            carton déjà entamé se rouvre au même endroit — rien de ce qui a été scanné
+                            n'est perdu.
+                          </p>
+                        </div>
+
+                        <div className="flex flex-col items-center gap-1.5">
+                          <div className="w-full h-[92px] rounded-xl border-2 bg-white p-2 flex items-center justify-center" style={{ borderColor: C.violet }}>
+                            {scanCarton.trim()
+                              ? <Code128 value={scanCarton.trim()} height={44} />
+                              : <span className="text-xs text-slate-400 text-center">En attente<br />d'un scan</span>}
+                          </div>
+                          <p className="text-xs text-slate-400">CODE128</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={`${CARD} p-0 overflow-hidden`}>
+                      <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between gap-3">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">
+                          Colis attendus <span className="tabular-nums text-slate-400">({cartonsAttendus.length})</span>
+                        </p>
+                        <button
+                          onClick={() => void chargerCartons()}
+                          disabled={cartonsLoading}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white disabled:opacity-50"
+                        >
+                          {ic.refresh()} Actualiser
+                        </button>
+                      </div>
+
+                      {cartonsAttendus.length === 0 ? (
+                        <div className="p-8 text-center">
+                          <p className="text-sm text-slate-400">
+                            {cartonsLoading
+                              ? 'Chargement…'
+                              : cartonsErreur
+                                ? `Liste indisponible : ${cartonsErreur}`
+                                : 'Aucun colis en attente pour votre magasin.'}
+                          </p>
+                          {!cartonsLoading && !cartonsErreur && (
+                            <p className="mt-1 text-xs text-slate-400">
+                              Un carton déjà ouvert n'apparaît plus ici : scannez son étiquette pour reprendre son pointage.
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-50 dark:divide-slate-700/60">
+                          {cartonsAttendus.map(box => (
+                            <div key={box.id} className="px-4 py-3 flex items-center gap-3">
+                              <Pastille color={C.violet}>{ic.carton('w-4 h-4')}</Pastille>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{box.code}</p>
+                                <p className="text-xs text-slate-400 truncate">
+                                  {box.item_count} monture{box.item_count > 1 ? 's' : ''} annoncée{box.item_count > 1 ? 's' : ''}
+                                  {box.session_code ? ` · ${box.session_code}` : ''}
+                                </p>
+                              </div>
+                              {/* Pas de bouton « Ouvrir » ici : ouvrir un colis qu'on n'a pas en
+                                  main fait entrer au stock des montures qui sont encore dans le
+                                  camion. Le bouton ne fait que ramener la douchette au champ. */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCartonMessage(`Scannez l'étiquette de ${box.code} pour l'ouvrir.`)
+                                  setCartonTone('blue')
+                                  cartonRef.current?.focus()
+                                }}
+                                className="flex-shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 hover:border-slate-300 hover:text-slate-900 dark:border-slate-600 dark:text-slate-400 dark:hover:text-white"
+                              >
+                                À scanner
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* ── Carton ouvert : pointage monture par monture */}
+                {carton && (
+                  <>
+                    <div className={CARD}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <Pastille color={C.violet}>{ic.carton()}</Pastille>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{carton.code}</p>
+                            <p className="text-xs text-slate-400 truncate">
+                              {carton.reference} · {carton.city}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => { setCarton(null); setCartonItems([]); setCartonMessage('') }}
+                          className="flex-shrink-0 text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                        >
+                          Fermer
+                        </button>
+                      </div>
+
+                      <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1" htmlFor="refMontureCarton">
+                            Code-barres de la monture
+                          </label>
+                          <form onSubmit={e => { e.preventDefault(); void recevoirMonture(scanMonture) }}>
+                            <input
+                              id="refMontureCarton"
+                              ref={montureRef}
+                              type="text"
+                              value={scanMonture}
+                              onChange={e => {
+                                const value = e.target.value
+                                setScanMonture(value)
+                                // Égalité stricte : une saisie partielle ne doit pas valider la
+                                // monture dont elle n'est que le préfixe.
+                                const cible = value.trim().toLowerCase()
+                                const trouve = cartonItems.find(item => !item.received && (
+                                  String(item.barcode || '').toLowerCase() === cible
+                                  || String(item.reference || '').toLowerCase() === cible))
+                                if (trouve) void recevoirMonture(value.trim())
+                              }}
+                              disabled={cartonBusy}
+                              placeholder="Scanner ou saisir…"
+                              autoComplete="off"
+                              autoFocus
+                              className={`${INPUT_CLASS} disabled:opacity-50`}
+                            />
+                          </form>
+                          <p className="mt-2 text-xs text-slate-400">
+                            La saisie se valide seule dès qu'elle correspond à une monture du carton.
+                          </p>
+                        </div>
+
+                        <div className="flex flex-col items-center gap-1.5">
+                          <div className="w-full h-[92px] rounded-xl border-2 bg-white p-2 flex items-center justify-center" style={{ borderColor: C.violet }}>
+                            {scanMonture.trim()
+                              ? <Code128 value={scanMonture.trim()} height={44} />
+                              : <span className="text-xs text-slate-400 text-center">En attente<br />d'un scan</span>}
+                          </div>
+                          <p className="text-xs text-slate-400">CODE128</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-3 gap-3">
+                        {[
+                          { label: 'Annoncées', value: cartonItems.length, color: C.violet },
+                          { label: 'Reçues', value: cartonRecues, color: C.success },
+                          { label: 'Restantes', value: Math.max(0, cartonItems.length - cartonRecues), color: C.amber },
+                        ].map(s => (
+                          <div key={s.label} className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+                            <p className="text-xs text-slate-400">{s.label}</p>
+                            <p className="mt-1 text-3xl font-black tabular-nums" style={{ color: s.color }}>{s.value}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-4">
+                        <Bar percent={cartonItems.length > 0 ? (cartonRecues / cartonItems.length) * 100 : 0} color={C.success} />
+                      </div>
+
+                      <div className="mt-3">
+                        <Note tone="amber">
+                          Chaque scan fait <strong>réellement entrer</strong> la monture dans votre stock. Une monture
+                          jamais scannée reste <strong>EN_TRANSIT</strong> : elle ne sera comptée nulle part, ce qui
+                          est exactement ce qu'on veut d'un colis incomplet.
+                        </Note>
+                      </div>
+
+                      <button
+                        onClick={() => void cloturerCarton()}
+                        disabled={cartonBusy}
+                        className="mt-3 w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {cartonBusy ? 'Traitement…' : `Clôturer le carton (${cartonRecues}/${cartonItems.length})`}
+                      </button>
+                    </div>
+
+                    <div className={`${CARD} p-0 overflow-hidden`}>
+                      <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">
+                          Contenu du carton <span className="tabular-nums text-slate-400">({cartonRecues}/{cartonItems.length})</span>
+                        </p>
+                      </div>
+
+                      <GlassTable
+                        emptyLabel="Ce carton ne contient aucune ligne."
+                        title={`carton-${carton.code}`}
+                        before={[{ header: 'Code-barres', mono: true }]}
+                        after={[{ header: 'Prix', align: 'right' }]}
+                        rows={cartonItems.map(item => ({
+                          key: item.id,
+                          photo: item.photo_monture_url,
+                          reference: item.reference || item.barcode,
+                          brand: item.brand,
+                          gender: item.gender,
+                          shape: item.shape,
+                          // L'emplacement de CE magasin, pas celui d'où la monture vient :
+                          // c'est là qu'il faut aller la poser. Il n'existe qu'après le scan.
+                          location: item.stock_location_code || (item.received ? undefined : '— attribué au scan'),
+                          entry: item.glass_created_at,
+                          before: [item.barcode],
+                          after: [fmtPrix(item.price)],
+                          done: item.received,
+                          status: item.received
+                            ? { label: 'en stock', tone: 'green' as const }
+                            : { label: 'attendue', tone: 'slate' as const },
+                        }))}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* ── REMISE CLIENT ────────────────────────────────────────────── */}
             {activeTab === 'remise' && (
               <div className="space-y-3">
@@ -1847,20 +2371,17 @@ function ResponsableMagasinPage() {
                         {scannedPresentoir.length} / {data.local.length} pointée(s)
                       </p>
                     </div>
-                    <div className="mt-3">
-                      {presentoirStationId ? (
-                        <Note tone="blue">
-                          Le pointage reste sur ce poste jusqu'à l'envoi. C'est le bouton
-                          <strong> Envoyer au présentoir </strong> qui expédie les montures et les fait passer
-                          en <strong>EN_PRESENTOIR</strong>.
-                        </Note>
-                      ) : (
+                    {/* Rien à dire quand tout va bien : le déroulé du transit s'apprend une
+                        fois, le répéter à chaque pointage encombre l'écran. Seul l'obstacle
+                        mérite un encadré. */}
+                    {!presentoirStationId && (
+                      <div className="mt-3">
                         <Note tone="amber">
                           Station « Présentoir » introuvable en base : le pointage reste possible, mais l'envoi
                           sera refusé faute de destination.
                         </Note>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className={`${CARD} p-0 overflow-hidden`}>
@@ -1869,30 +2390,35 @@ function ResponsableMagasinPage() {
                         Montures à scanner <span className="tabular-nums text-slate-400">({scannedPresentoir.length}/{data.local.length})</span>
                       </p>
                     </div>
-                    <div className="max-h-[600px] overflow-y-auto divide-y divide-slate-50 dark:divide-slate-700/60">
+                    <div className="max-h-[600px] overflow-y-auto">
                       {loading && data.local.length === 0 ? (
                         <Empty>Chargement…</Empty>
-                      ) : data.local.length === 0 ? (
-                        <Empty>Le stock local est vide.</Empty>
                       ) : (
-                        data.local.map(glass => {
-                          const pointee = scannedPresentoir.includes(glass.barcode)
-                          return (
-                            <GlassRow
-                              key={glass.barcode}
-                              glass={glass}
-                              client={[glass.brand, glass.shape, glass.color].filter(Boolean).join(' · ') || glass.barcode}
-                              tinted={pointee}
-                              code
-                              badge={
-                                <Badge tone={pointee ? 'green' : glass.location_code ? 'cyan' : 'amber'}>
-                                  {pointee && ic.check('w-3.5 h-3.5')}
-                                  {glass.location_code || (pointee ? 'Pointée' : 'En attente')}
-                                </Badge>
-                              }
-                            />
-                          )
-                        })
+                        <GlassTable
+                          emptyLabel="Le stock local est vide."
+                          title="stock-local"
+                          before={[{ header: 'Code-barres', mono: true }]}
+                          after={[{ header: 'Prix', align: 'right' }]}
+                          rows={data.local.map(glass => {
+                            const pointee = scannedPresentoir.includes(glass.barcode)
+                            return {
+                              key: glass.barcode,
+                              photo: glass.photo_monture_url,
+                              reference: glassRef(glass),
+                              brand: glass.brand,
+                              gender: glass.gender,
+                              shape: glass.shape,
+                              location: glass.location_code,
+                              entry: glass.created_at,
+                              before: [glass.barcode],
+                              after: [fmtPrix(glass.price)],
+                              done: pointee,
+                              status: pointee
+                                ? { label: '✓ pointée', tone: 'green' as const }
+                                : { label: 'en attente', tone: 'amber' as const },
+                            }
+                          })}
+                        />
                       )}
                     </div>
                   </div>
