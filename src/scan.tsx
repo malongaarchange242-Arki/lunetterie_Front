@@ -993,10 +993,11 @@ function PhotoBox({ url, label }: { url: string | null; label: string }) {
 }
 
 // ── Écran d'activation de session ──────────────────────────────────────────────
-function ActivationGate({ status, isError, onActivate }: {
+function ActivationGate({ status, isError, onActivate, onReturn }: {
   status: string
   isError: boolean
   onActivate: (code: string) => Promise<boolean>
+  onReturn?: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const scannerRef = useRef<Scanner | null>(null)
@@ -1038,6 +1039,11 @@ function ActivationGate({ status, isError, onActivate }: {
 
   return (
     <div className="mx-auto max-w-xl">
+      {onReturn && (
+        <div className="mb-4 flex justify-start">
+          <Btn variant="outline" onClick={onReturn}>{ic.arrowLeft()} Retour</Btn>
+        </div>
+      )}
       <div className="mb-5 text-center">
         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Activer une session d'enregistrement</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -1852,11 +1858,6 @@ function ListesScreen({
 
     return (
       <div className="mx-auto max-w-4xl space-y-4">
-        {!hasSession && (
-          <div className="flex justify-start">
-            <Btn variant="outline" onClick={onReturn}>{ic.arrowLeft()} Retour</Btn>
-          </div>
-        )}
         <div className="flex flex-wrap items-center gap-3">
           <Btn onClick={() => { setOpen(null); setDispatch(null) }}>{ic.arrowLeft()} Listes</Btn>
           <div className="min-w-0">
@@ -1905,10 +1906,7 @@ function ListesScreen({
           // et que le présentoir côté Vendeuse — un seul tableau à apprendre pour tout le monde.
           <div className={`${CARD} p-0`}>
             <GlassTable
-              // Le code-barres est ce qu'on scanne ici : il mérite sa colonne, à côté de la
-              // référence. Le prix ferme la ligne, il ne sert qu'au contrôle de valeur.
               title={`liste-${open.session_code || open.id}`}
-              before={[{ header: 'Code-barres', mono: true }]}
               after={[{ header: 'Prix', align: 'right' }]}
               rows={rows.map(item => {
                 const ok = verified.has(item.id)
@@ -1922,7 +1920,6 @@ function ListesScreen({
                   // Ici, l'emplacement est celui d'où il faut SORTIR la monture.
                   location: item.location_code,
                   entry: item.created_at,
-                  before: [item.barcode],
                   after: [fmtPrix(item.price)],
                   done: ok,
                   status: ok
@@ -3086,7 +3083,12 @@ function ScanPage() {
           {screen === 'loading' && null}
 
           {screen === 'activation' && (
-            <ActivationGate status={activationStatus} isError={activationError} onActivate={activateSession} />
+            <ActivationGate
+              status={activationStatus}
+              isError={activationError}
+              onActivate={activateSession}
+              onReturn={goToSessions}
+            />
           )}
 
           {screen === 'sessions' && (
