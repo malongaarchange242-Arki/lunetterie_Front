@@ -205,7 +205,10 @@ const ic = {
   home: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
   glasses: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><circle cx="7" cy="12" r="4"/><circle cx="17" cy="12" r="4"/><path d="M3 12h0M21 12h0M11 12h2"/></svg>,
   chart: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 4-8"/></svg>,
-  cash: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+  // « XAF » et non un signe dollar : la monnaie du magasin est le franc CFA, et un $ sur un
+  // tableau de bord congolais se lit comme une devise étrangère. En texte plutôt qu'en
+  // tracé — le franc CFA n'a pas de symbole normalisé, son code ISO est ce qui le désigne.
+  cash: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" fill="currentColor" stroke="none"><text x="12" y="16" textAnchor="middle" fontSize="10" fontWeight="700" letterSpacing="-0.6">XAF</text></svg>,
   cart: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>,
   doc: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h8M8 17h5"/></svg>,
   eye: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
@@ -257,20 +260,18 @@ const TONE = {
 }
 
 type Tone = keyof typeof TONE
-type TabId = 'tableau' | 'ventes' | 'cartons' | 'remise' | 'presentoir' | 'stock'
+type TabId = 'tableau' | 'ventes' | 'cartons' | 'presentoir' | 'stock'
 
-// Les libellés sont ceux de la maquette. Les identifiants, eux, disent ce que l'onglet
-// fait côté métier — « remise » remet au client, « presentoir » expédie au Présentoir —
-// et servent au code qui envoie les transferts : les renommer brouillerait la lecture.
+// Les libellés sont ceux de la maquette. Les identifiants, eux, disent ce que l'onglet fait
+// côté métier — « presentoir » expédie au Présentoir — et servent au code qui envoie les
+// transferts : les renommer brouillerait la lecture.
 //
-// « Réception » a été renommé « Remise client » : il porte la sortie du cycle, pas l'entrée.
-// L'entrée, c'est « Cartons reçus », qui pointe les colis venus du stock général — les deux
-// portaient le même nom, et c'était le meilleur moyen de chercher l'un en ouvrant l'autre.
+// « Remise client » a été déplacé au poste Vendeuse : c'est elle qui accueille le client
+// venu chercher ses lunettes, ce poste-ci ne le voit jamais.
 const TABS: { id: TabId; label: string; short: string; icon: IconFn }[] = [
   { id: 'tableau', label: 'Tableau de bord', short: 'Bord', icon: ic.home },
   { id: 'ventes', label: 'Ventes', short: 'Ventes', icon: ic.chart },
   { id: 'cartons', label: 'Cartons reçus', short: 'Cartons', icon: ic.carton },
-  { id: 'remise', label: 'Remise client', short: 'Remise', icon: ic.hand },
   { id: 'presentoir', label: 'Scanner', short: 'Scanner', icon: ic.scan },
   { id: 'stock', label: 'Stock', short: 'Stock', icon: ic.pkg },
 ]
@@ -323,12 +324,12 @@ const RESERVE_LIMITE_JOURS = 10
 const REFERENCE_CRITIQUE = 2
 
 // Les actions du journal de mouvements (table ACTION_LABELS de ../Frontend/historique.js:10).
-const ACTION_LIVRAISON = 'LIVRAISON'
-const ACTION_RESERVATION = 'RESERVATION'
-const ACTION_LABORATOIRE = 'LABORATOIRE'
-/** Ce qui ramène une paire dans le magasin après un passage en réserve. Le backend ne
- *  journalise pas « fin de réserve » : c'est le mouvement suivant qui la trahit. */
-const ACTIONS_RETOUR_STOCK = ['RETOUR', 'RANGEMENT', 'PRESENTOIR', 'RETRAIT_PRESENTOIR']
+//
+// REMISE_CLIENT et non LIVRAISON : cette dernière est écrite par le LABORATOIRE quand il
+// termine un montage (delivery_service.go CreateDelivery). Compter dessus faisait passer
+// des fins de montage pour des sorties de magasin — le libellé « Remises aujourd'hui »
+// annonçait des paires encore en rayon, que personne n'était venu chercher.
+const ACTION_REMISE = 'REMISE_CLIENT'
 
 // ── Chargement ────────────────────────────────────────────────────────────────
 
@@ -517,23 +518,6 @@ function buildHistoryIndex(movements: Movement[]) {
     liste.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
   }
   return parBarcode
-}
-
-/** Les mouvements du jour dont le précédent était une mise en réserve : c'est ce couple,
- *  et lui seul, qui distingue une sortie de réserve d'un mouvement ordinaire. */
-function sortiesDeReserve(history: Map<string, Movement[]>, jour: string, actions: string[]) {
-  const sorties: { movement: Movement; joursReserve: number }[] = []
-  for (const liste of history.values()) {
-    for (let i = 1; i < liste.length; i++) {
-      const precedent = liste[i - 1]
-      const courant = liste[i]
-      if (dayKey(courant.created_at) !== jour) continue
-      if (String(precedent.action || '').toUpperCase() !== ACTION_RESERVATION) continue
-      if (!actions.includes(String(courant.action || '').toUpperCase())) continue
-      sorties.push({ movement: courant, joursReserve: daysSince(precedent.created_at) })
-    }
-  }
-  return sorties
 }
 
 /** Rattache chaque monture à la proforma qui la porte : c'est la seule façon de
@@ -751,13 +735,10 @@ function ResponsableMagasinPage() {
   const [user, setUser] = useState<any>(null)
   const [ready, setReady] = useState(false)
 
-  // Scans : le pointage reste local jusqu'à l'envoi. Celui du présentoir se conclut par un
-  // vrai transfert (envoyerAuPresentoir) ; celui de la remise n'a pas d'équivalent en base,
-  // PRETE_A_LIVRER est le dernier statut du cycle.
+  // Le pointage du présentoir reste local jusqu'à l'envoi, qui se conclut par un vrai
+  // transfert (envoyerAuPresentoir).
   const [scannedPresentoir, setScannedPresentoir] = useState<string[]>([])
   const [scanPresentoir, setScanPresentoir] = useState('')
-  const [scannedRemise, setScannedRemise] = useState<string[]>([])
-  const [scanRemise, setScanRemise] = useState('')
   // La liste à prendre s'affiche avant le premier scan : le responsable part au meuble en
   // sachant ce qu'il vient chercher, plutôt que de découvrir chaque monture au douchage.
   const [presentoirDemarre, setPresentoirDemarre] = useState(false)
@@ -1091,16 +1072,12 @@ function ResponsableMagasinPage() {
 
     const history = buildHistoryIndex(data.movements)
     const livreesToday = data.movements.filter(m =>
-      String(m.action || '').toUpperCase() === ACTION_LIVRAISON && dayKey(m.created_at) === today)
+      String(m.action || '').toUpperCase() === ACTION_REMISE && dayKey(m.created_at) === today)
     const livreesBarcodes = new Set(
       data.movements
-        .filter(m => String(m.action || '').toUpperCase() === ACTION_LIVRAISON)
+        .filter(m => String(m.action || '').toUpperCase() === ACTION_REMISE)
         .map(m => String(m.barcode || '').trim().toUpperCase()),
     )
-
-    // Les deux sorties de réserve du jour, distinguées par leur destination.
-    const reserveVersLabo = sortiesDeReserve(history, today, [ACTION_LABORATOIRE])
-    const reserveVersStock = sortiesDeReserve(history, today, ACTIONS_RETOUR_STOCK)
 
     const reserveProche = data.reserved.filter(g => daysSince(g.updated_at || g.created_at) >= RESERVE_LIMITE_JOURS - 1)
 
@@ -1127,7 +1104,6 @@ function ResponsableMagasinPage() {
       montantSoldeesToday: soldeesToday.reduce((total, p) => total + (Number(p.total_amount) || 0), 0),
       payeesToday,
       livreesToday, livreesBarcodes,
-      reserveVersLabo, reserveVersStock,
       reserveProche,
       stockTotal,
       critiques,
@@ -1366,40 +1342,6 @@ function ResponsableMagasinPage() {
               </Badge>,
             }
           }),
-        },
-      },
-    },
-    {
-      label: 'Carrés : Réserve → Labo',
-      value: metrics.reserveVersLabo.length,
-      color: C.violetDeep,
-      icon: ic.flask,
-      desc: 'Client venu payer après',
-      detail: {
-        icon: ic.flask,
-        description: "Paires retirées de la réserve pour partir au laboratoire : le client est venu payer avant la fin du délai. Relevé sur le journal — un envoi au labo qui suit immédiatement une mise en réserve.",
-        table: {
-          title: 'Sorties de réserve vers le laboratoire',
-          rows: movementRows(metrics.reserveVersLabo, 'En réserve pendant',
-            () => <Badge tone="violet">→ Labo</Badge>),
-        },
-      },
-    },
-    {
-      label: 'Carrés : Réserve → Stock',
-      value: metrics.reserveVersStock.length,
-      color: C.amber,
-      icon: ic.pkg,
-      desc: `Dépassement délai (>${RESERVE_LIMITE_JOURS}j)`,
-      detail: {
-        icon: ic.pkg,
-        description: `Paires revenues au magasin après un passage en réserve : le client ne s'est pas présenté dans les ${RESERVE_LIMITE_JOURS} jours, il perd son option. Relevé sur le journal — un rangement, un retour ou une remise en présentoir qui suit une mise en réserve.`,
-        table: {
-          title: 'Retours de réserve vers le stock',
-          rows: movementRows(metrics.reserveVersStock, 'En réserve pendant',
-            ({ joursReserve }) => <Badge tone={(joursReserve || 0) >= RESERVE_LIMITE_JOURS ? 'red' : 'amber'}>
-              {(joursReserve || 0) >= RESERVE_LIMITE_JOURS ? 'Expirée' : 'Rendue'}
-            </Badge>),
         },
       },
     },
@@ -1797,12 +1739,15 @@ function ResponsableMagasinPage() {
                   {data.sold.length === 0 ? (
                     <p className="text-xs text-slate-400">Aucune vente enregistrée.</p>
                   ) : (
-                    <table className="w-full text-sm min-w-[680px]">
+                    <table className="w-full text-sm min-w-[780px]">
                       <thead>
                         <tr className="border-b border-slate-100 dark:border-slate-700">
-                          <th className="text-left py-2 pr-3 text-xs font-semibold text-slate-400">Référence</th>
+                          {/* La photo ouvre la ligne : on reconnaît une monture à son image
+                              bien avant sa référence, et c'est la première question posée
+                              devant un client — « laquelle a-t-il prise ? ». */}
+                          <th className="text-left py-2 pr-3 text-xs font-semibold text-slate-400">Monture</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Référence</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Client</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Monture</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Montant</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Statut</th>
                           <th className="text-right py-2 pl-3 text-xs font-semibold text-slate-400">Encaissée le</th>
@@ -1814,11 +1759,24 @@ function ResponsableMagasinPage() {
                           .slice(0, 15)
                           .map(glass => {
                             const statut = statutVente(glass)
+                            const attributs = [glass.shape, glass.color].filter(Boolean).join(' · ')
                             return (
                               <tr key={glass.barcode} className="border-b border-slate-50 dark:border-slate-700/60 last:border-0">
-                                <td className="py-3 pr-3 font-medium text-slate-900 dark:text-white">{glassRef(glass)}</td>
+                                <td className="py-3 pr-3">
+                                  <div className="h-9 w-11 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-700 flex-shrink-0">
+                                    {glass.photo_monture_url
+                                      ? <img src={glass.photo_monture_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                                      : <span className="flex h-full w-full items-center justify-center text-slate-300 dark:text-slate-600">{ic.glasses('w-4 h-4')}</span>}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3">
+                                  <p className="font-medium text-slate-900 dark:text-white truncate">{glassRef(glass)}</p>
+                                  {/* Forme et couleur passent sous la référence : la colonne
+                                      qu'elles occupaient revient à l'emplacement, et la photo
+                                      les montre déjà. */}
+                                  {attributs && <p className="text-xs text-slate-400 truncate">{attributs}</p>}
+                                </td>
                                 <td className="py-3 px-3 text-slate-400 truncate max-w-[160px]">{clientOf(glass)}</td>
-                                <td className="py-3 px-3 text-slate-400">{[glass.shape, glass.color].filter(Boolean).join(' · ') || '—'}</td>
                                 <td className="py-3 px-3 font-bold tabular-nums" style={{ color: C.primary }}>{fmtFCFA(glass.price)}</td>
                                 <td className="py-3 px-3"><Badge tone={statut.tone}>{statut.text}</Badge></td>
                                 <td className="py-3 pl-3 text-right tabular-nums text-slate-400">{fmtDate(glass.sold_at || glass.updated_at)}</td>
@@ -2154,168 +2112,6 @@ function ResponsableMagasinPage() {
               </div>
             )}
 
-            {/* ── REMISE CLIENT ────────────────────────────────────────────── */}
-            {activeTab === 'remise' && (
-              <div className="space-y-3">
-                <div className={CARD}>
-                  <div className="flex items-center gap-2.5">
-                    <Pastille color={C.cyan}>{ic.hand()}</Pastille>
-                    <div>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">Remettre au client</p>
-                      <p className="text-xs text-slate-400">Scannez le code-barres de la monture pour la pointer comme remise</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1" htmlFor="refRemise">
-                        Code-barres ou référence
-                      </label>
-                      <input
-                        id="refRemise"
-                        type="text"
-                        value={scanRemise}
-                        onChange={e => {
-                          const value = e.target.value
-                          setScanRemise(value)
-                          // La douchette envoie le code d'un bloc : on valide dès qu'il correspond,
-                          // sans attendre un Entrée que tous les lecteurs n'émettent pas.
-                          const found = data.pretes.find(g => g.barcode === value.trim() || glassRef(g) === value.trim().toUpperCase())
-                          if (found && !scannedRemise.includes(found.barcode)) {
-                            setScannedRemise([...scannedRemise, found.barcode])
-                            setScanRemise('')
-                          }
-                        }}
-                        placeholder="Scanner ou saisir…"
-                        autoFocus
-                        className={INPUT_CLASS}
-                      />
-                      <p className="mt-2 text-xs text-slate-400">
-                        La saisie se valide seule dès qu'elle correspond à une monture prête.
-                      </p>
-                    </div>
-
-                    {/* Le code se redessine à la frappe : il sert de contrôle visuel face à
-                        l'étiquette, et de code à présenter quand la douchette est en panne. */}
-                    <div className="flex flex-col items-center gap-1.5">
-                      <div className="w-full h-[92px] rounded-xl border-2 bg-white p-2 flex items-center justify-center" style={{ borderColor: C.cyan }}>
-                        {scanRemise.trim() ? (
-                          <Code128 value={scanRemise.trim()} height={44} />
-                        ) : (
-                          <span className="text-xs text-slate-400 text-center">En attente<br />d'un scan</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-400">CODE128</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-3 gap-3">
-                    {[
-                      { label: 'À remettre', value: data.pretes.length, color: C.cyan },
-                      { label: 'Pointées', value: scannedRemise.length, color: C.success },
-                      { label: 'Reste', value: Math.max(0, data.pretes.length - scannedRemise.length), color: C.amber },
-                    ].map(s => (
-                      <div key={s.label} className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
-                        <p className="text-xs text-slate-400">{s.label}</p>
-                        <p className="mt-1 text-3xl font-black tabular-nums" style={{ color: s.color }}>{s.value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-4">
-                    <Bar percent={data.pretes.length > 0 ? (scannedRemise.length / data.pretes.length) * 100 : 0} color={C.success} />
-                  </div>
-
-                  <div className="mt-3">
-                    <Note tone="amber">
-                      Le pointage reste sur ce poste : aucun mouvement n'est encore envoyé au serveur, la monture
-                      garde son statut <strong>PRETE_A_LIVRER</strong>.
-                    </Note>
-                  </div>
-                </div>
-
-                <div className={`${CARD} p-0 overflow-hidden`}>
-                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">
-                      Montures prêtes <span className="tabular-nums text-slate-400">({scannedRemise.length}/{data.pretes.length})</span>
-                    </p>
-                  </div>
-                  <div className="max-h-[600px] overflow-y-auto divide-y divide-slate-50 dark:divide-slate-700/60">
-                    {loading && data.pretes.length === 0 ? (
-                      <Empty>Chargement…</Empty>
-                    ) : data.pretes.length === 0 ? (
-                      <Empty>Aucune monture prête à remettre.</Empty>
-                    ) : (
-                      data.pretes.map(glass => {
-                        const pointee = scannedRemise.includes(glass.barcode)
-                        return (
-                          <GlassRow
-                            key={glass.barcode}
-                            glass={glass}
-                            client={clientOf(glass)}
-                            meta={glass.barcode}
-                            tinted={pointee}
-                            code
-                            badge={
-                              <Badge tone={pointee ? 'green' : 'amber'}>
-                                {pointee ? ic.check('w-3.5 h-3.5') : ic.clock('w-3.5 h-3.5')}
-                                {pointee ? 'Pointée' : 'En attente'}
-                              </Badge>
-                            }
-                          />
-                        )
-                      })
-                    )}
-                  </div>
-                </div>
-
-                {/* La seconde liste ne redit pas la première : elle donne l'ordre des scans,
-                    le dernier en tête, pour vérifier d'un coup d'œil ce qui vient de passer. */}
-                <div className={`${CARD} p-0 overflow-hidden`}>
-                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">
-                      Montures pointées <span className="tabular-nums text-slate-400">({scannedRemise.length}/{data.pretes.length})</span>
-                    </p>
-                  </div>
-                  <div className="max-h-[600px] overflow-y-auto divide-y divide-slate-50 dark:divide-slate-700/60">
-                    {scannedRemise.length === 0 ? (
-                      <Empty>Aucune monture pointée pour l'instant.</Empty>
-                    ) : (
-                      [...scannedRemise].reverse().map(barcode => {
-                        const glass = data.pretes.find(g => g.barcode === barcode)
-                        if (!glass) return null
-                        return (
-                          <GlassRow
-                            key={barcode}
-                            glass={glass}
-                            client={clientOf(glass)}
-                            meta={barcode}
-                            tinted
-                            code
-                            badge={<Badge tone="green">{ic.check('w-3.5 h-3.5')}Remise</Badge>}
-                          />
-                        )
-                      })
-                    )}
-                  </div>
-                </div>
-
-                {scannedRemise.length > 0 && (
-                  <button
-                    onClick={() => { setScannedRemise([]); setScanRemise('') }}
-                    className={scannedRemise.length === data.pretes.length
-                      ? 'w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90'
-                      : 'w-full rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200 transition-colors'}
-                    style={scannedRemise.length === data.pretes.length ? { background: C.success } : undefined}
-                  >
-                    {scannedRemise.length === data.pretes.length
-                      ? 'Remises terminées — nouvelle session'
-                      : 'Réinitialiser le pointage'}
-                  </button>
-                )}
-              </div>
-            )}
-
             {/* ── MISE EN PRÉSENTOIR ───────────────────────────────────────── */}
             {activeTab === 'presentoir' && (
               <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
@@ -2547,53 +2343,34 @@ function ResponsableMagasinPage() {
                   </button>
                 </div>
 
-                {/* Réserve */}
-                <SectionTitle>Réserve ({data.reserved.length})</SectionTitle>
+                {/* Stock magasin — le détail que les répartitions ci-dessus ne donnent pas.
+                    Les camemberts disent « 100 % rectangulaire » sans jamais dire de quelle
+                    monture il s'agit, ni où elle est rangée. */}
+                <SectionTitle>Stock magasin ({data.local.length})</SectionTitle>
                 <div className={`${CARD} p-0 overflow-hidden`}>
-                  <div className="max-h-[500px] overflow-y-auto divide-y divide-slate-50 dark:divide-slate-700/60">
-                    {loading && data.reserved.length === 0 ? (
-                      <Empty>Chargement…</Empty>
-                    ) : data.reserved.length === 0 ? (
-                      <Empty>Aucune monture en réserve.</Empty>
-                    ) : (
-                      [...data.reserved]
-                        .sort((a, b) => daysSince(b.updated_at || b.created_at) - daysSince(a.updated_at || a.created_at))
-                        .map(glass => {
-                          const jours = daysSince(glass.updated_at || glass.created_at)
-                          const urgence = jours >= RESERVE_LIMITE_JOURS - 1
-                          return (
-                            <div key={glass.barcode} className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1.4fr)_repeat(2,minmax(0,1fr))_auto] sm:items-center">
-                              <div className="min-w-0">
-                                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{glassRef(glass)}</p>
-                                <p className="text-xs text-slate-400 truncate">{clientOf(glass)}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-slate-400">Depuis le</p>
-                                <p className="text-sm font-medium tabular-nums text-slate-900 dark:text-white">{fmtDate(glass.updated_at || glass.created_at)}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-slate-400">Ancienneté</p>
-                                <p className="text-sm font-bold tabular-nums" style={{ color: urgence ? C.amber : C.muted }}>
-                                  {jours} jour{jours > 1 ? 's' : ''}
-                                </p>
-                              </div>
-                              <div className="sm:justify-self-end">
-                                <Badge tone={jours >= RESERVE_LIMITE_JOURS ? 'red' : urgence ? 'amber' : 'slate'}>
-                                  {jours >= RESERVE_LIMITE_JOURS ? 'Dépassée' : urgence ? 'Proche limite' : 'OK'}
-                                </Badge>
-                              </div>
-                            </div>
-                          )
-                        })
-                    )}
-                  </div>
+                  <GlassTable
+                    emptyLabel={loading ? 'Chargement…' : 'Aucune monture en stock local.'}
+                    title={`stock-magasin-${metrics.today}`}
+                    before={[{ header: 'Code-barres', mono: true }]}
+                    after={[{ header: 'Prix', align: 'right' }]}
+                    rows={data.local.map(glass => ({
+                      key: glass.barcode,
+                      photo: glass.photo_monture_url,
+                      reference: glassRef(glass),
+                      brand: glass.brand,
+                      gender: glass.gender,
+                      shape: glass.shape,
+                      location: glass.location_code,
+                      entry: glass.created_at,
+                      before: [glass.barcode],
+                      after: [fmtFCFA(glass.price)],
+                      // Le stock local est ce qui attend d'être mis en présentoir : c'est le
+                      // geste que ces lignes appellent, et l'onglet « Scanner » le fait.
+                      status: { label: 'à placer', tone: 'amber' as const },
+                    }))}
+                  />
                 </div>
-                <div className="mt-3">
-                  <Note>
-                    Les paires restent en réserve <strong>maximum {RESERVE_LIMITE_JOURS} jours</strong>. L'ancienneté est
-                    calculée depuis la dernière modification de la monture, le backend ne datant pas la mise en réserve.
-                  </Note>
-                </div>
+
               </div>
             )}
           </main>

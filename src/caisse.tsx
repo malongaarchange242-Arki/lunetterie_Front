@@ -8,7 +8,6 @@ import {
   Banknote,
   Boxes,
   CalendarDays,
-  CircleDollarSign,
   CircleOff,
   CreditCard,
   PackageCheck,
@@ -161,6 +160,12 @@ interface ProformaItem {
   brand?: string
   unit_price?: number | string
   is_pending?: boolean
+  /** La décision de la Caisse sur cette ligne : VENDUE ou RETOUR_PRESENTOIR, `null` tant
+   *  qu'elle attend. Renvoyée par /proformas/:id seulement, pas par la liste. */
+  outcome?: string | null
+  /** L'instant où la Caisse a tranché cette ligne : la date de vente, la seule qui vaille
+   *  pour un compte de la journée. */
+  settled_at?: string
   [key: string]: any
 }
 
@@ -199,11 +204,21 @@ interface Proforma {
    *  que dans `note`, en texte. */
   prescription?: Prescription
   created_at?: string
+  /** Posé par le serveur quand la Caisse clôt le document. C'est la date d'encaissement,
+   *  distincte de celle d'émission — un devis peut être réglé des jours plus tard. */
+  settled_at?: string
   total_amount?: number | string
   items?: ProformaItem[]
   reference?: string
   vendor_name?: string
+  /** Le nom de l'auteur, résolu par le serveur : `created_by` seul ne porte qu'un
+   *  identifiant, et /auth/users est fermé aux postes magasin — un caissier y prendrait un
+   *  403, que `apiFetch` traite en déconnexion. */
+  created_by_name?: string
   destination?: string
+  /** Les casiers des montures du document, joints par « · ». Calculé au chargement : la
+   *  ligne de proforma ne porte pas d'emplacement, il faut le rapprocher par code-barres. */
+  emplacement?: string
 }
 
 interface Glass {
@@ -239,6 +254,81 @@ function destinationLabel(destination?: string) {
   return '—'
 }
 
+/** Reconstruit les ventes à partir des lignes de proforma.
+ *
+ *  `/inventory/glasses?status=VENDUE` ne suffit pas et ne suffira jamais : l'encaissement
+ *  passe la monture en VENDUE puis l'expédie aussitôt au laboratoire (EN_TRANSIT), et le
+ *  scan du labo la met EN_LABORATOIRE. Une vente ne reste donc VENDUE que quelques heures.
+ *  D'où « Vendues au total : 1 » en face de trois proformas réglées à 290 000 FCFA.
+ *
+ *  La vente durable est sur le document : ligne à `outcome = VENDUE`, horodatée par
+ *  `settled_at`. Même reconstruction que soldFromProformas() dans vendeuse.tsx.
+ *
+ *  Le repli sur une proforma réglée à ligne unique couvre les documents tranchés avant que
+ *  `outcome` existe : sans lui, tout l'historique antérieur disparaîtrait du compte. */
+function soldFromProformas(proformas: Proforma[]): Glass[] {
+  const ventes: Glass[] = []
+
+  for (const proforma of proformas) {
+    const items = proforma.items || []
+    const reglee = String(proforma.status || '').toUpperCase() === 'REGLEE'
+
+    for (const item of items) {
+      const outcome = String(item.outcome || '').toUpperCase()
+      const vendue = outcome === 'VENDUE'
+        || (!outcome && reglee && items.length === 1 && item.is_pending === false)
+      if (!vendue) continue
+
+      ventes.push({
+        barcode: String(item.barcode || ''),
+        reference: item.reference,
+        brand: item.brand,
+        // ?? et non || : une monture offerte est facturée 0, ce n'est pas un prix manquant.
+        price: item.unit_price ?? undefined,
+        status: 'VENDUE',
+        sold_at: item.settled_at || proforma.settled_at || proforma.created_at,
+      })
+    }
+  }
+
+  return ventes
+}
+
+/** Un casier de présentoir : « PR01-1 », meuble puis position (allocation_service.go
+ *  presentoirLocationCode). À distinguer de la grammaire de l'entrepôt,
+ *  « RAYON-A-ETA-01-BAC-A-POS-01 », que porte aussi la caisse — une monture au comptoir
+ *  occupe un emplacement de stock, pas un casier d'exposition. */
+const PRESENTOIR_SLOT = /^PR\d+-\d+$/
+
+/** Où sont parties les montures d'une proforma.
+ *
+ *  Le serveur ne le stocke pas : aucune migration ne crée de colonne `destination` sur
+ *  `proformas`, et le front n'en envoie pas non plus. Les filtres qui lisaient
+ *  `proforma.destination` rendaient donc toujours une liste vide — d'où « Labo payé (0) »
+ *  et « Réserve (0) » en permanence, même sur des proformas réglées.
+ *
+ *  On la déduit de l'état réel, que cet écran charge déjà :
+ *   - réserve : une monture du document est mise de côté au nom du client (statut RESERVEE) ;
+ *   - labo : une ligne a été encaissée, et le règlement expédie aussitôt la monture au
+ *     laboratoire (sales_and_reserves_service.go CreateSale).
+ *
+ *  La réserve l'emporte : elle dit où la monture se trouve maintenant, quand `outcome` ne
+ *  dit que ce que la Caisse a tranché. En pratique les deux s'excluent — une monture vendue
+ *  quitte le statut RESERVEE. */
+function resolveDestination(proforma: Proforma, reservedBarcodes: Set<string>): string {
+  const items = proforma.items || []
+
+  const enReserve = items.some(item => {
+    const barcode = String(item.barcode || '').trim().toUpperCase()
+    return barcode !== '' && reservedBarcodes.has(barcode)
+  })
+  if (enReserve) return 'reserve'
+
+  if (items.some(item => String(item.outcome || '').toUpperCase() === 'VENDUE')) return 'labo'
+
+  return ''
+}
+
 // ── Icônes ─────────────────────────────────────────────────────────────────────
 const s = { fill: 'none' as const, stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
 
@@ -252,6 +342,9 @@ const ic = {
   back: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" {...s} strokeWidth={2}><path d="M19 12H5M11 18l-6-6 6-6" /></svg>,
   undo: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M3 7v6h6" /><path d="M3.5 13a9 9 0 1 0 2.1-5.7L3 10" /></svg>,
   cash: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" {...s}><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="3" /><path d="M6 9v.01M18 15v.01" /></svg>,
+  // Le code ISO du franc CFA, en texte : cette monnaie n'a pas de symbole normalisé, et un
+  // signe dollar sur un écran de caisse congolais désigne une devise qu'on n'encaisse pas.
+  xaf: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" fill="currentColor" stroke="none"><text x="12" y="16" textAnchor="middle" fontSize="10" fontWeight="700" letterSpacing="-0.6">XAF</text></svg>,
   download: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><path d="M12 15V3" /></svg>,
   refresh: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" /></svg>,
   search: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>,
@@ -271,19 +364,6 @@ const NAV: { id: Screen; label: string; short: string; icon: (c?: string) => Rea
 ]
 
 type NavCounts = Partial<Record<Screen, number>>
-
-const DEMO_PROFORMAS: Proforma[] = [
-  { id: 101, code: 'PRF-001', client_name: 'Jean Dupont', client_phone: '06 12 34 56 78', status: 'EN_ATTENTE', created_at: new Date().toISOString(), total_amount: 73000, items: [{ id: 1001, reference: 'MN-AVA-001', unit_price: 73000 }] },
-  { id: 102, code: 'PRF-002', client_name: 'Sophie Martin', client_phone: '07 45 67 89 12', status: 'REGLEE', created_at: new Date(Date.now() - 3600000).toISOString(), total_amount: 93000, items: [{ id: 1002, reference: 'MN-CHT-002', unit_price: 93000 }] },
-]
-
-const DEMO_RESERVED: Glass[] = [
-  { barcode: 'GL-RES-01', reference: 'MN-CHT-002', brand: 'Ray-Ban', price: 93000, status: 'RESERVEE', location_code: 'R-12', updated_at: new Date().toISOString() },
-]
-
-const DEMO_SOLD: Glass[] = [
-  { barcode: 'GL-SOLD-01', reference: 'MN-SPT-003', brand: 'Gucci', price: 137000, status: 'VENDUE', location_code: 'C-03', sold_at: new Date().toISOString() },
-]
 
 // ── Briques d'interface ────────────────────────────────────────────────────────
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -608,8 +688,17 @@ function useCaisseData() {
       apiFetch('/inventory/proformas'),
       apiFetch('/inventory/glasses?status=RESERVEE'),
       apiFetch('/inventory/glasses?status=VENDUE'),
+      // Une monture réservée n'a plus d'emplacement : le serveur rend le casier au pot
+      // commun et passe `location_id` à NULL. Seuls les mouvements gardent la trace.
+      //
+      // Sans filtre sur l'action, et volontairement. Le mouvement de réservation ne porte
+      // pas le casier de présentoir : entre les deux, la proforma a fait passer la monture
+      // au comptoir, où elle prend un emplacement de STOCK (display_service.go placeGlass,
+      // « la caisse n'expose rien »). L'origine d'une réservation est donc un code
+      // RAYON-…, pas un PR. On remonte au dernier mouvement parti d'un vrai casier.
+      apiFetch('/inventory/movements?limit=500'),
     ])
-    const [proformasR, reservedR, soldR] = results
+    const [proformasR, reservedR, soldR, mouvementsR] = results
     const glasses = (r: PromiseSettledResult<any>): Glass[] =>
       r.status === 'fulfilled' ? (r.value?.data?.glasses || []) : []
 
@@ -621,20 +710,97 @@ function useCaisseData() {
     const details = await Promise.allSettled(
       listees.map(proforma => apiFetch(`/inventory/proformas/${proforma.id}`)),
     )
+    // Le casier de présentoir, par code-barres. Le plus récent gagne : une monture peut
+    // avoir été exposée, vendue, rendue, puis reposée dans un autre casier.
+    const origines = new Map<string, { code: string; date: string }>()
+    const mouvements: any[] = mouvementsR.status === 'fulfilled' ? (mouvementsR.value?.data?.movements || []) : []
+    for (const mouvement of mouvements) {
+      const barcode = String(mouvement?.barcode || '').trim().toUpperCase()
+      const code = String(mouvement?.from_location_code || '').trim().toUpperCase()
+      // Le filtre porte sur la grammaire du code, pas sur l'action. Les deux grammaires ne
+      // se confondent pas — « PR01-1 » pour un meuble de présentoir, « RAYON-A-ETA-… » pour
+      // l'entrepôt — et c'est plus sûr que d'énumérer les actions qui vident un casier :
+      // vente, réserve, mise en caisse, retrait, et celles qui viendront après.
+      if (!barcode || !PRESENTOIR_SLOT.test(code)) continue
+      const date = String(mouvement?.created_at || '')
+      const connu = origines.get(barcode)
+      if (!connu || date > connu.date) origines.set(barcode, { code, date })
+    }
+
+    const reserved = glasses(reservedR).map(glass => {
+      // Écrit sur la fiche plutôt que résolu à l'affichage : la table des montures est
+      // décrite par une constante hors composant, qui ne peut pas atteindre cette carte.
+      const origine = origines.get(String(glass.barcode || '').trim().toUpperCase())
+      return origine ? { ...glass, presentoir_origine: origine.code } : glass
+    })
+    // La destination se calcule une seule fois, ici, et s'écrit sur la proforma : quatre
+    // endroits la relisent ensuite — dont deux constantes hors composant, qui n'auraient
+    // pas pu atteindre la liste des montures réservées autrement.
+    const reservedBarcodes = new Set(
+      reserved.map(glass => String(glass.barcode || '').trim().toUpperCase()).filter(Boolean),
+    )
+
+    // L'emplacement d'une monture, par code-barres. L'emplacement courant d'abord ; à
+    // défaut le casier de présentoir, car une monture partie en caisse ou au laboratoire
+    // n'en a plus — et la place qu'elle occupait reste ce qu'on cherche à savoir.
+    const emplacements = new Map<string, string>()
+    for (const glass of [...reserved, ...glasses(soldR)]) {
+      const barcode = String(glass.barcode || '').trim().toUpperCase()
+      const code = String(glass.location_code || '').trim()
+      if (barcode && code) emplacements.set(barcode, code)
+    }
+    for (const [barcode, origine] of origines) {
+      if (!emplacements.has(barcode)) emplacements.set(barcode, origine.code)
+    }
+
     const proformas = listees.map((proforma, index) => {
       const detail = details[index]
       const complete = detail.status === 'fulfilled' ? detail.value?.data?.proforma : null
       // Un détail indisponible ne doit pas faire disparaître la proforma de la file.
-      return complete ? { ...proforma, ...complete } : proforma
+      const merged: Proforma = complete ? { ...proforma, ...complete } : proforma
+      // Dédoublonné : deux montures du même document peuvent venir du même meuble, et
+      // « PR01-1 · PR01-1 » n'apprendrait rien de plus que « PR01-1 ».
+      const casiers = Array.from(new Set(
+        (merged.items || [])
+          .map(item => emplacements.get(String(item.barcode || '').trim().toUpperCase()) || '')
+          .filter(Boolean),
+      ))
+      return {
+        ...merged,
+        destination: resolveDestination(merged, reservedBarcodes),
+        emplacement: casiers.join(' · '),
+      }
     })
 
-    const resolvedProformas = proformas.length > 0 ? proformas : DEMO_PROFORMAS
-    const resolvedReserved = glasses(reservedR).length > 0 ? glasses(reservedR) : DEMO_RESERVED
-    const resolvedSold = glasses(soldR).length > 0 ? glasses(soldR) : DEMO_SOLD
-    setData({ proformas: resolvedProformas, reserved: resolvedReserved, sold: resolvedSold })
+    // Une liste vide s'affiche vide. Des jeux de démonstration prenaient ici le relais dès
+    // qu'une liste revenait sans ligne, et rien ne les distinguait à l'écran : le caissier
+    // lisait « 93 000 FCFA en réserve » sur une réserve inexistante. Pire, la substitution
+    // se déclenchait au moment où la donnée réelle disparaissait — une monture vendue quitte
+    // le statut VENDUE dès que le labo la scanne — si bien que le montant encaissé montait
+    // quand une vente s'en allait.
+    // Les ventes viennent de deux sources, dédoublonnées par code-barres : la liste VENDUE
+    // pour ce qui porte encore ce statut, les lignes de proforma pour tout le reste — soit
+    // la quasi-totalité, dès que le laboratoire a scanné.
+    const vendues = glasses(soldR)
+    const comptees = new Set(
+      vendues.map(glass => String(glass.barcode || '').trim().toUpperCase()).filter(Boolean),
+    )
+    const reconstituees = soldFromProformas(proformas).filter(vente => {
+      const key = String(vente.barcode || '').trim().toUpperCase()
+      if (!key || comptees.has(key)) return false
+      comptees.add(key)
+      return true
+    })
 
-    const failed = results.filter(r => r.status === 'rejected').length
-    if (failed === results.length) setError("Aucune donnée n'a pu être chargée.")
+    setData({ proformas, reserved, sold: [...vendues, ...reconstituees] })
+
+    // Les trois listes seulement : les mouvements ne peuplent aucune table, ils ne font
+    // qu'ajouter le casier d'origine à une colonne. Les compter ici afficherait « 1 liste
+    // indisponible » au-dessus de trois tables pleines, ce qui ferait chercher une panne
+    // là où il ne manque qu'un détail.
+    const listes = [proformasR, reservedR, soldR]
+    const failed = listes.filter(r => r.status === 'rejected').length
+    if (failed === listes.length) setError("Aucune donnée n'a pu être chargée.")
     else if (failed > 0) setError(`${failed} liste${failed > 1 ? 's' : ''} indisponible${failed > 1 ? 's' : ''}.`)
     setLoading(false)
   }, [])
@@ -885,7 +1051,7 @@ function ProformaCard({ proforma, onOpen }: { proforma: Proforma; onOpen: () => 
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
             <span>Vendeur</span>
-            <span style={{ fontWeight: 600, color: '#1a3a3a', textAlign: 'right' }}>{proforma.vendor_name || '—'}</span>
+            <span style={{ fontWeight: 600, color: '#1a3a3a', textAlign: 'right' }}>{proforma.created_by_name || proforma.vendor_name || '—'}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
             <span>Destination</span>
@@ -909,9 +1075,12 @@ function ProformaCard({ proforma, onOpen }: { proforma: Proforma; onOpen: () => 
 }
 
 const PROFORMA_COLUMNS: Column<Proforma>[] = [
-  { key: 'code', label: 'Code', value: p => p.code || `#${p.id}` },
+  // « Référence » et non « Code » : l'ancienne colonne « Référence » retombait sur `p.code`
+  // faute de champ propre, et affichait donc deux fois la même valeur sur chaque ligne.
+  { key: 'code', label: 'Référence', value: p => p.code || `#${p.id}` },
   { key: 'client', label: 'Client', value: p => p.client_name || '—' },
-  { key: 'reference', label: 'Référence', value: p => p.reference || p.code || '' },
+  // La place prise par le doublon sert à ce qui manquait : où sont les montures.
+  { key: 'emplacement', label: 'Emplacement', value: p => p.emplacement || '—' },
   { key: 'destination', label: 'Destination', value: p => destinationLabel(p.destination) },
   { key: 'amount', label: 'Montant', value: p => fmtFCFA(proformaTotal(p)), numeric: true },
   { key: 'status', label: 'Statut', value: p => isPending(p) ? 'En attente' : (p.status || '—') },
@@ -921,7 +1090,14 @@ const GLASS_COLUMNS: Column<Glass>[] = [
   { key: 'ref', label: 'Référence', value: g => g.reference || g.barcode || '' },
   { key: 'brand', label: 'Marque', value: g => g.brand || '' },
   { key: 'barcode', label: 'Code-barres', value: g => g.barcode || '' },
-  { key: 'location', label: 'Emplacement', value: g => g.location_code || '' },
+  // « (origine) » et non le casier nu : une monture en réserve n'est plus au présentoir,
+  // elle est de côté au nom du client. Afficher le casier sans le dire enverrait quelqu'un
+  // devant une place désormais occupée par une autre monture.
+  {
+    key: 'location',
+    label: 'Emplacement',
+    value: g => g.location_code || (g.presentoir_origine ? `${g.presentoir_origine} (origine)` : ''),
+  },
   { key: 'price', label: 'Prix', value: g => fmtFCFA(g.price), numeric: true },
   { key: 'date', label: 'Date', value: g => fmtDate(g.sold_at || g.updated_at || g.created_at) },
 ]
@@ -930,23 +1106,43 @@ function JourneeScreen({ data }: { data: CaisseData }) {
   const today = dayKey(new Date().toISOString())
 
   const soldToday = data.sold.filter(g => dayKey(g.sold_at || g.updated_at || g.created_at) === today)
-  const encaisse = soldToday.reduce((sum, g) => sum + (Number(g.price) || 0), 0)
+  // L'argent encaissé se lit sur les proformas réglées du jour, pas sur le prix des montures
+  // vendues : le total du document porte aussi les verres, les accessoires et le montage —
+  // souvent la plus grosse part du panier, et absents de toute fiche monture.
+  //
+  // Sur REGLEE et non sur « pas en attente » : une proforma annulée est elle aussi sortie de
+  // la file, et la compter ferait entrer en caisse de l'argent que personne n'a versé.
+  const regleesToday = data.proformas.filter(
+    p => String(p.status || '').toUpperCase() === 'REGLEE'
+      && dayKey(p.settled_at || p.created_at) === today,
+  )
+  const encaisse = regleesToday.reduce((sum, p) => sum + proformaTotal(p), 0)
   const reserveValue = data.reserved.reduce((sum, g) => sum + (Number(g.price) || 0), 0)
   const enAttente = data.proformas.filter(isPending)
   const validees = data.proformas.filter(p => !isPending(p))
   const montantValide = validees.reduce((sum, p) => sum + proformaTotal(p), 0)
 
+  // Les réserves rejoignent le tableau. Elles en étaient absentes par construction : une
+  // monture gardée de côté attend que le client revienne payer, sa proforma est donc encore
+  // EN_ATTENTE et le filtre « pas en attente » l'écartait. Or ces montures sont engagées au
+  // nom d'un client au même titre que les autres — un inventaire qui les ignore compte du
+  // stock disponible qui ne l'est pas.
+  const enReserve = data.proformas.filter(
+    p => isPending(p) && String(p.destination || '').toLowerCase() === 'reserve',
+  )
+  const lignes = [...validees, ...enReserve]
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile label="Encaissé aujourd'hui" value={fmtFCFA(encaisse)} color="#16a34a" note={`${soldToday.length} monture${soldToday.length > 1 ? 's' : ''}`} />
+        <StatTile label="Encaissé aujourd'hui" value={fmtFCFA(encaisse)} color="#16a34a" note={`${regleesToday.length} proforma${regleesToday.length > 1 ? 's' : ''} · ${soldToday.length} monture${soldToday.length > 1 ? 's' : ''}`} />
         <StatTile label="En attente" value={fmt(enAttente.length)} color="#d97706" note="proformas" />
         <StatTile label="En réserve" value={fmt(data.reserved.length)} color="#9333ea" note={fmtFCFA(reserveValue)} />
         <StatTile label="Vendues au total" value={fmt(data.sold.length)} color="#2563eb" />
       </div>
 
       <div className="rounded-2xl border border-slate-100 bg-white p-4 space-y-4">
-        <SectionTitle>Résumé des proformas validées</SectionTitle>
+        <SectionTitle>Proformas validées et réserves</SectionTitle>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Card>
             <p className="text-xs text-slate-400">Proformas validées</p>
@@ -963,9 +1159,9 @@ function JourneeScreen({ data }: { data: CaisseData }) {
         </div>
         <DataTable
           columns={PROFORMA_COLUMNS}
-          rows={validees}
+          rows={lignes}
           filename={`caisse-proformas-${today}`}
-          empty="Aucune proforma validée pour l'instant."
+          empty="Aucune proforma validée ni en réserve pour l'instant."
         />
       </div>
 
@@ -1153,9 +1349,24 @@ function CaissePage() {
   const enAttente = useMemo(() => data.proformas.filter(isPending), [data.proformas])
   const reglees = useMemo(() => data.proformas.filter(p => !isPending(p)), [data.proformas])
   const laboValidées = useMemo(() => reglees.filter(p => String(p.destination || '').toLowerCase() === 'labo'), [reglees])
-  const reserveValidées = useMemo(() => reglees.filter(p => String(p.destination || '').toLowerCase() === 'reserve'), [reglees])
+  // Sur toutes les proformas et non les seules réglées : une monture mise en réserve attend
+  // que le client revienne payer, son document est donc encore EN_ATTENTE. Le restreindre
+  // aux réglées vidait l'onglet de ce qu'il est censé montrer.
+  const reserveValidées = useMemo(
+    () => data.proformas.filter(p => String(p.destination || '').toLowerCase() === 'reserve'),
+    [data.proformas],
+  )
   const open = openId ? data.proformas.find(p => p.id === openId) || null : null
-  const totalEncaisse = useMemo(() => data.sold.reduce((sum, glass) => sum + (Number(glass.price) || 0), 0), [data.sold])
+  // « Encaissé » compte de l'argent, donc des proformas réglées — pas le prix des montures
+  // vendues, qui laisse de côté les verres et le montage. La tuile « Encaissé aujourd'hui »
+  // de l'Inventaire applique la même règle sur la seule journée : deux nombres différents
+  // sous le même mot, sur le même écran, se liraient comme une erreur.
+  const totalEncaisse = useMemo(
+    () => data.proformas
+      .filter(p => String(p.status || '').toUpperCase() === 'REGLEE')
+      .reduce((sum, p) => sum + proformaTotal(p), 0),
+    [data.proformas],
+  )
   const totalReserve = useMemo(() => data.reserved.reduce((sum, glass) => sum + (Number(glass.price) || 0), 0), [data.reserved])
   const totalTraitees = reglees.length
   const montantLabo = useMemo(() => laboValidées.reduce((sum, p) => sum + proformaTotal(p), 0), [laboValidées])
@@ -1214,7 +1425,9 @@ function CaissePage() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(140px, 1fr))', gap: '1rem' }}>
                     <div style={{ background: 'white', padding: '1rem', borderRadius: '12px', border: '1px solid #e0e0e0', boxShadow: '0 8px 20px rgba(0,0,0,0.05)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                        <CircleDollarSign size={16} color="#2E7D32" />
+                        {/* « XAF » et non le dollar cerclé de lucide : la caisse encaisse
+                            des francs CFA, et le montant juste en dessous est en FCFA. */}
+                        <span style={{ color: '#2E7D32' }}>{ic.xaf('w-4 h-4')}</span>
                         <p style={{ margin: 0, fontSize: '12px', color: '#666', fontWeight: 600 }}>Encaissé</p>
                       </div>
                       <p style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: '#2E7D32' }}>{fmtFCFA(totalEncaisse)}</p>
@@ -1347,7 +1560,7 @@ function CaissePage() {
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
                         {reserveValidées.length === 0 ? (
-                          <div style={{ gridColumn: '1 / -1' }}><EmptyState>Aucune proforma validée en réserve.</EmptyState></div>
+                          <div style={{ gridColumn: '1 / -1' }}><EmptyState>Aucune proforma en réserve.</EmptyState></div>
                         ) : (
                           reserveValidées.map(proforma => (
                             <ProformaCard key={proforma.id} proforma={proforma} onOpen={() => setOpenId(proforma.id)} />

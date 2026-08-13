@@ -5,6 +5,7 @@ import './index.css'
 // serait pas copié dans dist/ au build.
 import logoUrl from '../logo.jpeg'
 import { GlassTable, downloadCSV } from './GlassTable'
+import { calculateGlassSimilarity, getGamme, normalizeAttr } from './glassSimilarity'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 
@@ -95,15 +96,6 @@ function dayKey(value?: string) {
   return String(value || '').slice(0, 10)
 }
 
-/** Même barème que getGamme() de presentoir.js. */
-function getGamme(price: unknown) {
-  const value = Number(price)
-  if (!price || Number.isNaN(value)) return '—'
-  if (value <= 50000) return 'Classique'
-  if (value <= 100000) return 'Moyenne gamme'
-  return 'Luxe'
-}
-
 function fullName(user: any) {
   return `${String(user?.first_name || '').trim()} ${String(user?.last_name || '').trim()}`.trim()
 }
@@ -112,17 +104,40 @@ function glassRef(glass: Glass) {
   return glass.reference || glass.barcode || '—'
 }
 
-/** Compare deux attributs saisis à la main : « Écaille » et « ecaille » désignent la
- *  même couleur. Accents retirés et casse ignorée, comme normalizeSendValue() de
- *  ../Frontend/scan.js — sans quoi la moitié du stock ne se retrouverait jamais. */
-function normalizeAttr(value: unknown) {
-  return String(value || '')
-    .trim()
-    .toLocaleLowerCase('fr-FR')
-    .normalize('NFD')
-    // Les marques diacritiques que NFD vient de détacher. En échappements plutôt
-    // qu'en caractères bruts : ceux-ci se collent au crochet dans un éditeur.
-    .replace(/[\u0300-\u036f]/g, '')
+/**
+ * Score de recommandation pour la **recherche de remplacement** — à ne pas confondre
+ * avec la similarité du Présentoir. Celle-ci répond à « à quoi cette monture
+ * ressemble-t-elle ? » (cosinus pondéré genre/forme/gamme, glassSimilarity.ts) ; le
+ * score ci-dessous répond à « que proposer à la place ? » et ajoute donc la marque et
+ * la couleur, que la cliente a sous les yeux.
+ *
+ * Ses poids (0.6 / 0.2 / 0.2) lui sont propres et n'entrent jamais dans
+ * calculateGlassSimilarity(). Il ne sert qu'à ordonner searchSimilar(), dont il ne
+ * change pas les filtres métier.
+ */
+function calculateRecommendationScore(a: Glass, b: Glass): number {
+  // Poids attribués : base (genre/forme/gamme) 0.6, marque 0.2, couleur 0.2
+  const BASE_WEIGHT = 0.6
+  const BRAND_WEIGHT = 0.2
+  const COLOR_WEIGHT = 0.2
+
+  const base = calculateGlassSimilarity(a, b)
+
+  const aBrand = a?.brand ? normalizeAttr(a.brand) : undefined
+  const bBrand = b?.brand ? normalizeAttr(b.brand) : undefined
+  const brandScore = (aBrand !== undefined && bBrand !== undefined) ? (aBrand === bBrand ? 1 : 0) : undefined
+
+  const aColor = a?.color ? normalizeAttr(a.color) : undefined
+  const bColor = b?.color ? normalizeAttr(b.color) : undefined
+  const colorScore = (aColor !== undefined && bColor !== undefined) ? (aColor === bColor ? 1 : 0) : undefined
+
+  let sum = 0
+  let weightSum = 0
+  if (base !== undefined) { sum += BASE_WEIGHT * base; weightSum += BASE_WEIGHT }
+  if (brandScore !== undefined) { sum += BRAND_WEIGHT * brandScore; weightSum += BRAND_WEIGHT }
+  if (colorScore !== undefined) { sum += COLOR_WEIGHT * colorScore; weightSum += COLOR_WEIGHT }
+  if (weightSum === 0) return 0
+  return sum / weightSum
 }
 
 /** Une monture qu'on peut encore proposer. Vendue, perdue, cassée ou rendue ne
@@ -236,7 +251,7 @@ interface Claim {
   updated_at?: string
 }
 
-type Screen = 'dashboard' | 'proforma' | 'ventes' | 'scan' | 'reclamation' | 'stats'
+type Screen = 'dashboard' | 'proforma' | 'ventes' | 'scan' | 'remise' | 'reclamation' | 'stats'
 
 // ── Icônes ─────────────────────────────────────────────────────────────────────
 const ic = {
@@ -254,6 +269,8 @@ const ic = {
   back: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M19 12H5M11 18l-6-6 6-6" /></svg>,
   refresh: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" /></svg>,
   check: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>,
+  hand: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" /><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2" /><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg>,
+  clock: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
   search: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>,
   download: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><path d="M12 15V3" /></svg>,
   chevRight: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M9 18l6-6-6-6" /></svg>,
@@ -272,7 +289,14 @@ const NAV: { id: Screen; label: string; short: string; icon: (c?: string) => Rea
   { id: 'dashboard', label: 'Tableau de bord', short: 'Accueil', icon: ic.home },
   { id: 'proforma', label: 'Faire une proforma', short: 'Proforma', icon: ic.doc },
   { id: 'ventes', label: 'Ventes & proformas', short: 'Ventes', icon: ic.cart },
-  { id: 'scan', label: 'Scan monture', short: 'Scan', icon: ic.scan },
+  // L'écran porte deux choses : la recherche d'une monture au scan, et la liste du
+  // présentoir. Le libellé ne nommait que la première, si bien qu'on cherchait le
+  // présentoir dans un menu où il figurait déjà. « short » reste court : la barre du bas,
+  // sur téléphone, n'a pas la place des deux mots.
+  { id: 'scan', label: 'Scan monture / Présentoir', short: 'Scan', icon: ic.scan },
+  // La remise vit ici et non au poste R. Magasin : c'est la vendeuse qui accueille le
+  // client, donc elle qui lui rend ses lunettes une fois le montage terminé.
+  { id: 'remise', label: 'Remise client', short: 'Remise', icon: ic.hand },
   { id: 'reclamation', label: 'Réclamation', short: 'Réclam.', icon: ic.alert },
   { id: 'stats', label: 'Mes stats', short: 'Stats', icon: ic.chart },
 ]
@@ -636,26 +660,75 @@ function DataTable<T>({ columns, rows, filename, empty }: {
  *  La vendeuse conseille : elle a besoin du prix sous les yeux à chaque monture, et du
  *  code-barres pour la porter sur une proforma. */
 function PresentoirTable({ glasses }: { glasses: Glass[] }) {
+  const [compareKey, setCompareKey] = useState('')
+
+  const glassByKey = useMemo(() => {
+    const m = new Map<string, Glass>()
+    glasses.forEach((g, i) => {
+      const key = String(g.barcode || `presentoir-${i}`)
+      m.set(key, g)
+    })
+    return m
+  }, [glasses])
+
+  const similarities = useMemo(() => {
+    if (!compareKey) return new Map<string, number>()
+    const ref = glassByKey.get(compareKey)
+    if (!ref) return new Map<string, number>()
+    const m = new Map<string, number>()
+    for (const [key, g] of glassByKey.entries()) {
+      m.set(key, calculateGlassSimilarity(ref, g))
+    }
+    return m
+  }, [compareKey, glassByKey])
+
+  const rows = glasses.map((glass, index) => {
+    const key = String(glass.barcode || `presentoir-${index}`)
+    const sim = similarities.get(key) || 0
+    return {
+      key,
+      photo: glass.photo_monture_url,
+      reference: glassRef(glass),
+      brand: glass.brand,
+      gender: glass.gender,
+      shape: glass.shape,
+      location: glass.location_code || glass.station_name,
+      entry: glass.created_at,
+      before: [glass.barcode],
+      after: [compareKey ? `${Math.round(sim * 100)}%` : '', fmtFCFA(glass.price)],
+      status: { label: 'en rayon', tone: 'green' as const },
+    }
+  })
+
   return (
     <div className="rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-700">
+        <label className="text-xs font-semibold text-slate-600">Comparer à</label>
+        <select
+          value={compareKey}
+          onChange={e => setCompareKey(e.target.value)}
+          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm outline-none"
+        >
+          <option value="">—</option>
+          {glasses.map((g, i) => (
+            <option key={g.barcode || i} value={String(g.barcode || `presentoir-${i}`)}>
+              {glassRef(g)} · {getGamme(g.price)}
+            </option>
+          ))}
+        </select>
+        {compareKey && (
+          <button type="button" onClick={() => setCompareKey('')} className="text-xs text-slate-500 hover:underline">
+            Effacer
+          </button>
+        )}
+      </div>
+
       <GlassTable
         emptyLabel="Aucune monture au présentoir."
         title="presentoir"
         before={[{ header: 'Code-barres', mono: true }]}
-        after={[{ header: 'Prix', align: 'right' }]}
-        rows={glasses.map((glass, index) => ({
-          key: glass.barcode || `presentoir-${index}`,
-          photo: glass.photo_monture_url,
-          reference: glassRef(glass),
-          brand: glass.brand,
-          gender: glass.gender,
-          shape: glass.shape,
-          location: glass.location_code || glass.station_name,
-          entry: glass.created_at,
-          before: [glass.barcode],
-          after: [fmtFCFA(glass.price)],
-          status: { label: 'en rayon', tone: 'green' as const },
-        }))}
+        after={[{ header: 'Sim.' }, { header: 'Prix', align: 'right' }]}
+        rows={rows}
       />
     </div>
   )
@@ -711,12 +784,14 @@ interface StoreData {
   incoming: IncomingGlass[]
   reserved: Glass[]
   sold: Glass[]
+  /** Montage terminé au laboratoire : elles attendent que le client vienne les chercher. */
+  pretes: Glass[]
   proformas: Proforma[]
   movements: Movement[]
   claims: Claim[]
 }
 
-const EMPTY_DATA: StoreData = { presentoir: [], incoming: [], reserved: [], sold: [], proformas: [], movements: [], claims: [] }
+const EMPTY_DATA: StoreData = { presentoir: [], incoming: [], reserved: [], sold: [], pretes: [], proformas: [], movements: [], claims: [] }
 
 /** Les ventes reconstituées depuis les proformas encaissées.
  *
@@ -796,9 +871,12 @@ function useStoreData(stationId: number | null) {
       // la monture a été vendue et est passée à tout autre chose. C'est le statut de la
       // monture qui dit si elle voyage, le transfert seulement vers où.
       apiFetch('/inventory/glasses?status=EN_TRANSIT'),
+      // Le laboratoire a fini son montage : ces montures attendent que le client vienne les
+      // chercher, et c'est la vendeuse qui les lui remet.
+      stationId ? apiFetch(`/inventory/glasses?station_id=${stationId}&status=PRETE_A_LIVRER`) : Promise.resolve({}),
     ])
 
-    const [presentoirR, reservedR, soldR, proformasR, movementsR, transfersR, transitR] = results
+    const [presentoirR, reservedR, soldR, proformasR, movementsR, transfersR, transitR, pretesR] = results
     const glasses = (r: PromiseSettledResult<any>): Glass[] =>
       r.status === 'fulfilled' ? (r.value?.data?.glasses || []) : []
 
@@ -886,6 +964,7 @@ function useStoreData(stationId: number | null) {
       incoming,
       reserved: glasses(reservedR),
       sold: [...vendues, ...encaissees],
+      pretes: glasses(pretesR),
       proformas,
       movements: movementsR.status === 'fulfilled' ? (movementsR.value?.data?.movements || []) : [],
       claims: Array.isArray(claims) ? claims : [],
@@ -1750,6 +1829,19 @@ function EyeRow({ label, eye, onChange }: { label: string; eye: EyeLine; onChang
 
 interface MontureLine { glass: Glass; offerte: boolean }
 
+/** Mouvements affichés par page dans « Mes actions ». La liste entière était coupée à 15
+ *  sans moyen de voir la suite : le reste de l'historique était simplement inatteignable. */
+const ACTIONS_PAR_PAGE = 8
+
+/** Le silence après lequel la recherche part seule. Assez long pour qu'une douchette ait
+ *  fini d'écrire son code — elle le tape en quelques dizaines de millisecondes — et pour
+ *  qu'une frappe au clavier ne parte pas à mi-code. */
+const SCAN_PAUSE_MS = 450
+
+/** En deçà, on n'interroge pas : aucune référence du parc n'est aussi courte, et un code
+ *  à moitié tapé ne vaut pas un aller-retour serveur. Le bouton, lui, n'a pas ce seuil. */
+const SCAN_MIN_LENGTH = 4
+
 function ProformaScreen({ stationId, user, onDone }: {
   stationId: number | null
   user: any
@@ -1774,9 +1866,59 @@ function ProformaScreen({ stationId, user, onDone }: {
   const [reuseMessage, setReuseMessage] = useState('')
   const [reuseTone, setReuseTone] = useState<'error' | 'success' | ''>('')
   const scanRef = useRef<HTMLInputElement>(null)
+  // Le dernier code effectivement cherché. Sans lui, un code introuvable resterait dans le
+  // champ et repartirait en boucle à chaque rendu.
+  const lastScanRef = useRef('')
+  const [societes, setSocietes] = useState<Societe[]>([])
+  const [societesError, setSocietesError] = useState('')
 
   // La douchette écrit là où est le curseur : le champ le reprend après chaque ajout.
   useEffect(() => { scanRef.current?.focus() }, [montures.length])
+
+  // Recherche automatique, déclenchée sur la pause de saisie et non sur la frappe : la
+  // douchette envoie le code d'un bloc puis s'arrête, et une saisie au clavier s'arrête
+  // aussi quand elle est finie. Chercher à chaque caractère interrogerait le serveur pour
+  // « G », « GF », « GFD »… et noierait l'écran sous « Aucune monture ne porte ce code ».
+  //
+  // Le bouton Ajouter et la touche Entrée restent branchés : ils passent devant l'attente,
+  // et acceptent les codes plus courts que le seuil.
+  useEffect(() => {
+    const value = code.trim()
+    if (scanBusy || value.length < SCAN_MIN_LENGTH || value === lastScanRef.current) return
+
+    const timer = window.setTimeout(() => { void addMonture() }, SCAN_PAUSE_MS)
+    return () => window.clearTimeout(timer)
+  }, [code, scanBusy])
+
+  // La liste est fermée : la vendeuse choisit une société existante, elle n'en saisit plus.
+  // Un échec de chargement n'empêche pas d'émettre la proforma — la société est facultative,
+  // et bloquer une vente sur une liste indisponible serait pire que l'absence du champ.
+  useEffect(() => {
+    let annule = false
+    void (async () => {
+      try {
+        const payload = await apiFetch('/inventory/societes')
+        if (annule) return
+        const liste: Societe[] = payload?.data?.societes || payload?.data || []
+        setSocietes(Array.isArray(liste) ? liste : [])
+        setSocietesError('')
+      } catch (error: any) {
+        if (annule) return
+        setSocietes([])
+        setSocietesError(error?.message || 'Liste des sociétés indisponible.')
+      }
+    })()
+    return () => { annule = true }
+  }, [])
+
+  // Le formulaire s'ouvre sur « PARTICULIER » depuis toujours : dès que la liste arrive, on
+  // rattache ce nom à sa fiche pour que le cas courant parte avec son identifiant sans que
+  // la vendeuse ait à toucher au champ.
+  useEffect(() => {
+    if (rx.societeId || societes.length === 0) return
+    const defaut = societes.find(s => s.name.trim().toUpperCase() === rx.societe.trim().toUpperCase())
+    if (defaut) setRx(prev => ({ ...prev, societeId: defaut.id, societe: defaut.name }))
+  }, [societes, rx.societeId, rx.societe])
 
   const monturesTotal = montures.reduce((sum, line) => sum + (line.offerte ? 0 : Number(line.glass.price) || 0), 0)
   const totals = computeTotals(rx, monturesTotal)
@@ -1789,6 +1931,9 @@ function ProformaScreen({ stationId, user, onDone }: {
   async function addMonture() {
     const value = code.trim()
     if (!value) return
+    // Mémorisé ici et non dans l'effet : la recherche automatique et le bouton passent tous
+    // les deux par cette fonction, et un code déjà tenté ne doit pas repartir tout seul.
+    lastScanRef.current = value
     if (montures.some(line => line.glass.barcode === value || line.glass.reference === value)) {
       setScanMessage('Cette monture est déjà sur la proforma.')
       setScanTone('error')
@@ -1929,6 +2074,7 @@ function ProformaScreen({ stationId, user, onDone }: {
           // interrogeables — combien de progressifs, quel chiffre sur les accessoires.
           prescription: {
             societe: rx.societe,
+            societe_id: rx.societeId || undefined,
             foyer: rx.foyer,
             teinte: rx.teinte,
             od_sphere: rx.od.sphere,
@@ -2073,7 +2219,27 @@ function ProformaScreen({ stationId, user, onDone }: {
           <p className="text-sm font-bold text-slate-900 dark:text-white mb-3">Client</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Field label="Société">
-              <input value={rx.societe} onChange={e => patch({ societe: e.target.value })} placeholder="PARTICULIER" className={FIELD} />
+              <select
+                value={rx.societeId ? String(rx.societeId) : ''}
+                onChange={e => {
+                  const id = Number(e.target.value)
+                  const choisie = societes.find(s => s.id === id)
+                  // Le nom part avec l'identifiant : le serveur recopie les deux, et c'est
+                  // lui qui s'imprime sur le document.
+                  patch({ societeId: choisie ? choisie.id : 0, societe: choisie ? choisie.name : '' })
+                }}
+                className={FIELD}
+              >
+                <option value="">{societesError ? 'Liste indisponible' : 'Non renseignée'}</option>
+                {societes.map(societe => (
+                  <option key={societe.id} value={societe.id}>{societe.name}</option>
+                ))}
+              </select>
+              {societesError && (
+                <p className="mt-1 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                  {societesError} La proforma reste possible sans société.
+                </p>
+              )}
             </Field>
             <Field label="Nom et prénoms *">
               <input value={clientName} onChange={e => { setClientName(e.target.value); setMessage('') }} placeholder="MANCACATH Christiane" className={FIELD} />
@@ -2109,7 +2275,7 @@ function ProformaScreen({ stationId, user, onDone }: {
 
         <Card>
           <p className="text-sm font-bold text-slate-900 dark:text-white mb-1">Montures</p>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-3">Scannez l'étiquette ou saisissez le code, puis Entrée.</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-3">Scannez l'étiquette : la recherche part toute seule. Au clavier, marquez une pause ou appuyez sur Entrée.</p>
 
           <form onSubmit={e => { e.preventDefault(); void addMonture() }} className="flex flex-col sm:flex-row gap-2">
             <input
@@ -2361,8 +2527,20 @@ const TEINTES = ['Teinte A, B, C', 'Photo / Transit°', 'Blanc']
 
 interface EyeLine { sphere: string; cylindre: string; axe: string; addition: string; prix: number }
 
+/** Une société conventionnée, telle que la sert `/inventory/societes`. La liste est tenue
+ *  par la Direction : le poste la lit, il n'y écrit pas. */
+interface Societe {
+  id: number
+  name: string
+  active?: boolean
+}
+
 interface Prescription {
   societe: string
+  /** L'identifiant de la société choisie. Zéro tant qu'aucune ne l'est. Le nom est envoyé
+   *  avec lui : le serveur garde les deux, l'un pour compter, l'autre pour que le document
+   *  reste lisible si la société est renommée. */
+  societeId: number
   foyer: string
   teinte: string
   od: EyeLine
@@ -2378,7 +2556,7 @@ const EMPTY_EYE: EyeLine = { sphere: '', cylindre: '', axe: '', addition: '', pr
 
 function emptyPrescription(): Prescription {
   return {
-    societe: 'PARTICULIER', foyer: '', teinte: '',
+    societe: 'PARTICULIER', societeId: 0, foyer: '', teinte: '',
     od: { ...EMPTY_EYE }, og: { ...EMPTY_EYE },
     accessoiresLabel: '', accessoiresPrix: 0, montage: 0, remise: 0, freeNote: '',
   }
@@ -2875,6 +3053,9 @@ function ScanScreen({ data, stationId, onReceived }: {
   onReceived: () => void
 }) {
   const [code, setCode] = useState('')
+  // Le casier de présentoir choisi à la main. Vide : le serveur attribue le premier libre,
+  // comme il l'a toujours fait.
+  const [casier, setCasier] = useState('')
   const [found, setFound] = useState<Glass | null>(null)
   const [status, setStatus] = useState('Prêt à scanner.')
   const [tone, setTone] = useState<'error' | 'success' | ''>('')
@@ -2927,13 +3108,41 @@ function ScanScreen({ data, stationId, onReceived }: {
       // déclenche PlaceOnDisplay, qui clôt un transfert en cours. On le dit, et on relit
       // les listes du poste pour que « en route » et « présentoir » suivent.
       const attendue = data.incoming.some(item => item.barcode === glass.barcode)
-      if (attendue) {
-        setStatus(`${glassRef(glass)} reçue au présentoir.`)
-        onReceived()
-      } else {
-        setStatus(`${glassRef(glass)} trouvée.`)
+      let message = attendue ? `${glassRef(glass)} reçue au présentoir.` : `${glassRef(glass)} trouvée.`
+      let echec = false
+
+      // Le casier se pose après le scan, jamais avant : c'est le scan qui vaut réception et
+      // fait passer la monture EN_PRESENTOIR. Désigner une place pour une monture qui n'est
+      // pas encore exposée serait refusé par le serveur.
+      const voulu = casier.trim()
+      if (voulu) {
+        if (!stationId) {
+          message += " Casier non attribué : aucune station rattachée à ce compte."
+          echec = true
+        } else {
+          try {
+            const range = await apiFetch('/inventory/presentoir/assign-slot', {
+              method: 'POST',
+              body: JSON.stringify({ station_id: stationId, barcode: glass.barcode, location_code: voulu }),
+            })
+            const pose = range?.data?.location?.code || voulu.toUpperCase()
+            // La fiche affichée doit montrer le casier qu'on vient de lui donner, pas celui
+            // que le serveur avait attribué tout seul une seconde plus tôt.
+            setFound({ ...glass, location_code: pose })
+            message += ` Rangée en ${pose}.`
+            setCasier('')
+          } catch (error: any) {
+            // Le serveur nomme l'occupant d'un casier déjà pris : ce message doit passer,
+            // sinon la vendeuse repose la monture sur une place occupée.
+            message += ` Casier refusé : ${error?.message || 'erreur serveur'}.`
+            echec = true
+          }
+        }
       }
-      setTone('success')
+
+      if (attendue) onReceived()
+      setStatus(message)
+      setTone(echec ? 'error' : 'success')
       setCode('')
     } catch (error: any) {
       setStatus(error?.message || 'Monture introuvable.')
@@ -2978,6 +3187,8 @@ function ScanScreen({ data, stationId, onReceived }: {
           )
       })
 
+      // Trier par score de recommandation sans modifier le filtrage métier.
+      matches.sort((a, b) => calculateRecommendationScore(glass, b) - calculateRecommendationScore(glass, a))
       setSimilar(matches)
     } catch (error: any) {
       setSimilarError(error?.message || 'Recherche impossible pour le moment.')
@@ -2999,6 +3210,17 @@ function ScanScreen({ data, stationId, onReceived }: {
             placeholder="Scannez ou saisissez le code-barres"
             autoComplete="off"
             className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-slate-300 dark:focus:border-slate-600"
+          />
+          {/* Le casier où la monture est physiquement posée. Laissé vide, le serveur en
+              attribue un automatiquement — c'est ce qu'il faisait seul jusqu'ici, et rien
+              n'oblige à le renseigner monture par monture. */}
+          <input
+            type="text"
+            value={casier}
+            onChange={e => setCasier(e.target.value)}
+            placeholder="Casier (PR01-1)"
+            autoComplete="off"
+            className="sm:w-40 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-slate-300 dark:focus:border-slate-600"
           />
           <button
             type="submit"
@@ -3233,6 +3455,14 @@ function StatsScreen({ data, user }: { data: StoreData; user: any }) {
 
   const mine = useMemo(() => myMovements(data.movements, user), [data.movements, user])
 
+  const [page, setPage] = useState(0)
+  const pages = Math.max(1, Math.ceil(mine.length / ACTIONS_PAR_PAGE))
+  // Bornée à chaque rendu plutôt que remise à zéro par un effet : un rechargement des
+  // mouvements peut raccourcir la liste sous la page courante, qui afficherait alors du
+  // vide. On retombe sur la dernière page existante sans faire clignoter la première.
+  const pageSure = Math.min(page, pages - 1)
+  const visibles = mine.slice(pageSure * ACTIONS_PAR_PAGE, pageSure * ACTIONS_PAR_PAGE + ACTIONS_PAR_PAGE)
+
   // Le donut compte les montures, la barre empilée en cumule les montants : les deux
   // partent des mêmes listes, ils ne peuvent pas diverger.
   const etatSlices: Slice[] = [
@@ -3285,8 +3515,8 @@ function StatsScreen({ data, user }: { data: StoreData; user: any }) {
           <EmptyState>Aucun mouvement à votre nom.</EmptyState>
         ) : (
           <div className="space-y-2">
-            {mine.slice(0, 15).map((movement, index) => (
-              <Card key={`${movement.barcode}-${index}`} className="flex items-center gap-3">
+            {visibles.map((movement, index) => (
+              <Card key={`${movement.barcode}-${pageSure}-${index}`} className="flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                     {movement.reference || movement.barcode || '—'}
@@ -3299,9 +3529,282 @@ function StatsScreen({ data, user }: { data: StoreData; user: any }) {
                 <span className="text-xs text-slate-400 flex-shrink-0">{fmtDateTime(movement.created_at)}</span>
               </Card>
             ))}
+
+            {/* Masquée sur une seule page : deux boutons inertes sous une liste courte
+                donnent l'impression qu'il manque quelque chose. */}
+            {pages > 1 && (
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={pageSure === 0}
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  Précédent
+                </button>
+
+                {/* Le total, pas seulement le numéro de page : c'est lui qui dit combien
+                    d'actions on a à son nom, et il est utile en soi sur cet écran. */}
+                <span className="text-xs text-slate-400 dark:text-slate-500 tabular-nums">
+                  Page {pageSure + 1} / {pages} · {mine.length} action{mine.length > 1 ? 's' : ''}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setPage(p => Math.min(pages - 1, p + 1))}
+                  disabled={pageSure >= pages - 1}
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  Suivant
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Remise client ──────────────────────────────────────────────────────────────
+/** Rendre au client les lunettes que le laboratoire a terminées.
+ *
+ *  Cet écran vivait au poste R. Magasin. Il est ici parce que c'est la vendeuse qui reçoit
+ *  le client : celui qui vient chercher ses lunettes se présente devant elle, pas devant le
+ *  responsable.
+ *
+ *  Le pointage est local jusqu'à la validation : on scanne les paires du client, on relit,
+ *  puis on enregistre d'un geste. C'est `POST /inventory/deliveries/handover` qui acte la
+ *  sortie — statut `LIVREE` et mouvement `REMISE_CLIENT` — après quoi les montures quittent
+ *  la liste des paires en attente. */
+function RemiseScreen({ data, loading, stationId, onDone }: {
+  data: StoreData
+  loading: boolean
+  stationId: number | null
+  onDone: () => void
+}) {
+  const [pointees, setPointees] = useState<string[]>([])
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [tone, setTone] = useState<'error' | 'success' | ''>('')
+
+  // Le client se lit sur la proforma qui porte la monture : le backend ne le stocke pas sur
+  // la fiche. Sans lui, la vendeuse ne saurait pas à qui rendre la paire qu'elle tient.
+  const clientParBarcode = useMemo(() => {
+    const index = new Map<string, string>()
+    for (const proforma of data.proformas) {
+      for (const item of proforma.items || []) {
+        for (const cle of [item.barcode, item.reference]) {
+          const key = String(cle || '').trim().toUpperCase()
+          if (key && proforma.client_name) index.set(key, proforma.client_name)
+        }
+      }
+    }
+    return index
+  }, [data.proformas])
+
+  const clientDe = (glass: Glass) =>
+    clientParBarcode.get(String(glass.barcode || '').trim().toUpperCase())
+      || clientParBarcode.get(String(glass.reference || '').trim().toUpperCase())
+      || 'Client non rattaché'
+
+  const reste = Math.max(0, data.pretes.length - pointees.length)
+
+  /** Enregistre les paires pointées. Tant qu'on n'a pas cliqué, rien n'est parti : la
+   *  vendeuse scanne, vérifie, puis valide — le client est devant elle, elle ne doit pas
+   *  déclencher une sortie de stock à chaque bip. */
+  async function remettre() {
+    if (pointees.length === 0 || busy) return
+    if (!stationId) {
+      setMessage("Aucune station rattachée à ce compte : impossible d'enregistrer la remise.")
+      setTone('error')
+      return
+    }
+
+    setBusy(true)
+    setMessage('')
+    try {
+      const payload = await apiFetch('/inventory/deliveries/handover', {
+        method: 'POST',
+        body: JSON.stringify({ station_id: stationId, barcodes: pointees }),
+      })
+
+      const remises: string[] = payload?.data?.handed_over || []
+      const refusees: { barcode?: string; reason?: string }[] = payload?.data?.skipped || []
+
+      let texte = `${remises.length} monture${remises.length > 1 ? 's' : ''} remise${remises.length > 1 ? 's' : ''} au client.`
+      // Les refus sont nommés, pas tus : la vendeuse tient les paires en main et doit savoir
+      // laquelle n'est pas passée avant que le client reparte avec.
+      if (refusees.length > 0) {
+        const detail = refusees.map(item => `${item.barcode || '?'} — ${item.reason || 'refusée'}`).join(' · ')
+        texte += ` ${refusees.length} refusée${refusees.length > 1 ? 's' : ''} : ${detail}.`
+      }
+
+      setMessage(texte)
+      setTone(refusees.length > 0 ? 'error' : 'success')
+      setPointees([])
+      setCode('')
+      // Les montures remises quittent PRETE_A_LIVRER : la liste doit se relire, sinon elles
+      // resteraient affichées comme si le client attendait toujours.
+      onDone()
+    } catch (error: any) {
+      setMessage(error?.message || "Impossible d'enregistrer la remise.")
+      setTone('error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-center gap-2.5">
+          <span className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#0891b218', color: '#0891b2' }}>
+            {ic.hand()}
+          </span>
+          <div>
+            <p className="text-sm font-bold text-slate-900 dark:text-white">Remettre au client</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Scannez le code-barres de la monture pour la pointer comme remise</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
+          <div>
+            <label className="block text-xs font-medium text-slate-400 dark:text-slate-500 mb-1" htmlFor="refRemise">
+              Code-barres ou référence
+            </label>
+            <input
+              id="refRemise"
+              type="text"
+              value={code}
+              onChange={e => {
+                const value = e.target.value
+                setCode(value)
+                // La douchette envoie le code d'un bloc : on valide dès qu'il correspond,
+                // sans attendre un Entrée que tous les lecteurs n'émettent pas.
+                const saisie = value.trim()
+                const trouvee = data.pretes.find(g => g.barcode === saisie || glassRef(g) === saisie.toUpperCase())
+                if (trouvee && !pointees.includes(trouvee.barcode)) {
+                  setPointees(liste => [...liste, trouvee.barcode])
+                  setCode('')
+                }
+              }}
+              placeholder="Scanner ou saisir…"
+              autoFocus
+              autoComplete="off"
+              className={FIELD}
+            />
+            <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+              La saisie se valide seule dès qu'elle correspond à une monture prête.
+            </p>
+          </div>
+
+          {/* Le code se redessine à la frappe : contrôle visuel face à l'étiquette, et code
+              à présenter quand la douchette est en panne. */}
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="w-full h-[92px] rounded-xl border-2 bg-white p-2 flex items-center justify-center" style={{ borderColor: '#0891b2' }}>
+              {code.trim()
+                ? <ProformaBarcode value={code.trim()} />
+                : <span className="text-xs text-slate-400 text-center">En attente<br />d'un scan</span>}
+            </div>
+            <p className="text-xs text-slate-400 dark:text-slate-500">CODE128</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          {[
+            { label: 'À remettre', value: data.pretes.length, color: '#0891b2' },
+            { label: 'Pointées', value: pointees.length, color: '#16a34a' },
+            { label: 'Reste', value: reste, color: '#d97706' },
+          ].map(tuile => (
+            <div key={tuile.label} className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+              <p className="text-xs text-slate-400 dark:text-slate-500">{tuile.label}</p>
+              <p className="mt-1 text-3xl font-black tabular-nums" style={{ color: tuile.color }}>{tuile.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${data.pretes.length > 0 ? (pointees.length / data.pretes.length) * 100 : 0}%`,
+              backgroundColor: '#16a34a',
+            }}
+          />
+        </div>
+      </Card>
+
+      <div>
+        <SectionTitle
+          action={<span className="text-xs text-slate-400 tabular-nums">{pointees.length}/{data.pretes.length}</span>}
+        >
+          Montures prêtes
+        </SectionTitle>
+        <div className="space-y-2">
+          {loading && data.pretes.length === 0 ? (
+            <EmptyState>Chargement…</EmptyState>
+          ) : data.pretes.length === 0 ? (
+            <EmptyState>Aucune monture prête à remettre.</EmptyState>
+          ) : (
+            data.pretes.map(glass => {
+              const pointee = pointees.includes(glass.barcode)
+              return (
+                <div
+                  key={glass.barcode}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-colors ${
+                    pointee
+                      ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                      : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700'
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{glassRef(glass)}</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{clientDe(glass)}</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate font-mono">{glass.barcode}</p>
+                  </div>
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap flex-shrink-0 ${
+                    pointee
+                      ? 'bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-300'
+                      : 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+                  }`}>
+                    {pointee ? ic.check('w-3.5 h-3.5') : ic.clock('w-3.5 h-3.5')}
+                    {pointee ? 'Pointée' : 'En attente'}
+                  </span>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </div>
+
+      {message && (
+        <p className={`text-xs leading-snug ${tone === 'error' ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+          {message}
+        </p>
+      )}
+
+      {pointees.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={() => void remettre()}
+            disabled={busy}
+            className="flex-1 rounded-xl bg-green-600 hover:bg-green-700 px-4 py-3 text-sm font-semibold text-white transition-colors disabled:opacity-60"
+          >
+            {busy
+              ? 'Enregistrement…'
+              : `Remettre ${pointees.length} monture${pointees.length > 1 ? 's' : ''} au client`}
+          </button>
+          <button
+            onClick={() => { setPointees([]); setCode(''); setMessage('') }}
+            disabled={busy}
+            className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-3 text-sm font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors disabled:opacity-60"
+          >
+            Annuler le pointage
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -3485,6 +3988,7 @@ function VendeusePage() {
                 {screen === 'proforma' && <ProformaScreen stationId={stationId} user={user} onDone={() => void reload()} />}
                 {screen === 'ventes' && <VentesScreen data={data} user={user} />}
                 {screen === 'scan' && <ScanScreen data={data} stationId={stationId} onReceived={() => void reload()} />}
+                {screen === 'remise' && <RemiseScreen data={data} loading={loading} stationId={stationId} onDone={() => void reload()} />}
                 {screen === 'reclamation' && <ReclamationScreen stationId={stationId} onDone={() => void reload()} />}
                 {screen === 'stats' && <StatsScreen data={data} user={user} />}
               </>

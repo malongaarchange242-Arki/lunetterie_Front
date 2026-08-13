@@ -6,7 +6,7 @@ import { summarizeStockSummary } from './dashboardMetrics'
 import logoUrl from '../logo.jpeg'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type ModuleId = 'register' | 'reception' | 'employees' | 'orders' | 'supplier' | 'history'
+type ModuleId = 'register' | 'reception' | 'employees' | 'orders' | 'supplier' | 'history' | 'societes'
 
 type Block = 'total' | 'ca' | 'suivi'
 
@@ -949,6 +949,8 @@ const STATUS_COLOR: Record<string, string> = {
   // Statut d'une proforma encaissée, pas d'une monture : c'est lui que portent les lignes
   // du chiffre d'affaires, qui se lit sur les documents et non sur le stock.
   'Réglée': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  'Active': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  'Inactive': 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
   'Payé': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   'Actif': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   'Inactif': 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
@@ -1073,6 +1075,9 @@ function exportCSV(frames: FrameRecord[], city: string) {
 const SIDEBAR_MODULES: { id: ModuleId; label: string; icon: (c?: string) => React.ReactElement }[] = [
   { id: 'reception', label: 'Expédition', icon: ic.tag },
   { id: 'history', label: 'Suivi Global', icon: ic.hist },
+  // La liste que le champ « Société » d'une proforma vient lire. Elle est tenue ici parce
+  // qu'elle est fermée côté magasin : la vendeuse choisit, elle n'ajoute pas.
+  { id: 'societes', label: 'Sociétés', icon: ic.users },
 ]
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
@@ -5667,10 +5672,211 @@ function TopBar({ navStack, onBack, dark, onToggleDark, onOpenChat }: {
 }
 
 // ── Module router ─────────────────────────────────────────────────────────────
+// ── Sociétés conventionnées ───────────────────────────────────────────────────
+/** La liste que le champ « Société » d'une proforma vient lire. Elle est fermée côté
+ *  magasin — la vendeuse choisit, elle ne saisit plus — donc elle se tient ici.
+ *
+ *  Une société ne se supprime pas, elle se désactive : elle sort de la liste proposée mais
+ *  reste attachée aux proformas qu'elle a déjà portées. */
+interface SocieteRow {
+  id: number
+  name: string
+  contact?: string
+  phone?: string
+  active: boolean
+}
+
+function SocietesView() {
+  const [societes, setSocietes] = useState<SocieteRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [name, setName] = useState('')
+  const [contact, setContact] = useState('')
+  const [phone, setPhone] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [flash, setFlash] = useState('')
+
+  const headers = () => ({
+    Authorization: `Bearer ${window.localStorage.getItem('token') || ''}`,
+    'Content-Type': 'application/json',
+  })
+
+  async function load() {
+    setLoading(true)
+    try {
+      // include_inactive : l'écran de gestion doit voir les conventions terminées, sans quoi
+      // il serait impossible d'en réactiver une.
+      const response = await fetch(`${API_URL}/inventory/societes?include_inactive=true`, { headers: headers() })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload?.error || payload?.message || `Erreur ${response.status}`)
+      setSocietes(payload?.data?.societes || [])
+      setError('')
+    } catch (e: any) {
+      setError(e?.message || 'Liste des sociétés indisponible.')
+      setSocietes([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { void load() }, [])
+
+  async function create(e: React.FormEvent) {
+    e.preventDefault()
+    if (!name.trim() || busy) return
+    setBusy(true)
+    setFlash('')
+    try {
+      const response = await fetch(`${API_URL}/inventory/societes`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ name: name.trim(), contact: contact.trim(), phone: phone.trim() }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      // Le serveur nomme le doublon d'orthographe (« une société porte déjà ce nom ») :
+      // son message vaut mieux qu'un « erreur » générique, c'est le cas d'échec courant.
+      if (!response.ok) throw new Error(payload?.error || payload?.message || `Erreur ${response.status}`)
+      setName(''); setContact(''); setPhone('')
+      setFlash(`${payload?.data?.societe?.name || name.trim()} ajoutée.`)
+      setError('')
+      await load()
+    } catch (e: any) {
+      setError(e?.message || "Impossible d'ajouter la société.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function toggleActive(societe: SocieteRow) {
+    setBusy(true)
+    setFlash('')
+    try {
+      const response = await fetch(`${API_URL}/inventory/societes/${societe.id}`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify({ active: !societe.active }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload?.error || payload?.message || `Erreur ${response.status}`)
+      setFlash(`${societe.name} ${societe.active ? 'désactivée' : 'réactivée'}.`)
+      setError('')
+      await load()
+    } catch (e: any) {
+      setError(e?.message || 'Modification impossible.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const actives = societes.filter(s => s.active).length
+
+  return (
+    <div className="space-y-4">
+      {error && (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-400">
+          {error}
+        </div>
+      )}
+      {flash && (
+        <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 px-4 py-2.5 text-xs text-green-800 dark:text-green-400">
+          {flash}
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4">
+        <p className="text-sm font-bold text-slate-900 dark:text-white">Nouvelle société</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+          Elle apparaîtra aussitôt dans le champ « Société » du poste Vendeuse.
+        </p>
+        <form onSubmit={create} className="mt-3 grid grid-cols-1 sm:grid-cols-4 gap-2">
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Nom de la société *"
+            className="sm:col-span-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none"
+          />
+          <input
+            value={contact}
+            onChange={e => setContact(e.target.value)}
+            placeholder="Interlocuteur"
+            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none"
+          />
+          <input
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="Téléphone"
+            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none"
+          />
+          <button
+            type="submit"
+            disabled={busy || !name.trim()}
+            className="sm:col-span-4 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:opacity-60"
+          >
+            {busy ? 'Enregistrement…' : 'Ajouter la société'}
+          </button>
+        </form>
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+          <p className="text-sm font-bold text-slate-900 dark:text-white">Sociétés</p>
+          <span className="text-xs text-slate-400 dark:text-slate-500 tabular-nums">
+            {actives} active{actives > 1 ? 's' : ''} sur {societes.length}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[560px]">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-700">
+                <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Nom</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Interlocuteur</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Téléphone</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">État</th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-slate-400">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={5} className="py-10 text-center text-sm text-slate-400">Chargement…</td></tr>
+              ) : societes.length === 0 ? (
+                <tr><td colSpan={5} className="py-10 text-center text-sm text-slate-400">Aucune société enregistrée.</td></tr>
+              ) : societes.map(societe => (
+                <tr key={societe.id} className="border-b border-slate-50 dark:border-slate-700/60 last:border-0">
+                  <td className="py-3 px-3 font-semibold text-slate-900 dark:text-white">{societe.name}</td>
+                  <td className="py-3 px-3 text-slate-400">{societe.contact || '—'}</td>
+                  <td className="py-3 px-3 text-slate-400 tabular-nums">{societe.phone || '—'}</td>
+                  <td className="py-3 px-3">
+                    <Badge status={societe.active ? 'Active' : 'Inactive'} />
+                  </td>
+                  <td className="py-3 px-3 text-right">
+                    <button
+                      onClick={() => void toggleActive(societe)}
+                      disabled={busy}
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors disabled:opacity-50"
+                    >
+                      {societe.active ? 'Désactiver' : 'Réactiver'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p className="text-xs text-slate-400 dark:text-slate-500">
+        Une société désactivée disparaît de la liste du poste Vendeuse, mais reste attachée
+        aux proformas qu'elle a déjà portées.
+      </p>
+    </div>
+  )
+}
+
 function renderModuleView(id: ModuleId) {
   switch (id) {
     case 'reception': return <ReceptionView />
     case 'history': return <HistoryView />
+    case 'societes': return <SocietesView />
   }
 }
 

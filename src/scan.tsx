@@ -2056,6 +2056,11 @@ function ListesScreen({
   )
 }
 
+/** Le délai avant que la fin d'une réception ramène seule à « Mes sessions ». Assez long
+ *  pour lire le code-barres et prendre l'étiquette, assez court pour ne pas faire attendre
+ *  devant un écran qui n'attend plus rien. */
+const SESSION_DONE_SECONDS = 3
+
 type Screen = 'loading' | 'activation' | 'sessions' | 'wizard' | 'historique' | 'listes'
 
 // ── Coquille Direction ─────────────────────────────────────────────────────────
@@ -2173,12 +2178,13 @@ function MobileNav({ current, onNavigate, hasSession, newLists }: {
   )
 }
 
-function TopBar({ current, session, dark, onToggleDark, onReset }: {
+function TopBar({ current, session, dark, onToggleDark, onReset, onBack }: {
   current: Screen
   session: ReceptionSession | null
   dark: boolean
   onToggleDark: () => void
   onReset: (() => void) | null
+  onBack: (() => void) | null
 }) {
   const label = current === 'activation'
     ? 'Activer une session'
@@ -2186,16 +2192,39 @@ function TopBar({ current, session, dark, onToggleDark, onReset }: {
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-100 dark:border-slate-800 px-4 md:px-6 h-14 flex items-center gap-3 flex-shrink-0">
+      {/* Le retour est en tête, avant le titre : c'est la place qu'il occupe partout
+          ailleurs, et sur mobile la barre latérale n'existe pas — sans lui, quitter
+          l'assistant demandait de passer par la navigation du bas. */}
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="flex-shrink-0 -ml-1 flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          aria-label="Retour à mes sessions"
+        >
+          {ic.arrowLeft('w-4 h-4')}
+          <span className="hidden sm:inline">Retour</span>
+        </button>
+      )}
+
       <div className="flex-1 min-w-0">
         <h1 className="font-bold text-slate-900 dark:text-white text-sm md:text-base truncate leading-tight">{label}</h1>
       </div>
 
       {/* Le quota suit le magasinier d'un écran à l'autre : c'est lui qui dit s'il peut
-          encore enregistrer, il n'a donc pas sa place dans le seul assistant. */}
+          encore enregistrer, il n'a donc pas sa place dans le seul assistant.
+
+          L'avancement est le chiffre clé de l'écran : il passe en gras, au format des
+          chiffres clés du reste de l'application, et reste affiché sur téléphone — il
+          disparaissait entièrement sous `sm`, là où la barre latérale n'existe pas et où
+          rien d'autre ne le rappelait. Seul le code de session cède la place, c'est la
+          partie qu'on relit le moins. */}
       {session && (
-        <span className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex-shrink-0">
-          {ic.tag('w-3.5 h-3.5')}
-          <span className="tabular-nums">{session.code} · {session.registered}/{session.target}</span>
+        <span className="inline-flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-1.5 flex-shrink-0">
+          <span className="text-blue-600 dark:text-blue-400 flex-shrink-0">{ic.tag('w-4 h-4')}</span>
+          <span className="hidden sm:inline text-xs font-semibold text-slate-500 dark:text-slate-400">{session.code}</span>
+          <span className="text-base font-black tabular-nums text-slate-900 dark:text-white leading-none">
+            {session.registered}/{session.target}
+          </span>
         </span>
       )}
 
@@ -2229,6 +2258,10 @@ function ScanPage() {
   const [dark, setDark] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [screen, setScreen] = useState<Screen>('loading')
+
+  // Secondes restantes avant le retour automatique à « Mes sessions ». Null tant que la
+  // réception n'est pas terminée.
+  const [autoRetour, setAutoRetour] = useState<number | null>(null)
 
   // Session de réception
   const [session, setSession] = useState<ReceptionSession | null>(null)
@@ -2469,6 +2502,7 @@ function ScanPage() {
 
     setConfirming(true)
     let locationCode: string
+    let barcode = ''
     try {
       // Aperçu seulement : l'emplacement n'est pas réservé, celui réellement attribué
       // peut différer si un autre poste le prend entre-temps. Le serveur tranche.
@@ -2476,13 +2510,26 @@ function ScanPage() {
       locationCode = payload.data?.code || '—'
     } catch (error: any) {
       window.alert(`Impossible de trouver un emplacement libre en stock : ${error?.message || 'erreur inconnue'}`)
+      setConfirming(false)
       return
+    }
+
+    try {
+      // Le vrai numéro, réservé pour cette monture. L'aperçu affichait auparavant un
+      // `MNT-2026-…` tiré au hasard : il ressemblait à un identifiant sans en être un, et
+      // ne correspondait jamais au code que la monture allait porter.
+      const payload = await apiFetch('/inventory/barcodes/next')
+      barcode = String(payload.data?.barcode || '')
+    } catch (error) {
+      // Sans blocage : le serveur en attribuera un à l'enregistrement, comme avant cette
+      // réservation. Seul l'aperçu est en retrait, et il le dit plutôt que d'inventer.
+      console.warn('Code-barres non réservé, il sera attribué à l\'enregistrement', error)
     } finally {
       setConfirming(false)
     }
 
     setFinalData({
-      id: `MNT-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`,
+      id: barcode,
       reference: form.reference.trim(),
       marque: form.marque.trim(),
       genre: form.genre,
@@ -2514,6 +2561,9 @@ function ScanPage() {
       body.append('station_id', stationIdOf(user))
       body.append('price', String(finalData.prix))
       body.append('reception_command_code', session.code)
+      // Le numéro réservé pour l'aperçu, pour que l'étiquette imprimée porte bien celui que
+      // le magasinier a vu. Absent si la réservation a échoué : le serveur en génère un.
+      if (finalData.id) body.append('barcode', finalData.id)
       body.append('reference', finalData.reference)
       body.append('brand', finalData.marque)
       body.append('gender', finalData.genre)
@@ -2977,6 +3027,30 @@ function ScanPage() {
   // n'est donc plus une option mais la seule suite possible.
   const sessionFull = !session || session.registered >= session.target
 
+  // La dernière monture de la réception vient d'être enregistrée : on repart seul vers
+  // « Mes sessions ». Le délai laisse le temps de lire le code-barres et de récupérer
+  // l'étiquette qui sort de l'imprimante ; le bouton reste actif pour partir avant.
+  //
+  // Le décompte est affiché plutôt que silencieux : un écran qui change tout seul sans
+  // prévenir se lit comme une perte de saisie.
+  useEffect(() => {
+    if (!saved || !sessionFull || screen !== 'wizard') {
+      setAutoRetour(null)
+      return
+    }
+
+    setAutoRetour(SESSION_DONE_SECONDS)
+    const tic = window.setInterval(() => {
+      setAutoRetour(reste => (reste === null ? null : Math.max(0, reste - 1)))
+    }, 1000)
+    const sortie = window.setTimeout(() => resetAll(true), SESSION_DONE_SECONDS * 1000)
+
+    return () => {
+      window.clearInterval(tic)
+      window.clearTimeout(sortie)
+    }
+  }, [saved, sessionFull, screen])
+
   return (
     <div className={dark ? 'dark' : ''}>
       <style>{SCAN_CSS}</style>
@@ -2998,6 +3072,14 @@ function ScanPage() {
             dark={dark}
             onToggleDark={() => setDark(d => !d)}
             onReset={screen === 'wizard' ? () => resetAll() : null}
+            // Seulement depuis l'assistant : « Mes sessions » est l'écran d'où l'on vient,
+            // et les autres onglets sont à un clic dans la navigation.
+            //
+            // goToSessions et non setScreen : il arrête la caméra — la carte de capture est
+            // démontée, sa piste resterait ouverte, diode allumée — et relit l'avancement,
+            // sinon la carte de la session afficherait un compteur d'avant la dernière
+            // monture enregistrée.
+            onBack={screen === 'wizard' ? () => goToSessions() : null}
           />
 
           <main className="flex-1 px-4 md:px-6 py-4 md:py-6 pb-24 md:pb-8 overflow-auto">
@@ -3229,8 +3311,14 @@ function ScanPage() {
 
                   <div className="p-4">
                     <div className="mx-auto flex max-w-sm flex-col items-center rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700">
-                      <BarcodePreview value={finalData.id} />
-                      <div className="mt-1 font-mono text-sm font-bold tabular-nums text-slate-900">{finalData.id}</div>
+                      {/* Rien à dessiner sans numéro : un code-barres vide se scannerait
+                          quand même, et rendrait une chaîne vide. */}
+                      {finalData.id
+                        ? <>
+                            <BarcodePreview value={finalData.id} />
+                            <div className="mt-1 font-mono text-sm font-bold tabular-nums text-slate-900">{finalData.id}</div>
+                          </>
+                        : <div className="py-4 text-center text-xs text-slate-400">Numéro attribué à l'enregistrement</div>}
                       <span className="mt-1 text-[11px] text-slate-400">Aperçu de l'étiquette</span>
                     </div>
 
@@ -3238,7 +3326,9 @@ function ScanPage() {
                       {[
                         ['Marque', finalData.marque || '—'],
                         ['Référence', finalData.reference || '—'],
-                        ['ID', finalData.id],
+                        // « Code-barres » et non « ID » : c'est bien le numéro imprimé sur
+                        // l'étiquette, celui que la douchette lira en rayon.
+                        ['Code-barres', finalData.id || 'À l\'enregistrement'],
                         ['Emplacement', finalData.emplacement],
                         ['Quantité', String(finalData.quantite)],
                         ['Gamme', fmtFCFA(finalData.prix)],
@@ -3278,7 +3368,10 @@ function ScanPage() {
                           onClick={() => resetAll(true)}
                         >
                           {sessionFull
-                            ? <>{ic.check()} Réception terminée → Mes sessions</>
+                            ? <>
+                                {ic.check()} Réception terminée → Mes sessions
+                                {autoRetour !== null && <span className="tabular-nums"> ({autoRetour} s)</span>}
+                              </>
                             : <>{ic.plus()} Enregistrer une autre monture</>}
                         </Btn>
                       </>
