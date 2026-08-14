@@ -351,6 +351,7 @@ const ic = {
   sun: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>,
   moon: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>,
   x: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s} strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>,
+  signOut: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>,
 }
 
 /** Mêmes entrées que les onglets de la page : un poste de caisse n'a qu'un seul jeu
@@ -1226,7 +1227,7 @@ function Sidebar({ current, onNavigate, dark, onToggleDark, user, counts }: {
           <span className="text-xs">{dark ? 'Thème clair' : 'Thème sombre'}</span>
         </button>
         <button onClick={logoutToLogin} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full">
-          {ic.x('w-4 h-4')}
+          {ic.signOut('w-4 h-4')}
           <span className="text-xs">Déconnexion</span>
         </button>
         <div className="flex items-center gap-2">
@@ -1291,6 +1292,15 @@ function TopBar({ current, override, dark, onToggleDark, onReload, loading }: {
         aria-label="Changer de thème"
       >
         {dark ? ic.sun() : ic.moon()}
+      </button>
+      {/* Déconnexion vit dans la barre latérale ; sur mobile elle n'existe pas, elle
+          remonte donc ici. */}
+      <button
+        onClick={logoutToLogin}
+        className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors flex-shrink-0"
+        aria-label="Se déconnecter"
+      >
+        {ic.signOut()}
       </button>
     </header>
   )

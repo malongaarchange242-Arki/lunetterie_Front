@@ -286,6 +286,7 @@ const ic = {
   sun: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>,
   moon: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>,
   x: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s} strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>,
+  signOut: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>,
   alert: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></svg>,
   clock: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><path d="M12 7v5.2l3.2 1.9" /></svg>,
   target: (c = 'w-5 h-5') => <svg className={c} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.4" /></svg>,
@@ -981,7 +982,7 @@ function Sidebar({ current, onNavigate, dark, onToggleDark, user, todo }: {
           <span className="text-xs">{dark ? 'Thème clair' : 'Thème sombre'}</span>
         </button>
         <button onClick={logoutToLogin} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full">
-          {ic.x('w-4 h-4')}
+          {ic.signOut('w-4 h-4')}
           <span className="text-xs">Déconnexion</span>
         </button>
         <div className="flex items-center gap-2">
@@ -1030,6 +1031,15 @@ function TopBar({ current, dark, onToggleDark }: { current: Screen; dark: boolea
         aria-label="Changer de thème"
       >
         {dark ? ic.sun() : ic.moon()}
+      </button>
+      {/* Déconnexion vit dans la barre latérale ; sur mobile elle n'existe pas, elle
+          remonte donc ici. */}
+      <button
+        onClick={logoutToLogin}
+        className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors flex-shrink-0"
+        aria-label="Se déconnecter"
+      >
+        {ic.signOut()}
       </button>
     </header>
   )

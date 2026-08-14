@@ -6,6 +6,7 @@ import './index.css'
 import logoUrl from '../logo.jpeg'
 import { GlassTable, downloadCSV } from './GlassTable'
 import { calculateGlassSimilarity, getGamme, normalizeAttr } from './glassSimilarity'
+import { businessBlocKeyOf, businessBlocLabel } from './businessBloc'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 
@@ -102,6 +103,42 @@ function fullName(user: any) {
 
 function glassRef(glass: Glass) {
   return glass.reference || glass.barcode || '—'
+}
+
+function priceOf(glass: Glass) {
+  const n = Number(glass.price)
+  return Number.isNaN(n) ? 0 : n
+}
+
+function sumPrice(glasses: Glass[]) {
+  return glasses.reduce((total, glass) => total + priceOf(glass), 0)
+}
+
+/** Regroupe un attribut saisi à la main. « Écaille » et « ecaille » sont la même
+ *  valeur — même normalisation que normalizeSendValue() de ../Frontend/scan.js. */
+function groupByAttr(glasses: Glass[], pick: (g: Glass) => string | undefined) {
+  const counts = new Map<string, number>()
+  for (const glass of glasses) {
+    const raw = String(pick(glass) || '').trim()
+    if (!raw) continue
+    const key = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
+/** Le présentoir est classé par logique commerciale A–F, pas par l'emplacement réel
+ * du rayon. Cela correspond exactement à la règle métier demandée pour le blocage. */
+function blocKeyOf(glass: Glass) {
+  return businessBlocKeyOf({
+    gender: glass.gender,
+    price: glass.price,
+    status: glass.status,
+    is_offered: (glass as any).is_offered,
+    offered: (glass as any).offered,
+  })
 }
 
 /**
@@ -251,7 +288,7 @@ interface Claim {
   updated_at?: string
 }
 
-type Screen = 'dashboard' | 'proforma' | 'ventes' | 'scan' | 'remise' | 'reclamation' | 'stats'
+type Screen = 'dashboard' | 'proforma' | 'ventes' | 'scan' | 'bloc' | 'remise' | 'reclamation' | 'stats'
 
 // ── Icônes ─────────────────────────────────────────────────────────────────────
 const ic = {
@@ -266,6 +303,7 @@ const ic = {
   sun: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>,
   moon: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>,
   x: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>,
+  signOut: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>,
   back: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M19 12H5M11 18l-6-6 6-6" /></svg>,
   refresh: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6" /></svg>,
   check: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>,
@@ -294,9 +332,7 @@ const NAV: { id: Screen; label: string; short: string; icon: (c?: string) => Rea
   // présentoir dans un menu où il figurait déjà. « short » reste court : la barre du bas,
   // sur téléphone, n'a pas la place des deux mots.
   { id: 'scan', label: 'Scan monture / Présentoir', short: 'Scan', icon: ic.scan },
-  // La remise vit ici et non au poste R. Magasin : c'est la vendeuse qui accueille le
-  // client, donc elle qui lui rend ses lunettes une fois le montage terminé.
-  { id: 'remise', label: 'Remise client', short: 'Remise', icon: ic.hand },
+  { id: 'bloc', label: 'Présentoir par bloc', short: 'Blocs', icon: ic.glasses },
   { id: 'reclamation', label: 'Réclamation', short: 'Réclam.', icon: ic.alert },
   { id: 'stats', label: 'Mes stats', short: 'Stats', icon: ic.chart },
 ]
@@ -730,6 +766,202 @@ function PresentoirTable({ glasses }: { glasses: Glass[] }) {
         after={[{ header: 'Sim.' }, { header: 'Prix', align: 'right' }]}
         rows={rows}
       />
+    </div>
+  )
+}
+
+/** Le présentoir regroupé par bloc (meuble), un onglet par bloc — complète PresentoirTable
+ *  ci-dessus, qui reste la vue à plat pour comparer une monture à une autre. Répond à
+ *  « qu'y a-t-il sur ce meuble ? », utile pour orienter une cliente vers un rayon précis. */
+function PresentoirParBloc({ glasses }: { glasses: Glass[] }) {
+  const [activeBlocKey, setActiveBlocKey] = useState('')
+  const [preview, setPreview] = useState<Glass | null>(null)
+
+  const blocs = useMemo(() => {
+    const groupes = new Map<string, Glass[]>()
+    for (const glass of glasses) {
+      const cle = blocKeyOf(glass)
+      const liste = groupes.get(cle)
+      if (liste) liste.push(glass)
+      else groupes.set(cle, [glass])
+    }
+    return Array.from(groupes.entries())
+      .sort(([a], [b]) => a.localeCompare(b, 'fr'))
+      .map(([cle, montures]) => ({
+        cle,
+        montures,
+        total: sumPrice(montures),
+        moyenne: montures.length > 0 ? Math.round(sumPrice(montures) / montures.length) : 0,
+        formes: groupByAttr(montures, g => g.shape),
+        couleurs: groupByAttr(montures, g => g.color),
+      }))
+  }, [glasses])
+
+  if (blocs.length === 0) return null
+  const blocCourant = blocs.find(b => b.cle === activeBlocKey) || blocs[0]
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-3 overflow-x-auto">
+        {blocs.map(bloc => (
+          <button
+            key={bloc.cle}
+            onClick={() => setActiveBlocKey(bloc.cle)}
+            className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+              bloc.cle === blocCourant.cle
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+            }`}
+          >
+            {bloc.cle === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${bloc.cle}`}
+          </button>
+        ))}
+      </div>
+
+      <Card>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-slate-900 dark:text-white">{blocCourant.cle === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${blocCourant.cle}`}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">{businessBlocLabel(blocCourant.cle)}</p>
+          </div>
+          <span className="flex-shrink-0 rounded-full bg-blue-50 dark:bg-blue-500/15 px-3 py-1 text-xs font-semibold text-blue-700 dark:text-blue-300">
+            {blocCourant.montures.length} monture{blocCourant.montures.length > 1 ? 's' : ''}
+          </span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+            <p className="text-xs text-slate-400">Prix total du bloc</p>
+            <p className="mt-1 text-lg font-black tabular-nums text-blue-600 dark:text-blue-400">{fmtFCFA(blocCourant.total)}</p>
+            <p className="text-xs text-slate-400">{fmtFCFA(blocCourant.moyenne)} moy.</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+            <p className="text-xs text-slate-400">Nombre de formes</p>
+            <p className="mt-1 text-lg font-black tabular-nums text-cyan-600 dark:text-cyan-400">{blocCourant.formes.length}</p>
+            <p className="text-xs text-slate-400">variante{blocCourant.formes.length > 1 ? 's' : ''}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+            <p className="text-xs text-slate-400">Nombre de couleurs</p>
+            <p className="mt-1 text-lg font-black tabular-nums text-amber-600 dark:text-amber-400">{blocCourant.couleurs.length}</p>
+            <p className="text-xs text-slate-400">variante{blocCourant.couleurs.length > 1 ? 's' : ''}</p>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Distribution des formes</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {blocCourant.formes.map(f => {
+              const percent = blocCourant.montures.length > 0 ? Math.round((f.count / blocCourant.montures.length) * 100) : 0
+              return (
+                <div key={f.label} className="rounded-xl border border-slate-100 dark:border-slate-700 p-3 text-center">
+                  <p className="text-2xl font-black tabular-nums text-blue-600 dark:text-blue-400">{percent}%</p>
+                  <p className="mt-1 text-xs text-slate-400 truncate">{f.label}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Distribution des couleurs</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {blocCourant.couleurs.map(c => {
+              const percent = blocCourant.montures.length > 0 ? Math.round((c.count / blocCourant.montures.length) * 100) : 0
+              return (
+                <div key={c.label} className="rounded-xl border border-slate-100 dark:border-slate-700 p-3 text-center">
+                  <p className="text-2xl font-black tabular-nums text-purple-600 dark:text-purple-400">{percent}%</p>
+                  <p className="mt-1 text-xs text-slate-400 truncate">{c.label}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Montures du bloc</p>
+          <div className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <tr className="border-b border-slate-100 dark:border-slate-700">
+                  <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Référence</th>
+                  <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Forme</th>
+                  <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Couleur</th>
+                  <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Emplacement</th>
+                  <th className="text-right py-2 px-3 text-xs font-semibold text-slate-400">Prix</th>
+                  <th className="text-right py-2 px-3 text-xs font-semibold text-slate-400">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 dark:divide-slate-700/60">
+                {blocCourant.montures.map(glass => (
+                  <tr key={glass.barcode}>
+                    <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">{glassRef(glass)}</td>
+                    <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">{glass.shape || '—'}</td>
+                    <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">{glass.color || '—'}</td>
+                    <td className="py-2.5 px-3 font-mono text-xs text-slate-500 dark:text-slate-400">{glass.location_code || '—'}</td>
+                    <td className="py-2.5 px-3 text-right font-bold tabular-nums text-blue-600 dark:text-blue-400">{fmtFCFA(glass.price)}</td>
+                    <td className="py-2.5 px-3 text-right">
+                      <button
+                        onClick={() => setPreview(glass)}
+                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                      >
+                        Aperçu
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Card>
+
+      {preview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setPreview(null)}>
+          <div
+            className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3.5 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm border-b border-slate-100 dark:border-slate-700">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{glassRef(preview)}</p>
+                <p className="text-xs text-slate-400 truncate">{blocKeyOf(preview) === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${blocKeyOf(preview)}`} · {businessBlocLabel(blocKeyOf(preview))}</p>
+              </div>
+              <button
+                onClick={() => setPreview(null)}
+                className="flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                aria-label="Fermer"
+              >
+                {ic.x('w-5 h-5')}
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="h-40 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900 flex items-center justify-center">
+                {preview.photo_monture_url
+                  ? <img src={preview.photo_monture_url} alt={glassRef(preview)} className="h-full w-full object-cover" />
+                  : <span className="text-xs text-slate-400">Pas de photo de monture</span>}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+                  <p className="text-xs text-slate-400">Forme</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{preview.shape || '—'}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+                  <p className="text-xs text-slate-400">Couleur</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{preview.color || '—'}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+                  <p className="text-xs text-slate-400">Emplacement</p>
+                  <p className="mt-1 text-sm font-mono text-slate-900 dark:text-white">{preview.location_code || '—'}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+                  <p className="text-xs text-slate-400">Prix</p>
+                  <p className="mt-1 text-sm font-bold tabular-nums text-blue-600 dark:text-blue-400">{fmtFCFA(preview.price)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -3354,6 +3586,22 @@ function ScanScreen({ data, stationId, onReceived }: {
   )
 }
 
+// ── Présentoir par bloc ──────────────────────────────────────────────────────────
+/** Écran dédié, séparé du Scan : le regroupement par meuble sert à orienter une cliente
+ *  vers un rayon précis, une tâche différente de la recherche par code-barres. */
+function PresentoirBlocScreen({ data }: { data: StoreData }) {
+  return (
+    <div className="space-y-4">
+      <SectionTitle>Présentoir par bloc</SectionTitle>
+      {data.presentoir.length === 0 ? (
+        <EmptyState>Aucune monture au présentoir.</EmptyState>
+      ) : (
+        <PresentoirParBloc glasses={data.presentoir} />
+      )}
+    </div>
+  )
+}
+
 // ── Réclamation ────────────────────────────────────────────────────────────────
 /** L'envoi part sur `POST /inventory/claims`. La lecture, elle, n'a pas encore de route
  *  côté serveur (`claims` n'enregistre que `Create`) : le tableau de bord la demande
@@ -3850,7 +4098,7 @@ function Sidebar({ current, onNavigate, dark, onToggleDark, user }: {
           <span className="text-xs">{dark ? 'Thème clair' : 'Thème sombre'}</span>
         </button>
         <button onClick={logoutToLogin} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full">
-          {ic.x('w-4 h-4')}
+          {ic.signOut('w-4 h-4')}
           <span className="text-xs">Déconnexion</span>
         </button>
         <div className="flex items-center gap-2">
@@ -3908,6 +4156,15 @@ function TopBar({ current, override, dark, onToggleDark, onReload, loading }: {
         aria-label="Changer de thème"
       >
         {dark ? ic.sun('w-4 h-4') : ic.moon('w-4 h-4')}
+      </button>
+      {/* Déconnexion vit dans la barre latérale ; sur mobile elle n'existe pas, elle
+          remonte donc ici. */}
+      <button
+        onClick={logoutToLogin}
+        className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors flex-shrink-0"
+        aria-label="Se déconnecter"
+      >
+        {ic.signOut('w-4 h-4')}
       </button>
     </header>
   )
@@ -3988,7 +4245,7 @@ function VendeusePage() {
                 {screen === 'proforma' && <ProformaScreen stationId={stationId} user={user} onDone={() => void reload()} />}
                 {screen === 'ventes' && <VentesScreen data={data} user={user} />}
                 {screen === 'scan' && <ScanScreen data={data} stationId={stationId} onReceived={() => void reload()} />}
-                {screen === 'remise' && <RemiseScreen data={data} loading={loading} stationId={stationId} onDone={() => void reload()} />}
+                {screen === 'bloc' && <PresentoirBlocScreen data={data} />}
                 {screen === 'reclamation' && <ReclamationScreen stationId={stationId} onDone={() => void reload()} />}
                 {screen === 'stats' && <StatsScreen data={data} user={user} />}
               </>

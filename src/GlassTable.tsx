@@ -82,6 +82,8 @@ export function downloadCSV(nom: string, entetes: string[], lignes: string[][]) 
 export interface GlassTableRow {
   key: string | number
   photo?: string
+  /** Photo de la branche, quand elle est disponible dans les données métier. */
+  branchPhoto?: string
   /** Réf : la référence commerciale, à défaut le code-barres. */
   reference?: string
   brand?: string
@@ -143,6 +145,7 @@ export function GlassTable({ rows, before = [], after = [], emptyLabel = 'Aucune
   // Le filtre par date vit dans le tableau, pas chez l'appelant : il porte sur la colonne
   // Entrée, que le tableau est seul à savoir lire.
   const [jour, setJour] = useState('')
+  const [selectedPreview, setSelectedPreview] = useState<GlassTableRow | null>(null)
 
   const visibles = jour
     ? rows.filter(row => String(row.entry || '').slice(0, 10) === jour)
@@ -239,6 +242,48 @@ export function GlassTable({ rows, before = [], after = [], emptyLabel = 'Aucune
 
   return (
     <div>
+      {selectedPreview && (
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/60">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Aperçu</p>
+              <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{selectedPreview.reference || 'Monture'}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedPreview(null)}
+              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Fermer
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+              {selectedPreview.photo ? (
+                <img src={selectedPreview.photo} alt={selectedPreview.reference || 'Monture'} className="h-40 w-full object-cover" />
+              ) : (
+                <div className="flex h-40 items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo de monture</div>
+              )}
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+              {selectedPreview.branchPhoto ? (
+                <img src={selectedPreview.branchPhoto} alt="Branche" className="h-40 w-full object-cover" />
+              ) : (
+                <div className="flex h-40 items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo de branche</div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
+            <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Marque</span><span className="mt-1 block font-semibold">{selectedPreview.brand || '—'}</span></div>
+            <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Forme</span><span className="mt-1 block font-semibold">{selectedPreview.shape || '—'}</span></div>
+            <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Genre</span><span className="mt-1 block font-semibold">{selectedPreview.gender || '—'}</span></div>
+            <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Emplacement</span><span className="mt-1 block font-mono text-xs">{selectedPreview.location || '—'}</span></div>
+          </div>
+        </div>
+      )}
+
       {barre}
       <table className="w-full table-fixed">
         <colgroup>
@@ -273,7 +318,8 @@ export function GlassTable({ rows, before = [], after = [], emptyLabel = 'Aucune
             return (
               <tr
                 key={row.key}
-                className={`${row.done ? 'bg-green-50/60 dark:bg-green-500/5' : ''} ${row.muted ? 'bg-slate-50/60 opacity-60 dark:bg-slate-900/40' : ''}`}
+                onClick={() => setSelectedPreview(row)}
+                className={`${row.done ? 'bg-green-50/60 dark:bg-green-500/5' : ''} ${row.muted ? 'bg-slate-50/60 opacity-60 dark:bg-slate-900/40' : ''} cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70`}
               >
                 <td className="px-1.5 py-2.5">
                   <div className="h-9 w-11 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-700">

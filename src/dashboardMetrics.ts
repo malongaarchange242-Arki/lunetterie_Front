@@ -4,6 +4,8 @@ export interface StockSummaryRow {
   qty_general?: number
   qty_local?: number
   qty_presentoir?: number
+  qty_labo?: number
+  qty_reserve?: number
   qty_total?: number
   is_critical?: boolean
 }
@@ -13,6 +15,8 @@ export interface DashboardSummary {
   generalUnits: number
   localUnits: number
   presentoirUnits: number
+  laboUnits: number
+  reserveUnits: number
   criticalReferences: number
   // Le dénominateur des références critiques : elles se comptent en références, pas en
   // montures, et les rapporter à totalUnits mélangerait deux unités.
@@ -25,6 +29,8 @@ export function summarizeStockSummary(rows: StockSummaryRow[] = []): DashboardSu
   const generalUnits = rows.reduce((sum, row) => sum + (row.qty_general ?? 0), 0)
   const localUnits = rows.reduce((sum, row) => sum + (row.qty_local ?? 0), 0)
   const presentoirUnits = rows.reduce((sum, row) => sum + (row.qty_presentoir ?? 0), 0)
+  const laboUnits = rows.reduce((sum, row) => sum + (row.qty_labo ?? 0), 0)
+  const reserveUnits = rows.reduce((sum, row) => sum + (row.qty_reserve ?? 0), 0)
   const criticalReferences = rows.filter(row => row.is_critical).length
 
   return {
@@ -32,6 +38,8 @@ export function summarizeStockSummary(rows: StockSummaryRow[] = []): DashboardSu
     generalUnits,
     localUnits,
     presentoirUnits,
+    laboUnits,
+    reserveUnits,
     criticalReferences,
     totalReferences: rows.length,
     hasData: rows.length > 0,

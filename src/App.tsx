@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
 import { buildAssistantPayload, buildStockDigest, mapChatActionToScreen } from './chatContext'
 import { summarizeStockSummary } from './dashboardMetrics'
+import { businessBlocKeyOf, businessBlocLabel } from './businessBloc'
 // Importé plutôt que référencé par URL : il n'y a pas de dossier public/ ici, donc un
 // chemin littéral ne serait pas copié dans dist/ au build.
 import logoUrl from '../logo.jpeg'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type ModuleId = 'register' | 'reception' | 'employees' | 'orders' | 'supplier' | 'history' | 'societes'
+type ModuleId = 'register' | 'reception' | 'employees' | 'orders' | 'supplier' | 'history' | 'societes' | 'presentoir-bloc'
 
 type Block = 'total' | 'ca' | 'suivi'
 
@@ -48,6 +49,7 @@ interface FrameRecord {
   gamme?: string
   price?: number | string
   emplacement?: string
+  couleur?: string
 }
 
 interface Employee {
@@ -264,6 +266,7 @@ function buildFrameRowsFromGlasses(glasses: any[], stationMap: Map<number, strin
       gamme: resolveFrameGamme(glass.material, glass.price),
       price: glass.price ?? 0,
       emplacement: glass.location_code || glass.station_name || '—',
+      couleur: glass.color || '—',
     }
 
     if (!rowsByCity[city]) rowsByCity[city] = []
@@ -279,14 +282,6 @@ const MOVEMENTS_DATA: Movement[] = []
 // le passe à un IN (...) sans rien valider, donc un statut mal orthographié ne renvoie
 // pas d'erreur — il fait juste disparaître les lignes concernées.
 const STOCK_STATUSES = ['EN_STOCK_GENERAL', 'EN_STOCK_SOUS_STATION', 'EN_PRESENTOIR', 'EN_LABORATOIRE', 'RESERVEE'] as const
-
-// Tous les statuts de backend/internal/inventory/models/enums.go. Le chatbot reçoit la
-// base entière, vendues et pertes comprises, et filtre lui-même sur le champ `status`.
-const ALL_GLASS_STATUSES = [
-  'RECU_FOURNISSEUR', 'EN_STOCK_GENERAL', 'EN_TRANSIT', 'EN_STOCK_SOUS_STATION',
-  'EN_PRESENTOIR', 'EN_CAISSE', 'RESERVEE', 'EN_LABORATOIRE', 'PRETE_A_LIVRER',
-  'VENDUE', 'PERDUE', 'CASSEE', 'RETOURNEE',
-] as const
 
 const EMPLOYEES: Array<{ id: number; name: string; role: string; station: string; group: string; status: string; avatar: string }> = []
 
@@ -325,6 +320,36 @@ function fmtPct(part: number, total: number) {
   return `${value.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`
 }
 
+function priceOf(frame: FrameRecord) {
+  const n = Number(frame.price)
+  return Number.isNaN(n) ? 0 : n
+}
+
+function sumPrice(frames: FrameRecord[]) {
+  return frames.reduce((total, frame) => total + priceOf(frame), 0)
+}
+
+function groupByAttr(frames: FrameRecord[], pick: (f: FrameRecord) => string | undefined) {
+  const counts = new Map<string, number>()
+  for (const frame of frames) {
+    const raw = String(pick(frame) || '').trim()
+    if (!raw || raw === '—') continue
+    const key = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
+function blocKeyOf(frame: FrameRecord) {
+  return businessBlocKeyOf({
+    gender: frame.genre,
+    price: frame.price,
+    status: frame.status,
+  })
+}
+
 // Le magasin est identifié par sa VILLE partout dans les échanges serveur — les paniers y
 // sont indexés — mais il s'affiche « Stock magasin (Ville) » : le poste s'appelle Stock
 // magasin, la ville n'en est que le qualificatif. Seul le libellé change, jamais la valeur.
@@ -344,10 +369,53 @@ interface RestockSuggestion {
   alert: boolean
 }
 
-function normalizeStationCityName(station: { id?: number; name?: string; city?: string }) {
-  const raw = String(station.city || station.name || '').trim()
+export function resolveStationCity(station: { id?: number; name?: string; city?: string; type?: string }) {
+  const cityFromDb = String(station.city || '').trim()
+  if (cityFromDb) return cityFromDb.replace(/^station\s+/i, '').trim()
+
+  const raw = String(station.name || '').trim()
   if (!raw) return ''
+
+  const parsedCity = raw.match(/^station\s+(.+)$/i)
+  if (parsedCity) return parsedCity[1].trim()
+
+  const name = raw.toLowerCase()
+  if (name.includes('présentoir') || name.includes('presentoir') || name.includes('laboratoire') || name.includes('labo')) {
+    return ''
+  }
+
   return raw.replace(/^station\s+/i, '').trim()
+}
+
+export function mergeCityNames(baseCities: string[] = [], stockCities: string[] = []) {
+  return Array.from(new Set([...baseCities, ...stockCities].map(city => String(city || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'fr'))
+}
+
+function addMissingZeroCities(counts: Record<string, CityStats>, cities: string[] = []): Record<string, CityStats> {
+  const next: Record<string, CityStats> = { ...counts }
+
+  cities.forEach(city => {
+    const trimmed = String(city || '').trim()
+    if (!trimmed) return
+    if (!next[trimmed]) {
+      next[trimmed] = {
+        local: 0,
+        presentoir: 0,
+        labo: 0,
+        reserve: 0,
+        vendues: 0,
+        transit: 0,
+        color: '#94a3b8',
+        revenue: 0,
+      }
+    }
+  })
+
+  return next
+}
+
+function normalizeStationCityName(station: { id?: number; name?: string; city?: string }) {
+  return resolveStationCity(station as { id?: number; name?: string; city?: string; type?: string })
 }
 
 // « Station Pointe-Noire » est un nom de base, pas un nom métier : sur le terrain c'est le
@@ -788,18 +856,10 @@ function buildCityStockCounts(
   stations.forEach(station => {
     if (station?.id == null) return
 
-    const cityName = normalizeStationCityName(station)
+    const cityName = resolveStationCity(station)
     if (!cityName) return
 
-    if (isStoreStation(station)) {
-      cityByStationId.set(Number(station.id), cityName)
-      return
-    }
-
-    const name = String(station.name || '').toLowerCase()
-    if (name.includes('présentoir') || name.includes('presentoir') || name.includes('laboratoire') || name.includes('labo')) {
-      cityByStationId.set(Number(station.id), 'Pointe-Noire')
-    }
+    cityByStationId.set(Number(station.id), cityName)
   })
 
   const counts: Record<string, CityStats> = {}
@@ -1003,6 +1063,7 @@ const ic = {
   send: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>,
   mic: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>,
   x: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  signOut: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>,
   search: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
   trash: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>,
   back: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>,
@@ -1072,12 +1133,15 @@ function exportCSV(frames: FrameRecord[], city: string) {
   document.body.removeChild(a); URL.revokeObjectURL(url)
 }
 
-const SIDEBAR_MODULES: { id: ModuleId; label: string; icon: (c?: string) => React.ReactElement }[] = [
-  { id: 'reception', label: 'Expédition', icon: ic.tag },
-  { id: 'history', label: 'Suivi Global', icon: ic.hist },
+// `short` sert à la nav mobile, en bas d'écran : trop peu de place pour « Présentoir par
+// bloc » en entier, d'où un libellé court par entrée plutôt qu'une troncature à l'affichage.
+const SIDEBAR_MODULES: { id: ModuleId; label: string; short: string; icon: (c?: string) => React.ReactElement }[] = [
+  { id: 'reception', label: 'Expédition', short: 'Expédition', icon: ic.tag },
+  { id: 'history', label: 'Suivi Global', short: 'Suivi', icon: ic.hist },
   // La liste que le champ « Société » d'une proforma vient lire. Elle est tenue ici parce
   // qu'elle est fermée côté magasin : la vendeuse choisit, elle n'ajoute pas.
-  { id: 'societes', label: 'Sociétés', icon: ic.users },
+  { id: 'societes', label: 'Sociétés', short: 'Sociétés', icon: ic.users },
+  { id: 'presentoir-bloc', label: 'Présentoir par bloc', short: 'Blocs', icon: ic.display },
 ]
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
@@ -1225,7 +1289,7 @@ function CalendarModal({ year, month, selectedDay, onSelectDay, onClose, onPrevM
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCities }: { onNavigate: (s: NavScreen) => void; stockSummary: any[]; cityStockCounts: Record<string, CityStats>; stationCities: string[] }) {
   const [selectedCity, setSelectedCity] = useState('')
-  const cityNames = Object.keys(cityStockCounts).length > 0 ? Object.keys(cityStockCounts).sort() : stationCities.slice().sort()
+  const cityNames = mergeCityNames(stationCities, Object.keys(cityStockCounts))
   const stats = cityStockCounts[selectedCity]
 
   useEffect(() => {
@@ -1248,6 +1312,8 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
 
   const totalRevenue = Object.values(cityStockCounts).reduce((sum, stats) => sum + (stats?.revenue || 0), 0)
   const revenueCities = Object.values(cityStockCounts).filter(stats => (stats?.revenue || 0) > 0).length
+  const selectedCityStats = selectedCity ? cityStockCounts[selectedCity] : undefined
+  const selectedCityTotalForMetrics = selectedCityStats ? getCityTotal(selectedCityStats) : summary.totalUnits
 
   return (
     <div className="space-y-5">
@@ -1324,12 +1390,14 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
       <div className="grid grid-cols-2 gap-3">
         {[
           { label: 'Stock général', value: summary.generalUnits, total: summary.totalUnits, of: montureDenominator, color: '#2563eb', screen: { type: 'stock-general' } as NavScreen },
-          { label: 'Stock magasin', value: summary.localUnits, total: summary.totalUnits, of: montureDenominator, color: '#0891b2', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'stock' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
-          { label: 'Présentoir', value: summary.presentoirUnits, total: summary.totalUnits, of: montureDenominator, color: '#7c3aed', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'presentoire' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
+          { label: 'Stock magasin', value: selectedCity ? (selectedCityStats?.local ?? 0) : summary.localUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#0891b2', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'stock' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
+          { label: 'Labo', value: selectedCity ? (selectedCityStats?.labo ?? 0) : summary.laboUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#7c3aed', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'labo' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
+          { label: 'Réserve', value: selectedCity ? (selectedCityStats?.reserve ?? 0) : summary.reserveUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#059669', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'placement' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
+          { label: 'Présentoir', value: selectedCity ? (selectedCityStats?.presentoir ?? 0) : summary.presentoirUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#f59e0b', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'presentoire' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
           // Rapportées au nombre de références, pas aux montures : une référence critique n'est
           // pas une monture, et le pourcentage n'aurait aucun sens sur l'autre dénominateur.
           // C'est cette exception qui justifie d'écrire le dénominateur sous chaque tuile.
-          { label: 'Références critiques', value: summary.criticalReferences, total: summary.totalReferences, of: referenceDenominator, color: '#059669', screen: { type: 'stock-general' } as NavScreen },
+          { label: 'Références critiques', value: summary.criticalReferences, total: summary.totalReferences, of: referenceDenominator, color: '#10b981', screen: { type: 'stock-general' } as NavScreen },
         ].map(item => {
           const ratio = item.total > 0 ? item.value / item.total : 0
           return (
@@ -2111,6 +2179,10 @@ function SuiviDetailScreen({ pays, city, section, cityStockCounts, framesByCity,
         ))}
       </div>
 
+      {section === 'presentoire' && frames.length > 0 && (
+        <PresentoirParBloc frames={frames} onNavigate={onNavigate} city={city} />
+      )}
+
       {/* Table */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
@@ -2169,6 +2241,212 @@ function SuiviDetailScreen({ pays, city, section, cityStockCounts, framesByCity,
           onSelectDay={setSelectedDay} onClose={() => setCalOpen(false)}
           onPrevMonth={prevMonth} onNextMonth={nextMonth}
         />
+      )}
+    </div>
+  )
+}
+
+// ── Présentoir par bloc ─────────────────────────────────────────────────────────
+// Regroupe les montures d'une ville par bloc (meuble) de présentoir, cf. blocKeyOf().
+// Complète la table à plat ci-dessous, qui reste la vue de recherche/filtre globale.
+function PresentoirParBloc({ frames, city, onNavigate }: { frames: FrameRecord[]; city: string; onNavigate: (screen: NavScreen) => void }) {
+  const [activeBlocKey, setActiveBlocKey] = useState('')
+  const [preview, setPreview] = useState<FrameRecord | null>(null)
+
+  const blocs = useMemo(() => {
+    const groupes = new Map<string, FrameRecord[]>()
+    for (const frame of frames) {
+      const cle = blocKeyOf(frame)
+      const liste = groupes.get(cle)
+      if (liste) liste.push(frame)
+      else groupes.set(cle, [frame])
+    }
+    return Array.from(groupes.entries())
+      .sort(([a], [b]) => a.localeCompare(b, 'fr'))
+      .map(([cle, montures]) => ({
+        cle,
+        montures,
+        total: sumPrice(montures),
+        moyenne: montures.length > 0 ? Math.round(sumPrice(montures) / montures.length) : 0,
+        formes: groupByAttr(montures, f => f.forme),
+        couleurs: groupByAttr(montures, f => f.couleur),
+      }))
+  }, [frames])
+
+  if (blocs.length === 0) return null
+  const blocCourant = blocs.find(b => b.cle === activeBlocKey) || blocs[0]
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-3 overflow-x-auto">
+        {blocs.map(bloc => (
+          <button
+            key={bloc.cle}
+            type="button"
+            onClick={() => setActiveBlocKey(bloc.cle)}
+            className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
+              bloc.cle === blocCourant.cle
+                ? 'bg-green-600 text-white shadow-sm'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-green-200 dark:border-green-700'
+            }`}
+          >
+            {bloc.cle === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${bloc.cle}`}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-slate-900 dark:text-white">{blocCourant.cle === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${blocCourant.cle}`}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">{businessBlocLabel(blocCourant.cle)}</p>
+          </div>
+          <span className="flex-shrink-0 rounded-full bg-green-50 dark:bg-green-500/15 px-3 py-1 text-xs font-semibold text-green-700 dark:text-green-300">
+            {blocCourant.montures.length} monture{blocCourant.montures.length > 1 ? 's' : ''}
+          </span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+            <p className="text-xs text-slate-400">Prix total du bloc</p>
+            <p className="mt-1 text-lg font-black tabular-nums text-green-600 dark:text-green-400">{fmtFCFA(blocCourant.total)}</p>
+            <p className="text-xs text-slate-400">{fmtFCFA(blocCourant.moyenne)} moy.</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+            <p className="text-xs text-slate-400">Nombre de formes</p>
+            <p className="mt-1 text-lg font-black tabular-nums text-cyan-600 dark:text-cyan-400">{blocCourant.formes.length}</p>
+            <p className="text-xs text-slate-400">variante{blocCourant.formes.length > 1 ? 's' : ''}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+            <p className="text-xs text-slate-400">Nombre de couleurs</p>
+            <p className="mt-1 text-lg font-black tabular-nums text-amber-600 dark:text-amber-400">{blocCourant.couleurs.length}</p>
+            <p className="text-xs text-slate-400">variante{blocCourant.couleurs.length > 1 ? 's' : ''}</p>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Distribution des formes</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {blocCourant.formes.map(f => {
+              const percent = blocCourant.montures.length > 0 ? Math.round((f.count / blocCourant.montures.length) * 100) : 0
+              return (
+                <div key={f.label} className="rounded-xl border border-green-200 dark:border-green-800 p-3 text-center">
+                  <p className="text-2xl font-black tabular-nums text-green-600 dark:text-green-400">{percent}%</p>
+                  <p className="mt-1 text-xs text-slate-400 truncate">{f.label}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Distribution des couleurs</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {blocCourant.couleurs.map(c => {
+              const percent = blocCourant.montures.length > 0 ? Math.round((c.count / blocCourant.montures.length) * 100) : 0
+              return (
+                <div key={c.label} className="rounded-xl border border-green-200 dark:border-green-800 p-3 text-center">
+                  <p className="text-2xl font-black tabular-nums text-purple-600 dark:text-purple-400">{percent}%</p>
+                  <p className="mt-1 text-xs text-slate-400 truncate">{c.label}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Montures du bloc</p>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Référence</th>
+                  <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Forme</th>
+                  <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Couleur</th>
+                  <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Emplacement</th>
+                  <th className="text-right py-2 px-3 text-xs font-semibold text-slate-400">Prix</th>
+                  <th className="text-right py-2 px-3 text-xs font-semibold text-slate-400">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 dark:divide-slate-700/60">
+                {blocCourant.montures.map(frame => (
+                  <tr key={frame.ref + frame.date}>
+                    <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">{frame.ref}</td>
+                    <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">{frame.forme || '—'}</td>
+                    <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">{frame.couleur || '—'}</td>
+                    <td className="py-2.5 px-3 font-mono text-xs text-slate-500 dark:text-slate-400">{frame.emplacement || '—'}</td>
+                    <td className="py-2.5 px-3 text-right font-bold tabular-nums text-green-600 dark:text-green-400">{fmtFCFA(priceOf(frame))}</td>
+                    <td className="py-2.5 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setPreview(frame)}
+                        className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                      >
+                        Aperçu
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {preview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setPreview(null)}>
+          <div
+            className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3.5 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{preview.ref}</p>
+                <p className="text-xs text-slate-400 truncate">{blocKeyOf(preview) === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${blocKeyOf(preview)}`} · {city}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreview(null)}
+                className="flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                aria-label="Fermer"
+              >
+                {ic.x('w-5 h-5')}
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="h-40 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900 flex items-center justify-center">
+                {preview.photo
+                  ? <FramePhoto src={preview.photo} alt={preview.ref} className="h-full w-full object-cover" />
+                  : <span className="text-xs text-slate-400">Pas de photo de monture</span>}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+                  <p className="text-xs text-slate-400">Forme</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{preview.forme || '—'}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+                  <p className="text-xs text-slate-400">Couleur</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{preview.couleur || '—'}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+                  <p className="text-xs text-slate-400">Emplacement</p>
+                  <p className="mt-1 text-sm font-mono text-slate-900 dark:text-white">{preview.emplacement || '—'}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+                  <p className="text-xs text-slate-400">Prix</p>
+                  <p className="mt-1 text-sm font-bold tabular-nums text-green-600 dark:text-green-400">{fmtFCFA(priceOf(preview))}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate({ type: 'frame', ref: preview.ref, city })}
+                className="w-full rounded-xl bg-slate-100 dark:bg-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+              >
+                Voir la fiche complète
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -2604,6 +2882,7 @@ function ReceptionView() {
   // non les indices de ligne : la sélection doit survivre au changement de page et de filtre.
   const [stockListSelection, setStockListSelection] = useState<string[]>([])
   const [stockListCity, setStockListCity] = useState('')
+  const [selectedStockPreview, setSelectedStockPreview] = useState<any | null>(null)
   const [isSendingStockList, setIsSendingStockList] = useState(false)
   const [excludedPreparationKeys, setExcludedPreparationKeys] = useState<string[]>([])
   const [basketCounts, setBasketCounts] = useState<Record<string, number>>({})
@@ -3258,7 +3537,7 @@ function ReceptionView() {
     const generalGlasses = (stockGlasses || []).filter((g: any) => isGeneralStockStatus(g.status))
     const magasinGlasses = (stockGlasses || []).filter((g: any) => isLocalStockStatus(g.status))
 
-    const fixedMagasins = ['Pointe-Noire', 'Kinshasa']
+    const configuredMagasins = magasinOptions.map(option => String(option.city || '').trim()).filter(Boolean)
     // Les paniers sont indexés par VILLE côté serveur, alors que les montures portent un nom
     // de STATION. Sans cette normalisation, « Station Pointe-Noire » se retrouvait à côté de
     // « Pointe-Noire » : deux chips pour le même magasin, dont une qui affichait toujours 0
@@ -3266,9 +3545,14 @@ function ReceptionView() {
     const discoveredMagasins = magasinGlasses
       .map((g: any) => normalizeStationCityName({ name: String(g.station_name || ''), city: String(g.station_city || '') }))
       .filter(Boolean)
-    // Une ville peut avoir un panier sans avoir encore de stock : elle doit quand même
-    // apparaître, c'est précisément le magasin qui a tout à recevoir.
-    const magasins = Array.from(new Set([...fixedMagasins, ...discoveredMagasins, ...Object.keys(basketCounts)]))
+    // Les villes viennent de la table `villes`, pas d'un hardcode à 2 villes : le magasin
+    // doit afficher l'intégralité du parc même quand un panier ou un stock local est vide.
+    const magasins = Array.from(new Set([
+      ...configuredMagasins,
+      ...discoveredMagasins,
+      ...Object.keys(basketCounts),
+      ...Object.keys(restockByCity).map(city => city.trim()),
+    ])).sort((a, b) => a.localeCompare(b, 'fr'))
 
     const selectedMagasin = stockScope === 'GENERAL' ? '' : stockScope
     const filteredGeneralGlasses = generalGlasses.filter(matchesStockFilters)
@@ -3504,6 +3788,42 @@ function ReceptionView() {
 
     return (
       <div className="space-y-3">
+        {selectedStockPreview && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/60">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Aperçu</p>
+                <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{selectedStockPreview.reference || selectedStockPreview.barcode || 'Monture'}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedStockPreview(null)}
+                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+              >
+                Fermer
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-[140px_1fr]">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                {selectedStockPreview.photo_monture_url ? (
+                  <img src={selectedStockPreview.photo_monture_url} alt={selectedStockPreview.reference || selectedStockPreview.barcode || 'Monture'} className="h-32 w-full object-cover" />
+                ) : (
+                  <div className="flex h-32 items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo</div>
+                )}
+              </div>
+
+              <div className="grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Marque</span><span className="mt-1 block font-semibold">{selectedStockPreview.brand || selectedStockPreview.marque || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Forme</span><span className="mt-1 block font-semibold">{selectedStockPreview.shape || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Genre</span><span className="mt-1 block font-semibold">{selectedStockPreview.gender || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Statut</span><span className="mt-1 block font-semibold">{selectedStockPreview.status || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60 sm:col-span-2"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Emplacement</span><span className="mt-1 block font-mono text-xs">{selectedStockPreview.location_code || selectedStockPreview.station_name || '—'}</span></div>
+              </div>
+            </div>
+          </div>
+        )}
+
       {/* Composer une liste depuis le stock existant. La Direction commande, le Stock Général
           prépare et expédie — ce bouton n'envoie aucune monture, il crée l'ordre. */}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
@@ -3570,10 +3890,14 @@ function ReceptionView() {
                 <tr><td colSpan={9} className="px-3 py-6 text-center text-green-700">Aucune lunette trouvée.</td></tr>
               ) : (
                 pageRows.map((g: any, idx: number) => (
-                  <tr key={`stock-${g.id || idx}`} className={`transition-colors ${stockListSelection.includes(String(g.barcode || ''))
-                    ? 'bg-blue-50 dark:bg-blue-900/20'
-                    : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-                    <td className="px-2 py-2">
+                  <tr
+                    key={`stock-${g.id || idx}`}
+                    onClick={() => setSelectedStockPreview(g)}
+                    className={`cursor-pointer transition-colors ${stockListSelection.includes(String(g.barcode || ''))
+                      ? 'bg-blue-50 dark:bg-blue-900/20'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                  >
+                    <td className="px-2 py-2" onClick={event => event.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={stockListSelection.includes(String(g.barcode || ''))}
@@ -3581,7 +3905,7 @@ function ReceptionView() {
                         className="h-4 w-4 cursor-pointer accent-blue-600"
                       />
                     </td>
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2" onClick={event => event.stopPropagation()}>
                       {g.photo_monture_url ? (
                         <img src={g.photo_monture_url} alt={g.reference || g.barcode || ''} className="h-12 w-12 rounded-md object-cover" />
                       ) : (
@@ -5401,7 +5725,7 @@ function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose
     }
 
     const results = await Promise.allSettled([
-      get(`/inventory/glasses?status=${ALL_GLASS_STATUSES.join(',')}`, 'glasses'),
+      get('/inventory/glasses', 'glasses'),
       get('/inventory/movements?limit=500&offset=0', 'movements'),
       get('/auth/users', 'users'),
       get('/auth/stations', 'stations'),
@@ -5581,7 +5905,7 @@ function Sidebar({ currentScreen, onNavigate, dark, onToggleDark, onLogout }: {
           <span className="text-xs">{dark ? 'Thème clair' : 'Thème sombre'}</span>
         </button>
         <button onClick={onLogout} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full">
-          {ic.x('w-4 h-4')}
+          {ic.signOut('w-4 h-4')}
           <span className="text-xs">Déconnexion</span>
         </button>
         <div className="flex items-center gap-2">
@@ -5594,24 +5918,32 @@ function Sidebar({ currentScreen, onNavigate, dark, onToggleDark, onLogout }: {
 }
 
 // ── Mobile nav ────────────────────────────────────────────────────────────────
+// Dérivée de SIDEBAR_MODULES plutôt qu'une liste à part : un module ajouté à la barre
+// latérale l'était jusqu'ici invisible en mobile (c'est ce qui a manqué « Présentoir par
+// bloc » — visible sur desktop, absent d'ici), une seule liste tenue à jour empêche l'écart
+// de revenir au prochain module ajouté.
 function MobileNav({ currentScreen, onNavigate }: { currentScreen: NavScreen; onNavigate: (s: NavScreen) => void }) {
   const isDash = ['dashboard', 'pays', 'city', 'frame'].includes(currentScreen.type)
-  const isExped = currentScreen.type === 'module' && (currentScreen as any).id === 'reception'
-  const isGlobal = currentScreen.type === 'module' && (currentScreen as any).id === 'history'
+
+  const tabs: { label: string; icon: (c?: string) => React.ReactElement; active: boolean; nav: NavScreen }[] = [
+    { label: 'Tableau de bord', icon: ic.home, active: isDash, nav: { type: 'dashboard' } },
+    ...SIDEBAR_MODULES.map(mod => ({
+      label: mod.short,
+      icon: mod.icon,
+      active: currentScreen.type === 'module' && (currentScreen as any).id === mod.id,
+      nav: { type: 'module', id: mod.id } as NavScreen,
+    })),
+  ]
 
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-40">
-      <div className="flex">
-        {[
-          { label: 'Tableau de bord', icon: ic.home, active: isDash, nav: { type: 'dashboard' } as NavScreen },
-          { label: 'Expédition', icon: ic.tag, active: isExped, nav: { type: 'module', id: 'reception' } as NavScreen },
-          { label: 'Suivi global', icon: ic.hist, active: isGlobal, nav: { type: 'module', id: 'history' } as NavScreen },
-        ].map(tab => (
+    <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-40 overflow-x-auto">
+      <div className="flex min-w-max">
+        {tabs.map(tab => (
           <button key={tab.label} onClick={() => onNavigate(tab.nav)}
-            className={`flex-1 flex flex-col items-center py-3 gap-1 transition-colors ${tab.active ? 'text-blue-600' : 'text-slate-400'}`}
+            className={`flex-1 min-w-[68px] flex flex-col items-center py-3 gap-1 transition-colors ${tab.active ? 'text-blue-600' : 'text-slate-400'}`}
           >
             {tab.icon('w-5 h-5')}
-            <span className="text-[10px] font-semibold leading-none">{tab.label}</span>
+            <span className="text-[10px] font-semibold leading-none whitespace-nowrap">{tab.label}</span>
           </button>
         ))}
       </div>
@@ -5620,9 +5952,9 @@ function MobileNav({ currentScreen, onNavigate }: { currentScreen: NavScreen; on
 }
 
 // ── TopBar ────────────────────────────────────────────────────────────────────
-function TopBar({ navStack, onBack, dark, onToggleDark, onOpenChat }: {
+function TopBar({ navStack, onBack, dark, onToggleDark, onOpenChat, onLogout }: {
   navStack: NavScreen[]; onBack: () => void
-  dark: boolean; onToggleDark: () => void; onOpenChat: () => void
+  dark: boolean; onToggleDark: () => void; onOpenChat: () => void; onLogout: () => void
 }) {
   const current = navStack[navStack.length - 1]
   const canGoBack = navStack.length > 1
@@ -5663,8 +5995,13 @@ function TopBar({ navStack, onBack, dark, onToggleDark, onOpenChat }: {
         {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Thème et déconnexion vivent dans la barre latérale ; sur mobile elle n'existe
+            pas, ils remontent donc ici (même geste que scan.tsx). */}
         <button onClick={onToggleDark} className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors">
           {dark ? ic.sun('w-4 h-4') : ic.moon('w-4 h-4')}
+        </button>
+        <button onClick={onLogout} className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors" aria-label="Se déconnecter">
+          {ic.signOut('w-4 h-4')}
         </button>
       </div>
     </header>
@@ -5872,6 +6209,56 @@ function SocietesView() {
   )
 }
 
+// ── Présentoir par bloc (module) ──────────────────────────────────────────────────
+// Accès direct depuis le menu principal : plus besoin de passer par Suivi → ville →
+// Présentoire pour voir le présentoir regroupé par meuble. On choisit la ville en haut,
+// le reste réutilise PresentoirParBloc (déjà branché sur SuiviDetailScreen).
+function PresentoirBlocModule({ framesByCity, stationCities, onNavigate }: {
+  framesByCity: Record<string, FrameRecord[]>; stationCities: string[]; onNavigate: (screen: NavScreen) => void
+}) {
+  const cities = stationCities.length > 0 ? stationCities : Object.keys(framesByCity)
+  const [city, setCity] = useState('')
+  const activeCity = city && cities.includes(city) ? city : (cities[0] || '')
+  const frames = (framesByCity[activeCity] || []).filter(f => f.status === 'Présentoir')
+
+  if (cities.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+        Aucune ville détectée.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-1.5">
+        {cities.map(c => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setCity(c)}
+            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
+              c === activeCity
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+
+      {frames.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+          Aucune monture au présentoir à {activeCity}.
+        </div>
+      ) : (
+        <PresentoirParBloc frames={frames} city={activeCity} onNavigate={onNavigate} />
+      )}
+    </div>
+  )
+}
+
 function renderModuleView(id: ModuleId) {
   switch (id) {
     case 'reception': return <ReceptionView />
@@ -5934,7 +6321,7 @@ export default function App() {
       })
 
     Promise.allSettled([stockSummaryPromise, stationsPromise, activeGlassesPromise, proformasPromise])
-      .then(([stockResult, stationsResult, glassesResult, proformasResult]) => {
+      .then(async ([stockResult, stationsResult, glassesResult, proformasResult]) => {
         const summary = stockResult.status === 'fulfilled' ? summarizeStockSummary(stockResult.value) : { totalUnits: 0, hasData: false }
 
         if (stockResult.status === 'fulfilled') {
@@ -5945,6 +6332,25 @@ export default function App() {
 
         const fallbackCounts = summary.hasData ? buildFallbackCityCounts(summary.totalUnits) : {}
 
+        let dbCities: string[] = []
+        try {
+          const countriesResponse = await fetch(`${API_URL}/inventory/countries`, { headers })
+          if (countriesResponse.ok) {
+            const countriesPayload = await countriesResponse.json().catch(() => ({}))
+            const countries = (countriesPayload?.data?.countries || []) as any[]
+            const cityLists = await Promise.all(countries.map(async country => {
+              if (!country?.id) return []
+              const citiesResponse = await fetch(`${API_URL}/inventory/cities?country_id=${country.id}`, { headers })
+              if (!citiesResponse.ok) return []
+              const citiesPayload = await citiesResponse.json().catch(() => ({}))
+              return (citiesPayload?.data?.cities || []).map((city: any) => String(city?.name || '').trim()).filter(Boolean)
+            }))
+            dbCities = mergeCityNames(cityLists.flat())
+          }
+        } catch {
+          dbCities = []
+        }
+
         if (stationsResult.status === 'fulfilled') {
           const stationList = stationsResult.value as any[]
           const uniqueCities = Array.from(new Set(
@@ -5954,11 +6360,9 @@ export default function App() {
               .filter((value): value is string => Boolean(value))
           )) as string[]
           uniqueCities.sort((a, b) => a.localeCompare(b, 'fr'))
-          setStationCities(uniqueCities)
-        } else if (summary.hasData) {
-          setStationCities(Object.keys(fallbackCounts))
+          setStationCities(mergeCityNames(dbCities, uniqueCities))
         } else {
-          setStationCities([])
+          setStationCities(mergeCityNames(dbCities, Object.keys(fallbackCounts)))
         }
 
         // Le CA vient des proformas, le stock des montures : que l'une des deux listes
@@ -5981,10 +6385,13 @@ export default function App() {
 
           const builtCounts = buildCityStockCounts(stationsResult.value, glassesResult.value)
           const counts = Object.keys(builtCounts).length > 0 ? builtCounts : fallbackCounts
-          setCityStockCounts(mergeRevenueIntoCityCounts(counts, revenue.revenueByCity))
+          const mergedCounts = addMissingZeroCities(mergeRevenueIntoCityCounts(counts, revenue.revenueByCity), stationCities)
+          const finalCounts = addMissingZeroCities(mergedCounts, dbCities)
+          setCityStockCounts(finalCounts)
           setFramesByCity(buildFrameRowsFromGlasses(glassesResult.value, stationMap))
         } else {
-          setCityStockCounts(mergeRevenueIntoCityCounts(fallbackCounts, revenue.revenueByCity))
+          const mergedCounts = addMissingZeroCities(mergeRevenueIntoCityCounts(fallbackCounts, revenue.revenueByCity), stationCities)
+          setCityStockCounts(addMissingZeroCities(mergedCounts, dbCities))
           setFramesByCity({})
         }
       })
@@ -6069,7 +6476,9 @@ export default function App() {
       case 'suivi-detail': return <SuiviDetailScreen pays={current.pays} city={current.city} section={current.section} cityStockCounts={cityStockCounts} framesByCity={framesByCity} onNavigate={navigate} />
       case 'stock-general': return <StockGeneralScreen onNavigate={navigate} />
       case 'frame': return <FrameDetailScreen frameRef={current.ref} city={current.city} framesByCity={framesByCity} />
-      case 'module': return renderModuleView(current.id)
+      case 'module': return current.id === 'presentoir-bloc'
+        ? <PresentoirBlocModule framesByCity={framesByCity} stationCities={stationCities} onNavigate={navigate} />
+        : renderModuleView(current.id)
     }
   }
 
@@ -6079,7 +6488,7 @@ export default function App() {
         <Sidebar currentScreen={current} onNavigate={navigateRoot} dark={dark} onToggleDark={() => setDark(d => !d)} onLogout={logoutAndRedirectToIndex} />
 
         <div className="flex-1 flex flex-col min-w-0">
-          <TopBar navStack={navStack} onBack={goBack} dark={dark} onToggleDark={() => setDark(d => !d)} onOpenChat={() => setChatOpen(v => !v)} />
+          <TopBar navStack={navStack} onBack={goBack} dark={dark} onToggleDark={() => setDark(d => !d)} onOpenChat={() => setChatOpen(v => !v)} onLogout={logoutAndRedirectToIndex} />
           <main className="flex-1 px-4 md:px-6 py-4 md:py-6 pb-24 md:pb-8 overflow-auto">
             {renderScreen()}
           </main>

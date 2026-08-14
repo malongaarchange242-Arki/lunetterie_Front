@@ -339,7 +339,9 @@ const LABEL_CSS = `
   .lb .marque { font-size: 13px; font-weight: 700; }
   .lb .ref { font-size: 10px; color: #333; font-family: ui-monospace, monospace; }
   .lb svg { margin: 2mm 0; max-width: 100%; }
-  .lb .meta { display: flex; justify-content: space-between; width: 100%; font-size: 9px; font-variant-numeric: tabular-nums; }
+  .lb .meta { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 8px; font-size: 9px; font-variant-numeric: tabular-nums; }
+  .lb .meta span { white-space: nowrap; }
+  .lb .meta span:last-child { font-weight: 800; font-size: 10px; }
 `
 
 /** Le gabarit de LABEL_CSS converti en pixels CSS à 96 dpi : 60 mm de large, 4 mm de
@@ -364,6 +366,10 @@ async function drawBarcode(target: SVGSVGElement, value: string, showValue = tru
   const module = await import('jsbarcode')
   const JsBarcode = (module.default || module) as any
   if (typeof JsBarcode !== 'function') return
+
+  target.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  target.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+
   JsBarcode(target, value, {
     format: 'CODE128',
     lineColor: '#0f172a',
@@ -374,11 +380,27 @@ async function drawBarcode(target: SVGSVGElement, value: string, showValue = tru
     margin: 8,
     displayValue: showValue,
   })
-  // JsBarcode fixe width/height en pixels mais n'ajoute pas de viewBox : sans lui,
-  // max-width:100% ne peut pas réduire le code proportionnellement et il déborde.
-  const w = target.getAttribute('width')
-  const h = target.getAttribute('height')
-  if (w && h) target.setAttribute('viewBox', `0 0 ${w} ${h}`)
+
+  // JsBarcode fixe parfois seulement les attributs du SVG sans les dimensions de
+  // la vue, ou bien il les laisse à 0 sur certains navigateurs quand l'élément est
+  // temporaire. Sans un viewBox exploitable, la barre n'a ni largeur ni hauteur à
+  // l'impression / export d'image.
+  const explicitWidth = Number.parseFloat(String(target.getAttribute('width') ?? '')) || 0
+  const explicitHeight = Number.parseFloat(String(target.getAttribute('height') ?? '')) || 0
+  const vb = target.viewBox?.baseVal
+  const vbWidth = vb && vb.width > 0 ? vb.width : 0
+  const vbHeight = vb && vb.height > 0 ? vb.height : 0
+
+  if ((explicitWidth > 0 && explicitHeight > 0) || (vbWidth > 0 && vbHeight > 0)) {
+    target.setAttribute('viewBox', `0 0 ${Math.max(explicitWidth || vbWidth, 1)} ${Math.max(explicitHeight || vbHeight, 1)}`)
+    return
+  }
+
+  const fallbackWidth = 200
+  const fallbackHeight = 50
+  target.setAttribute('width', String(fallbackWidth))
+  target.setAttribute('height', String(fallbackHeight))
+  target.setAttribute('viewBox', `0 0 ${fallbackWidth} ${fallbackHeight}`)
 }
 
 function BarcodePreview({ value, className = '' }: { value: string; className?: string }) {
@@ -448,7 +470,7 @@ interface PrintableLabel {
   barcodeValue: string
   /** Pied de page, aligné à gauche : l'emplacement, ou la ville de destination. */
   metaLeft: string
-  /** Pied de page, aligné à droite : le prix, ou le nombre de montures. */
+  /** Prix affiché sous la référence, avant le code-barres. */
   metaRight: string
   /** Préfixe du PNG déposé sur le disque : `etiquette-…` ou `carton-…`. */
   filePrefix: string
@@ -476,13 +498,15 @@ async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; w
   let barcodeImage: HTMLImageElement | null = null
   let barcodeWidth = 0
   let barcodeHeight = 0
-  if (barcode.svg && barcode.width > 0 && barcode.height > 0) {
+  const safeBarcodeWidth = barcode.width > 0 ? barcode.width : 180
+  const safeBarcodeHeight = barcode.height > 0 ? barcode.height : 48
+  if (barcode.svg) {
     // data: plutôt que blob: — une <img> qui charge un blob: SVG déclenche selon les
     // navigateurs un contrôle d'origine qui échoue, et l'image n'arrive jamais.
     barcodeImage = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(barcode.svg)}`)
-    const ratio = Math.min(1, contentWidth / barcode.width)
-    barcodeWidth = barcode.width * ratio
-    barcodeHeight = barcode.height * ratio
+    const ratio = Math.min(1, contentWidth / safeBarcodeWidth)
+    barcodeWidth = safeBarcodeWidth * ratio
+    barcodeHeight = safeBarcodeHeight * ratio
   }
 
   const height = LABEL_PX.pad
@@ -532,7 +556,12 @@ async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; w
     ctx.fillText(line, center, y)
     y += LABEL_LINE.ref
   }
-  y += LABEL_PX.gap
+
+  ctx.font = LABEL_FONT.meta
+  ctx.fillStyle = '#000000'
+  ctx.textAlign = 'center'
+  ctx.fillText(data.metaRight || '—', center, y + 2)
+  y += LABEL_LINE.meta + LABEL_PX.gap
 
   if (barcodeImage) {
     y += LABEL_PX.barcodeMargin
@@ -545,7 +574,7 @@ async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; w
   ctx.textAlign = 'left'
   ctx.fillText(data.metaLeft || '—', LABEL_PX.pad, y)
   ctx.textAlign = 'right'
-  ctx.fillText(data.metaRight || '—', LABEL_PX.width - LABEL_PX.pad, y)
+  ctx.fillText('', LABEL_PX.width - LABEL_PX.pad, y)
 
   return canvas.toDataURL('image/png')
 }
@@ -583,14 +612,14 @@ async function printLabel(data: PrintableLabel) {
   // qu'un chargement d'image, lui, ferait passer le clic pour une popup non sollicitée.
   const barcode = { svg: '', width: 0, height: 0 }
   try {
-    await drawBarcode(svg, data.barcodeValue, true)
+    await drawBarcode(svg, data.barcodeValue, false)
     markup = svg.outerHTML
 
     const clone = svg.cloneNode(true) as SVGSVGElement
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
     barcode.svg = new XMLSerializer().serializeToString(clone)
-    barcode.width = Number(svg.getAttribute('width')) || 0
-    barcode.height = Number(svg.getAttribute('height')) || 0
+    barcode.width = Number(svg.getAttribute('width')) || Number(svg.viewBox?.baseVal.width) || 180
+    barcode.height = Number(svg.getAttribute('height')) || Number(svg.viewBox?.baseVal.height) || 48
   } finally {
     holder.remove()
   }
@@ -613,21 +642,40 @@ async function printLabel(data: PrintableLabel) {
     + `<div class="shop">La Lunetterie</div>`
     + `<div class="marque">${esc(data.title || '—')}</div>`
     + `<div class="ref">${esc(data.reference || '—')}</div>`
+    + `<div class="meta"><span>${esc(data.metaRight || '—')}</span></div>`
     + markup
-    + `<div class="meta"><span>${esc(data.metaLeft || '—')}</span><span>${esc(data.metaRight || '—')}</span></div>`
+    + `<div class="meta"><span>${esc(data.metaLeft || '—')}</span></div>`
     + `</div>`
     + `<script>window.onload=function(){window.print();}<\/script></body></html>`,
   )
   popup.document.close()
 }
 
-/** L'étiquette d'une monture : celle qui part sur la branche. */
-function printMontureLabel(data: FinalMonture) {
+/** L'étiquette d'une monture : celle qui part sur la branche.
+ *  Le code-barres doit exister avant l'impression : si l'enregistrement vient d'un
+ *  flux qui n'a pas réservé de numéro, on le demande au serveur pour éviter une
+ *  étiquette vide. */
+async function printMontureLabel(data: FinalMonture) {
+  let barcodeValue = String(data.id || '').trim()
+  if (!barcodeValue) {
+    try {
+      const payload = await apiFetch('/inventory/barcodes/next')
+      barcodeValue = String(payload?.data?.barcode || '').trim()
+    } catch (error) {
+      console.warn('Aucun code-barres disponible pour l\'étiquette', error)
+    }
+  }
+
+  if (!barcodeValue) {
+    window.alert('Le code-barres de la monture est introuvable : réessayez l\'enregistrement.')
+    return
+  }
+
   return printLabel({
     title: data.marque,
     reference: data.reference,
-    barcodeValue: data.id,
-    metaLeft: data.emplacement,
+    barcodeValue,
+    metaLeft: data.emplacement || 'Emplacement non attribué',
     metaRight: fmtFCFA(data.prix),
     filePrefix: 'etiquette',
   })
@@ -1543,7 +1591,7 @@ function distinctValues(records: Movement[], key: string) {
  *  une. On ne remplit que ce que l'étiquette imprime — le reste ne serait jamais lu. */
 function recordToLabel(record: Movement): FinalMonture {
   return {
-    id: recordField(record, 'barcode'),
+    id: recordField(record, 'barcode') || recordField(record, 'id') || '',
     reference: recordField(record, 'reference'),
     marque: recordField(record, 'brand'),
     genre: '',

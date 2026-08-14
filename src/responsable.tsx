@@ -6,6 +6,7 @@ import './index.css'
 import logoUrl from '../logo.jpeg'
 import type { ReactElement, ReactNode } from 'react'
 import { GlassTable, fmtPrix } from './GlassTable'
+import { businessBlocKeyOf, businessBlocLabel } from './businessBloc'
 
 // Écran du poste Responsable magasin (rôle RESPONSABLE_STATION).
 // Tout ce qui s'affiche vient de l'API, dans le périmètre de la station du compte.
@@ -199,6 +200,20 @@ function groupByAttr(glasses: Glass[], pick: (g: Glass) => string | undefined) {
     .sort((a, b) => b.count - a.count)
 }
 
+/** Le meuble du présentoir : la partie fixe de `location_code` (« PR03-12 » →
+ *  « PR03 », AGENTS.md § Emplacements), la position après le dernier tiret variant à
+ *  l'intérieur d'un même bloc. Sans emplacement renseigné, la monture n'est encore
+ *  affectée à aucun bloc physique. */
+function blocKeyOf(glass: Glass) {
+  return businessBlocKeyOf({
+    gender: glass.gender,
+    price: glass.price,
+    status: glass.status,
+    is_offered: (glass as any).is_offered,
+    offered: (glass as any).offered,
+  })
+}
+
 // ── Icônes ────────────────────────────────────────────────────────────────────
 // SVG inline : le projet n'embarque aucune bibliothèque d'icônes (cf. AGENTS.md).
 const ic = {
@@ -224,6 +239,7 @@ const ic = {
   scan: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M11 8v8M15 8v8"/></svg>,
   hand: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v7M10 10.5V6a2 2 0 0 0-4 0v9"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2a8 8 0 0 1-8-8"/></svg>,
   x: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  signOut: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>,
   refresh: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6"/></svg>,
   // Carton aux rabats ouverts : le colis qui arrive, distinct du cube plein de « Stock ».
   carton: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M4 9.5V19a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9.5"/><path d="M2.5 6.5 5 3.5h14l2.5 3-2 3H4.5z"/><path d="M9.5 13h5"/></svg>,
@@ -260,19 +276,18 @@ const TONE = {
 }
 
 type Tone = keyof typeof TONE
-type TabId = 'tableau' | 'ventes' | 'cartons' | 'presentoir' | 'stock'
+type TabId = 'tableau' | 'ventes' | 'cartons' | 'presentoir' | 'remise' | 'bloc' | 'stock'
 
 // Les libellés sont ceux de la maquette. Les identifiants, eux, disent ce que l'onglet fait
 // côté métier — « presentoir » expédie au Présentoir — et servent au code qui envoie les
 // transferts : les renommer brouillerait la lecture.
-//
-// « Remise client » a été déplacé au poste Vendeuse : c'est elle qui accueille le client
-// venu chercher ses lunettes, ce poste-ci ne le voit jamais.
 const TABS: { id: TabId; label: string; short: string; icon: IconFn }[] = [
   { id: 'tableau', label: 'Tableau de bord', short: 'Bord', icon: ic.home },
   { id: 'ventes', label: 'Ventes', short: 'Ventes', icon: ic.chart },
   { id: 'cartons', label: 'Cartons reçus', short: 'Cartons', icon: ic.carton },
   { id: 'presentoir', label: 'Scanner', short: 'Scanner', icon: ic.scan },
+  { id: 'remise', label: 'Remise client', short: 'Remise', icon: ic.hand },
+  { id: 'bloc', label: 'Présentoir par bloc', short: 'Blocs', icon: ic.eye },
   { id: 'stock', label: 'Stock', short: 'Stock', icon: ic.pkg },
 ]
 
@@ -606,7 +621,11 @@ function Code128({ value, height = 40, showValue = true }: { value: string; heig
       // se réduire proportionnellement dans une carte étroite.
       const w = target.getAttribute('width')
       const h = target.getAttribute('height')
-      if (w && h) target.setAttribute('viewBox', `0 0 ${w} ${h}`)
+      const width = Number.parseFloat(String(w ?? ''))
+      const height = Number.parseFloat(String(h ?? ''))
+      if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+        target.setAttribute('viewBox', `0 0 ${width} ${height}`)
+      }
       target.removeAttribute('width')
       target.removeAttribute('height')
     }).catch(() => {
@@ -735,6 +754,11 @@ function ResponsableMagasinPage() {
   const [user, setUser] = useState<any>(null)
   const [ready, setReady] = useState(false)
 
+  // Onglet actif dans « Présentoir par bloc » et monture dont l'aperçu est ouvert — un seul
+  // bloc affiché à la fois, comme le reste de l'écran (pile d'états + switch, pas de router).
+  const [activeBlocKey, setActiveBlocKey] = useState('')
+  const [blocPreview, setBlocPreview] = useState<Glass | null>(null)
+
   // Le pointage du présentoir reste local jusqu'à l'envoi, qui se conclut par un vrai
   // transfert (envoyerAuPresentoir).
   const [scannedPresentoir, setScannedPresentoir] = useState<string[]>([])
@@ -742,6 +766,51 @@ function ResponsableMagasinPage() {
   // La liste à prendre s'affiche avant le premier scan : le responsable part au meuble en
   // sachant ce qu'il vient chercher, plutôt que de découvrir chaque monture au douchage.
   const [presentoirDemarre, setPresentoirDemarre] = useState(false)
+
+  const [remisesPointees, setRemisesPointees] = useState<string[]>([])
+  const [scanRemise, setScanRemise] = useState('')
+  const [remiseBusy, setRemiseBusy] = useState(false)
+  const [remiseMessage, setRemiseMessage] = useState('')
+  const [remiseErreur, setRemiseErreur] = useState(false)
+
+  async function remettreAuClient() {
+    if (remisesPointees.length === 0 || remiseBusy) return
+    if (!stationId) {
+      setRemiseMessage("Aucune station rattachée à ce compte : impossible d'enregistrer la remise.")
+      setRemiseErreur(true)
+      return
+    }
+
+    setRemiseBusy(true)
+    setRemiseMessage('')
+    setRemiseErreur(false)
+    try {
+      const payload = await apiFetch('/inventory/deliveries/handover', {
+        method: 'POST',
+        body: JSON.stringify({ station_id: stationId, barcodes: remisesPointees }),
+      })
+
+      const remises: string[] = payload?.data?.handed_over || []
+      const refusees: { barcode?: string; reason?: string }[] = payload?.data?.skipped || []
+
+      let texte = `${remises.length} monture${remises.length > 1 ? 's' : ''} remise${remises.length > 1 ? 's' : ''} au client.`
+      if (refusees.length > 0) {
+        const detail = refusees.map(item => `${item.barcode || '?'} — ${item.reason || 'refusée'}`).join(' · ')
+        texte += ` ${refusees.length} refusée${refusees.length > 1 ? 's' : ''} : ${detail}.`
+      }
+
+      setRemiseMessage(texte)
+      setRemiseErreur(refusees.length > 0)
+      setRemisesPointees([])
+      setScanRemise('')
+      void reload()
+    } catch (error: any) {
+      setRemiseMessage(error?.message || "Impossible d'enregistrer la remise.")
+      setRemiseErreur(true)
+    } finally {
+      setRemiseBusy(false)
+    }
+  }
 
   // Les deux étapes doivent avoir été franchies : un jeton valide de rôle
   // RESPONSABLE_STATION, et le passage par /magasin.html (qui pose `poste`). Sans le
@@ -1117,6 +1186,28 @@ function ResponsableMagasinPage() {
     }
   }, [data])
 
+  // Regroupement du présentoir par bloc (meuble), cf. blocKeyOf() : seul ce qui y est déjà
+  // placé compte ici — ce qui attend encore reste dans « Stock magasin ».
+  const presentoirBlocs = useMemo(() => {
+    const groupes = new Map<string, Glass[]>()
+    for (const glass of data.presentoir) {
+      const cle = blocKeyOf(glass)
+      const liste = groupes.get(cle)
+      if (liste) liste.push(glass)
+      else groupes.set(cle, [glass])
+    }
+    return Array.from(groupes.entries())
+      .sort(([a], [b]) => a.localeCompare(b, 'fr'))
+      .map(([cle, montures]) => ({
+        cle,
+        montures,
+        total: sumPrice(montures),
+        moyenne: montures.length > 0 ? Math.round(sumPrice(montures) / montures.length) : 0,
+        formes: groupByAttr(montures, g => g.shape),
+        couleurs: groupByAttr(montures, g => g.color),
+      }))
+  }, [data.presentoir])
+
   const dateDuJour = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const tabCourant = TABS.find(t => t.id === activeTab)
   const nomAffiche = fullName(user) || 'Responsable'
@@ -1491,7 +1582,7 @@ function ResponsableMagasinPage() {
               <span className="text-xs">{dark ? 'Thème clair' : 'Thème sombre'}</span>
             </button>
             <button onClick={logoutToLogin} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full">
-              {ic.x('w-4 h-4')}
+              {ic.signOut('w-4 h-4')}
               <span className="text-xs">Déconnexion</span>
             </button>
             <div className="flex items-center gap-2 min-w-0">
@@ -1525,6 +1616,11 @@ function ResponsableMagasinPage() {
             </button>
             <button onClick={() => setDark(d => !d)} className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors">
               {dark ? ic.sun('w-4 h-4') : ic.moon('w-4 h-4')}
+            </button>
+            {/* Déconnexion vit dans la barre latérale ; sur mobile elle n'existe pas, elle
+                remonte donc ici. */}
+            <button onClick={logoutToLogin} className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors" aria-label="Se déconnecter">
+              {ic.signOut('w-4 h-4')}
             </button>
           </header>
 
@@ -2304,7 +2400,294 @@ function ResponsableMagasinPage() {
               </div>
             )}
 
+            {/* ── REMISE CLIENT ─────────────────────────────────────────────── */}
+            {activeTab === 'remise' && (
+              <div className="space-y-3">
+                <div className={CARD}>
+                  <div className="flex items-center gap-2.5">
+                    <Pastille color={C.cyan}>{ic.hand()}</Pastille>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">Remise client</p>
+                      <p className="text-xs text-slate-400">Scannez les montures prêtes à être remises au client</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1" htmlFor="refRemiseResponsable">
+                        Code-barres ou référence
+                      </label>
+                      <input
+                        id="refRemiseResponsable"
+                        type="text"
+                        value={scanRemise}
+                        onChange={e => {
+                          const value = e.target.value
+                          setScanRemise(value)
+                          const saisie = value.trim()
+                          const trouvee = data.pretes.find(g => g.barcode === saisie || glassRef(g) === saisie.toUpperCase())
+                          if (trouvee && !remisesPointees.includes(trouvee.barcode)) {
+                            setRemisesPointees(list => [...list, trouvee.barcode])
+                            setScanRemise('')
+                          }
+                        }}
+                        placeholder="Scanner ou saisir…"
+                        autoFocus
+                        className={INPUT_CLASS}
+                      />
+                      <p className="mt-2 text-xs text-slate-400">
+                        La saisie se valide seule dès qu'elle correspond à une monture prête.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col items-center gap-1.5">
+                      <div className="w-full h-[92px] rounded-xl border-2 bg-white p-2 flex items-center justify-center" style={{ borderColor: C.cyan }}>
+                        {scanRemise.trim() ? (
+                          <Code128 value={scanRemise.trim()} height={44} />
+                        ) : (
+                          <span className="text-xs text-slate-400 text-center">En attente<br />d'un scan</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400">CODE128</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'À remettre', value: data.pretes.length, color: C.cyan },
+                      { label: 'Pointées', value: remisesPointees.length, color: C.success },
+                      { label: 'Reste', value: Math.max(0, data.pretes.length - remisesPointees.length), color: C.amber },
+                    ].map(item => (
+                      <div key={item.label} className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+                        <p className="text-xs text-slate-400">{item.label}</p>
+                        <p className="mt-1 text-3xl font-black tabular-nums" style={{ color: item.color }}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{
+                        width: `${data.pretes.length > 0 ? (remisesPointees.length / data.pretes.length) * 100 : 0}%`,
+                        backgroundColor: C.success,
+                      }}
+                    />
+                  </div>
+
+                  {remiseMessage && (
+                    <div
+                      className={remiseErreur
+                        ? 'mt-4 rounded-xl bg-red-50 dark:bg-red-500/15 px-3 py-2.5 text-xs font-medium text-red-700 dark:text-red-300'
+                        : 'mt-4 rounded-xl bg-green-50 dark:bg-green-500/15 px-3 py-2.5 text-xs font-medium text-green-700 dark:text-green-300'}
+                    >
+                      {remiseMessage}
+                    </div>
+                  )}
+
+                  {remisesPointees.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <button
+                        onClick={() => void remettreAuClient()}
+                        disabled={remiseBusy}
+                        className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        style={{ background: C.success }}
+                      >
+                        {remiseBusy
+                          ? 'Enregistrement…'
+                          : `Remettre ${remisesPointees.length} monture${remisesPointees.length > 1 ? 's' : ''} au client`}
+                      </button>
+                      <button
+                        onClick={() => { setRemisesPointees([]); setScanRemise(''); setRemiseMessage(''); setRemiseErreur(false) }}
+                        disabled={remiseBusy}
+                        className="w-full rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50"
+                      >
+                        Réinitialiser
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className={`${CARD} p-0 overflow-hidden`}>
+                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">
+                      Montures prêtes à remettre <span className="tabular-nums text-slate-400">({remisesPointees.length}/{data.pretes.length})</span>
+                    </p>
+                  </div>
+                  <div className="max-h-[600px] overflow-y-auto">
+                    {loading && data.pretes.length === 0 ? (
+                      <Empty>Chargement…</Empty>
+                    ) : data.pretes.length === 0 ? (
+                      <Empty>Aucune monture prête à remettre.</Empty>
+                    ) : (
+                      <GlassTable
+                        emptyLabel="Aucune monture prête."
+                        title="remise-client"
+                        before={[{ header: 'Code-barres', mono: true }]}
+                        after={[{ header: 'Prix', align: 'right' }]}
+                        rows={data.pretes.map(glass => {
+                          const pointee = remisesPointees.includes(glass.barcode)
+                          return {
+                            key: glass.barcode,
+                            photo: glass.photo_monture_url,
+                            reference: glassRef(glass),
+                            brand: glass.brand,
+                            gender: glass.gender,
+                            shape: glass.shape,
+                            location: glass.location_code,
+                            entry: glass.created_at,
+                            before: [glass.barcode],
+                            after: [fmtFCFA(glass.price)],
+                            done: pointee,
+                            status: pointee
+                              ? { label: '✓ pointée', tone: 'green' as const }
+                              : { label: 'prête', tone: 'cyan' as const },
+                          }
+                        })}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* ── STOCK ────────────────────────────────────────────────────── */}
+            {/* ── PRÉSENTOIR PAR BLOC ─────────────────────────────────────────── */}
+            {activeTab === 'bloc' && (
+              <div>
+                {presentoirBlocs.length === 0 ? (
+                  <Empty>Aucune monture au présentoir pour l'instant.</Empty>
+                ) : (() => {
+                  const blocCourant = presentoirBlocs.find(b => b.cle === activeBlocKey) || presentoirBlocs[0]
+                  return (
+                    <div>
+                      <SectionTitle>Présentoir par bloc ({data.presentoir.length})</SectionTitle>
+
+                      <div className="flex flex-wrap gap-1.5 mb-3 overflow-x-auto">
+                        {presentoirBlocs.map(bloc => (
+                          <button
+                            key={bloc.cle}
+                            onClick={() => setActiveBlocKey(bloc.cle)}
+                            className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+                              bloc.cle === blocCourant.cle
+                                ? 'bg-violet-600 text-white'
+                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                            }`}
+                          >
+                            {bloc.cle === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${bloc.cle}`}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className={CARD}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Pastille color={C.violet}>{ic.glasses()}</Pastille>
+                            <div>
+                              <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{blocCourant.cle === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${blocCourant.cle}`}</p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400">{businessBlocLabel(blocCourant.cle)}</p>
+                            </div>
+                          </div>
+                          <span className="flex-shrink-0 rounded-full bg-violet-50 dark:bg-violet-500/15 px-3 py-1 text-xs font-semibold text-violet-700 dark:text-violet-300">
+                            {blocCourant.montures.length} monture{blocCourant.montures.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-3 gap-2">
+                          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+                            <p className="text-xs text-slate-400">Prix total du bloc</p>
+                            <p className="mt-1 text-lg font-black tabular-nums" style={{ color: C.primary }}>{fmtFCFA(blocCourant.total)}</p>
+                            <p className="text-xs text-slate-400">{fmtFCFA(blocCourant.moyenne)} moy.</p>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+                            <p className="text-xs text-slate-400">Nombre de formes</p>
+                            <p className="mt-1 text-lg font-black tabular-nums" style={{ color: C.cyan }}>{blocCourant.formes.length}</p>
+                            <p className="text-xs text-slate-400">variante{blocCourant.formes.length > 1 ? 's' : ''}</p>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 text-center">
+                            <p className="text-xs text-slate-400">Nombre de couleurs</p>
+                            <p className="mt-1 text-lg font-black tabular-nums" style={{ color: C.amber }}>{blocCourant.couleurs.length}</p>
+                            <p className="text-xs text-slate-400">variante{blocCourant.couleurs.length > 1 ? 's' : ''}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4">
+                          <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Distribution des formes</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {blocCourant.formes.map(f => {
+                              const percent = blocCourant.montures.length > 0 ? Math.round((f.count / blocCourant.montures.length) * 100) : 0
+                              return (
+                                <div key={f.label} className="rounded-xl border border-slate-100 dark:border-slate-700 p-3 text-center">
+                                  <p className="text-2xl font-black tabular-nums" style={{ color: C.primary }}>{percent}%</p>
+                                  <p className="mt-1 text-xs text-slate-400 truncate">{f.label}</p>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="mt-4">
+                          <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Distribution des couleurs</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {blocCourant.couleurs.map(c => {
+                              const percent = blocCourant.montures.length > 0 ? Math.round((c.count / blocCourant.montures.length) * 100) : 0
+                              return (
+                                <div key={c.label} className="rounded-xl border border-slate-100 dark:border-slate-700 p-3 text-center">
+                                  <p className="text-2xl font-black tabular-nums" style={{ color: C.violet }}>{percent}%</p>
+                                  <p className="mt-1 text-xs text-slate-400 truncate">{c.label}</p>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="mt-4">
+                          <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Montures du bloc</p>
+                          <div className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden overflow-x-auto">
+                            {blocCourant.montures.length === 0 ? (
+                              <Empty>Aucune monture dans ce bloc.</Empty>
+                            ) : (
+                              <table className="w-full text-sm min-w-[560px]">
+                                <thead className="bg-slate-50 dark:bg-slate-900/50">
+                                  <tr className="border-b border-slate-100 dark:border-slate-700">
+                                    <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Référence</th>
+                                    <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Forme</th>
+                                    <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Couleur</th>
+                                    <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Emplacement</th>
+                                    <th className="text-right py-2 px-3 text-xs font-semibold text-slate-400">Prix</th>
+                                    <th className="text-right py-2 px-3 text-xs font-semibold text-slate-400">Action</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50 dark:divide-slate-700/60">
+                                  {blocCourant.montures.map(glass => (
+                                    <tr key={glass.barcode}>
+                                      <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">{glassRef(glass)}</td>
+                                      <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">{glass.shape || '—'}</td>
+                                      <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">{glass.color || '—'}</td>
+                                      <td className="py-2.5 px-3 font-mono text-xs text-slate-500 dark:text-slate-400">{glass.location_code || '—'}</td>
+                                      <td className="py-2.5 px-3 text-right font-bold tabular-nums" style={{ color: C.primary }}>{fmtFCFA(glass.price)}</td>
+                                      <td className="py-2.5 px-3 text-right">
+                                        <button
+                                          onClick={() => setBlocPreview(glass)}
+                                          className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
+                                        >
+                                          Aperçu
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+
             {activeTab === 'stock' && (
               <div>
                 {grilleRepartitions}
@@ -2404,6 +2787,15 @@ function ResponsableMagasinPage() {
 
         {/* ── Modale de détail ──────────────────────────────────────────────── */}
         {selectedDetail && <DetailModal detail={selectedDetail} onClose={() => setSelectedDetail(null)} />}
+
+        {/* ── Aperçu d'une monture de bloc ─────────────────────────────────── */}
+        {blocPreview && (
+          <BlocApercuModal
+            glass={blocPreview}
+            blocLabel={`Bloc ${blocKeyOf(blocPreview)}`}
+            onClose={() => setBlocPreview(null)}
+          />
+        )}
       </div>
     </div>
   )
@@ -2560,6 +2952,60 @@ function DetailModal({ detail, onClose }: { detail: Detail; onClose: () => void 
           )}
 
           {detail.description && <Note>{detail.description}</Note>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Aperçu d'une monture de bloc ────────────────────────────────────────────────
+
+function BlocApercuModal({ glass, blocLabel, onClose }: { glass: Glass; blocLabel: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3.5 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm border-b border-slate-100 dark:border-slate-700">
+          <Pastille color={C.violet}>{ic.glasses()}</Pastille>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{glassRef(glass)}</p>
+            <p className="text-xs text-slate-400 truncate">{blocLabel}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+            aria-label="Fermer"
+          >
+            {ic.x('w-5 h-5')}
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <div className="h-40 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900 flex items-center justify-center">
+            {glass.photo_monture_url
+              ? <img src={glass.photo_monture_url} alt={glassRef(glass)} className="h-full w-full object-cover" />
+              : <span className="text-xs text-slate-400">Pas de photo de monture</span>}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+              <p className="text-xs text-slate-400">Forme</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{glass.shape || '—'}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+              <p className="text-xs text-slate-400">Couleur</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{glass.color || '—'}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+              <p className="text-xs text-slate-400">Emplacement</p>
+              <p className="mt-1 text-sm font-mono text-slate-900 dark:text-white">{glass.location_code || '—'}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3">
+              <p className="text-xs text-slate-400">Prix</p>
+              <p className="mt-1 text-sm font-bold tabular-nums" style={{ color: C.primary }}>{fmtFCFA(glass.price)}</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

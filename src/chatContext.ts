@@ -136,18 +136,55 @@ export interface ChatActionPayload {
   page?: string
 }
 
+function sanitizeChatText(value: string): string {
+  return value
+    .replace(/\*\*|__|~~|`/g, '')
+    .replace(/(^|\s)[*_#]+(?=\s|$)/g, ' ')
+    .replace(/[*_#]/g, '')
+    .replace(/[•·▪◦]/g, ' ')
+    .replace(/[–—]/g, ' ')
+    .replace(/[|]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+function sanitizeChatValue<T>(value: T): T {
+  if (typeof value === 'string') {
+    return sanitizeChatText(value) as T
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => sanitizeChatValue(item)) as T
+  }
+
+  if (value && typeof value === 'object') {
+    const sanitized: Record<string, unknown> = {}
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      sanitized[key] = sanitizeChatValue(item)
+    }
+    return sanitized as T
+  }
+
+  return value
+}
+
 export function buildAssistantPayload(message: string, history: ChatHistoryItem[], context: ChatContextState) {
+  const sanitizedHistory = history.map(item => ({
+    role: item.role,
+    content: sanitizeChatText(item.content),
+  }))
+
   return {
-    message,
-    history: history.map(item => ({ role: item.role, content: item.content })),
-    context: {
+    message: sanitizeChatText(message),
+    history: sanitizedHistory,
+    context: sanitizeChatValue({
       screen: context.screen || 'dashboard',
       stockSummary: context.stockSummary || [],
       summary: context.summary || {},
       // Étalé à la racine : le prompt système nomme ses clés directement (`mouvements`,
       // `toutes_les_montures`…), pas via un sous-objet.
       ...(context.digest || {}),
-    },
+    }),
   }
 }
 

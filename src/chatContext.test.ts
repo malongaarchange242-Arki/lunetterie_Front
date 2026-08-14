@@ -17,6 +17,21 @@ describe('buildAssistantPayload', () => {
     expect(payload.context.screen).toBe('dashboard')
     expect(payload.context.stockSummary[0].reference).toBe('REF-001')
   })
+
+  it('strips markdown and decorative characters before sending the chat payload', () => {
+    const payload = buildAssistantPayload(
+      'Stock **critique** • Pointe-Noire • 12 montures',
+      [{ role: 'assistant', content: 'Réponse: **OK** — 3 montures' }],
+      {
+        screen: 'dashboard',
+        stockSummary: [{ reference: '**REF-001**', qty_total: 12, qty_general: 8, qty_local: 2, qty_presentoir: 2, is_critical: false }],
+      },
+    )
+
+    expect(payload.message).toBe('Stock critique Pointe-Noire 12 montures')
+    expect(payload.history[0].content).toBe('Réponse: OK 3 montures')
+    expect(payload.context.stockSummary[0].reference).toBe('REF-001')
+  })
 })
 
 describe('mapChatActionToScreen', () => {
