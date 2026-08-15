@@ -91,6 +91,7 @@ interface Glass {
   station_id?: number
   location_code?: string
   photo_monture_url?: string
+  photo_branche_url?: string
   created_at?: string
   updated_at?: string
 }
@@ -691,6 +692,7 @@ function LaboPage() {
                       ...data.enRoute.map(glass => ({
                         key: `transit-${glass.barcode}`,
                         photo: glass.photo_monture_url,
+                        branchPhoto: glass.photo_branche_url,
                         reference: glassRef(glass),
                         brand: glass.brand,
                         gender: glass.gender,
@@ -704,6 +706,7 @@ function LaboPage() {
                       ...aMonter.map(glass => ({
                         key: glass.barcode,
                         photo: glass.photo_monture_url,
+                        branchPhoto: glass.photo_branche_url,
                         reference: glassRef(glass),
                         brand: glass.brand,
                         gender: glass.gender,

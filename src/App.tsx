@@ -1331,16 +1331,9 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
         ].map(item => {
           // Le CA a sa propre somme : il vient des proformas réglées, quand `summary` ne
           // compte que des montures. Les deux autres tuiles ne pouvaient donc pas le servir.
-          // À zéro, on garde « — » plutôt qu'un « 0 FCFA » : un chargement en échec et une
-          // journée sans vente donnent le même chiffre, et l'un des deux serait un mensonge.
-          const value = item.block === 'ca' ? (totalRevenue > 0 ? fmtFCFA(totalRevenue) : '—')
-            : item.block === 'total' && summary.hasData ? summary.totalUnits.toLocaleString('fr-FR')
-            : item.block === 'suivi' && summary.hasData ? summary.totalUnits.toLocaleString('fr-FR')
-            : '—'
+          const value = item.block === 'ca' ? fmtFCFA(totalRevenue) : summary.totalUnits.toLocaleString('fr-FR')
           const note = item.block === 'ca' ? (totalRevenue > 0 ? `${revenueCities} ville${revenueCities > 1 ? 's' : ''} avec des ventes` : 'Aucune donnée disponible')
-            : item.block === 'total' && summary.hasData ? `${summary.totalUnits.toLocaleString('fr-FR')} monture${summary.totalUnits > 1 ? 's' : ''}`
-            : item.block === 'suivi' && summary.hasData ? `${summary.totalUnits.toLocaleString('fr-FR')} monture${summary.totalUnits > 1 ? 's' : ''}`
-            : 'Aucune donnée disponible'
+            : `${summary.totalUnits.toLocaleString('fr-FR')} monture${summary.totalUnits > 1 ? 's' : ''}`
 
           return (
             <button
@@ -1415,16 +1408,12 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
             >
               <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">{item.label}</p>
               <div className="flex items-baseline gap-1.5 mt-1">
-                <p className="text-3xl font-black tabular-nums" style={{ color: item.color }}>{summary.hasData ? item.value : '—'}</p>
+                <p className="text-3xl font-black tabular-nums" style={{ color: item.color }}>{item.value}</p>
               </div>
-              {summary.hasData && (
-                <>
-                  <div className="mt-2.5 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                    <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, ratio * 100)}%`, backgroundColor: item.color }} />
-                  </div>
-                  <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">{item.of}</p>
-                </>
-              )}
+              <div className="mt-2.5 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, ratio * 100)}%`, backgroundColor: item.color }} />
+              </div>
+              <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">{item.of}</p>
             </button>
           )
         })}
@@ -3576,6 +3565,26 @@ function ReceptionView() {
     setSelectedStockPreview(preview)
   }
 
+  // L'aperçu du stock général vient de /inventory/stock-summary, agrégé par référence —
+  // sans emplacement. On le retrouve en croisant avec stockGlasses (montures individuelles,
+  // déjà chargées pour la page « Voir le stock »), limité au stock général : une même
+  // référence en stock local aurait un emplacement propre à sa station, sans rapport.
+  function getGeneralStockLocationLabel(item: any) {
+    const refKey = String(item?.reference || item?.barcode || item?.code || '').trim()
+    if (!refKey) return '—'
+
+    const matches = (stockGlasses || []).filter((glass: any) =>
+      isGeneralStockStatus(glass.status) && normalizeReference(String(glass.reference || '')) === normalizeReference(refKey)
+    )
+    const locations = Array.from(new Set(
+      matches.map((glass: any) => String(glass.location_code || '').trim()).filter(Boolean)
+    ))
+
+    if (locations.length === 0) return '—'
+    if (locations.length === 1) return locations[0]
+    return `${locations[0]} +${locations.length - 1}`
+  }
+
   function renderStockPage() {
     const generalGlasses = (stockGlasses || []).filter((g: any) => isGeneralStockStatus(g.status))
     const magasinGlasses = (stockGlasses || []).filter((g: any) => isLocalStockStatus(g.status))
@@ -4450,6 +4459,7 @@ function ReceptionView() {
         enregistréPar: String(glass.station_name || glass.location_code || '—'),
         heure: heure || '—',
         forme: String(glass.shape || '—'),
+        emplacement: String(glass.location_code || '—'),
         quantity: 1,
         date,
         status: 'Reçu' as const,
@@ -4464,6 +4474,7 @@ function ReceptionView() {
       enregistréPar: 'A. Diop',
       heure: '09:15',
       forme: 'Rectangle',
+      emplacement: '—',
       quantity: 1,
       date: detailSession.date,
       status: 'Reçu' as const,
@@ -4527,7 +4538,7 @@ function ReceptionView() {
               ))}
             </select>
             <button type="button" onClick={() => {
-              const csv = ['Référence;Photo;Gamme;Genre;Enregistré par;Heure;Forme;Quantité;Date;Statut', ...filteredRows.map(row => [row.reference, row.photo, row.gamme, row.genre, row.enregistréPar, row.heure, row.forme, row.quantity, row.date, row.status].join(';'))].join('\r\n')
+              const csv = ['Référence;Photo;Gamme;Genre;Enregistré par;Heure;Forme;Emplacement;Quantité;Date;Statut', ...filteredRows.map(row => [row.reference, row.photo, row.gamme, row.genre, row.enregistréPar, row.heure, row.forme, row.emplacement, row.quantity, row.date, row.status].join(';'))].join('\r\n')
               const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
               const url = URL.createObjectURL(blob)
               const link = document.createElement('a')
@@ -4554,6 +4565,7 @@ function ReceptionView() {
                     <th className="px-2 py-2 text-left font-semibold">Par</th>
                     <th className="px-2 py-2 text-left font-semibold">Heure</th>
                     <th className="px-2 py-2 text-left font-semibold">Forme</th>
+                    <th className="px-2 py-2 text-left font-semibold">Emplacement</th>
                     <th className="px-2 py-2 text-left font-semibold">Date</th>
                   </tr>
                 </thead>
@@ -4573,12 +4585,13 @@ function ReceptionView() {
                       <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{row.enregistréPar}</td>
                       <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{row.heure}</td>
                       <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{row.forme}</td>
+                      <td className="px-2 py-2 font-mono text-xs text-slate-700 dark:text-slate-200">{row.emplacement}</td>
                       <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{row.date}</td>
                     </tr>
                   ))}
                   {filteredRows.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">Aucune monture n&apos;est associée à cette session pour le moment.</td>
+                      <td colSpan={9} className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">Aucune monture n&apos;est associée à cette session pour le moment.</td>
                     </tr>
                   )}
                 </tbody>
@@ -4743,13 +4756,14 @@ function ReceptionView() {
                         <th className="px-3 py-2.5 text-left font-semibold">Total</th>
                         <th className="px-3 py-2.5 text-left font-semibold">Stock général</th>
                         <th className="px-3 py-2.5 text-left font-semibold">Stock local</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Emplacement</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-emerald-100 bg-white dark:divide-emerald-800 dark:bg-slate-900">
                       {isLoadingStockSummary ? (
-                        <tr><td colSpan={4} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Chargement…</td></tr>
+                        <tr><td colSpan={5} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Chargement…</td></tr>
                       ) : stockSummary.length === 0 ? (
-                        <tr><td colSpan={4} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Aucune donnée disponible pour le moment.</td></tr>
+                        <tr><td colSpan={5} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Aucune donnée disponible pour le moment.</td></tr>
                       ) : (
                         stockSummary.slice(0, 5).map((item: any, index: number) => (
                           <tr
@@ -4761,6 +4775,7 @@ function ReceptionView() {
                             <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_total || 0).toLocaleString('fr-FR')}</td>
                             <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_general || 0).toLocaleString('fr-FR')}</td>
                             <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_local || 0).toLocaleString('fr-FR')}</td>
+                            <td className="px-3 py-2.5 font-mono text-xs text-slate-700 dark:text-slate-300">{getGeneralStockLocationLabel(item)}</td>
                           </tr>
                         ))
                       )}

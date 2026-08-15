@@ -2417,10 +2417,10 @@ function TopBar({ current, session, dark, onToggleDark, onReset, onBack }: {
           rien d'autre ne le rappelait. Seul le code de session cède la place, c'est la
           partie qu'on relit le moins. */}
       {session && (
-        <span className="inline-flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-1.5 flex-shrink-0">
-          <span className="text-blue-600 dark:text-blue-400 flex-shrink-0">{ic.tag('w-4 h-4')}</span>
-          <span className="hidden sm:inline text-xs font-semibold text-slate-500 dark:text-slate-400">{session.code}</span>
-          <span className="text-base font-black tabular-nums text-slate-900 dark:text-white leading-none">
+        <span className="inline-flex items-center gap-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-4 py-2 flex-shrink-0">
+          <span className="text-blue-600 dark:text-blue-400 flex-shrink-0">{ic.tag('w-5 h-5')}</span>
+          <span className="hidden sm:inline text-sm font-semibold text-slate-500 dark:text-slate-400">{session.code}</span>
+          <span className="text-xl font-black tabular-nums text-slate-900 dark:text-white leading-none">
             {session.registered}/{session.target}
           </span>
         </span>
