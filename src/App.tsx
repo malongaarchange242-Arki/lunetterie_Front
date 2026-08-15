@@ -3012,6 +3012,7 @@ function ReceptionView() {
   const [sessions, setSessions] = useState(RECEPTION_SESSIONS)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [detailSession, setDetailSession] = useState<(typeof RECEPTION_SESSIONS)[number] | null>(null)
+  const [detailRowPreview, setDetailRowPreview] = useState<any | null>(null)
   const [detailSearch, setDetailSearch] = useState('')
   const [detailStatusFilter, setDetailStatusFilter] = useState<'all' | 'Reçu' | 'En attente'>('all')
   const [detailFormeFilter, setDetailFormeFilter] = useState<ShapeFilterValue>('all')
@@ -4017,36 +4018,32 @@ function ReceptionView() {
     return (
       <div className="space-y-3">
         {selectedStockPreview && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/60">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Aperçu</p>
-                <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{selectedStockPreview.reference || selectedStockPreview.barcode || 'Monture'}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedStockPreview(null)}
-                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
-              >
-                Fermer
-              </button>
-            </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-[140px_1fr]">
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
-                {selectedStockPreview.photo_monture_url ? (
-                  <img src={selectedStockPreview.photo_monture_url} alt={selectedStockPreview.reference || selectedStockPreview.barcode || 'Monture'} className="h-32 w-full object-cover" />
-                ) : (
-                  <div className="flex h-32 items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo</div>
-                )}
+          <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4" onClick={() => setSelectedStockPreview(null)}>
+            <div className="w-full max-w-3xl rounded-2xl bg-white dark:bg-slate-900 p-4 shadow-2xl border border-slate-200 dark:border-slate-700" onClick={e => e.stopPropagation()}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Aperçu</p>
+                  <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{selectedStockPreview.reference || selectedStockPreview.barcode || 'Monture'}</p>
+                </div>
+                <button onClick={() => setSelectedStockPreview(null)} className="text-slate-400 hover:text-slate-600">{ic.x()}</button>
               </div>
 
-              <div className="grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Marque</span><span className="mt-1 block font-semibold">{selectedStockPreview.brand || selectedStockPreview.marque || '—'}</span></div>
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Forme</span><span className="mt-1 block font-semibold">{selectedStockPreview.shape || '—'}</span></div>
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Genre</span><span className="mt-1 block font-semibold">{selectedStockPreview.gender || '—'}</span></div>
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Statut</span><span className="mt-1 block font-semibold">{selectedStockPreview.status || '—'}</span></div>
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60 sm:col-span-2"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Emplacement</span><span className="mt-1 block font-mono text-xs">{selectedStockPreview.location_code || selectedStockPreview.station_name || '—'}</span></div>
+              <div className="mt-4 grid gap-4 md:grid-cols-[140px_1fr]">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                  {selectedStockPreview.photo_monture_url ? (
+                    <img src={selectedStockPreview.photo_monture_url} alt={selectedStockPreview.reference || selectedStockPreview.barcode || 'Monture'} className="h-32 w-full object-cover" />
+                  ) : (
+                    <div className="flex h-32 items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo</div>
+                  )}
+                </div>
+
+                <div className="grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
+                  <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Marque</span><span className="mt-1 block font-semibold">{selectedStockPreview.brand || selectedStockPreview.marque || '—'}</span></div>
+                  <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Forme</span><span className="mt-1 block font-semibold">{selectedStockPreview.shape || '—'}</span></div>
+                  <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Genre</span><span className="mt-1 block font-semibold">{selectedStockPreview.gender || '—'}</span></div>
+                  <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Statut</span><span className="mt-1 block font-semibold">{selectedStockPreview.status || '—'}</span></div>
+                  <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60 sm:col-span-2"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Emplacement</span><span className="mt-1 block font-mono text-xs">{selectedStockPreview.location_code || selectedStockPreview.station_name || '—'}</span></div>
+                </div>
               </div>
             </div>
           </div>
@@ -4744,7 +4741,7 @@ function ReceptionView() {
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-900">
                   {filteredRows.map((row, idx) => (
-                    <tr key={`${detailSession.id}-${idx}`} className="hover:bg-green-50/50 dark:hover:bg-green-900/10 transition-colors">
+                    <tr key={`${detailSession.id}-${idx}`} onClick={() => setDetailRowPreview(row)} role="button" className="hover:bg-green-50/50 dark:hover:bg-green-900/10 transition-colors cursor-pointer">
                       <td className="px-2 py-2 text-slate-700 dark:text-slate-200">
                         {row.photo && row.photo.startsWith('http') ? (
                           <img src={row.photo} alt={row.reference} className="h-16 w-16 rounded-md object-cover" />
@@ -4771,6 +4768,34 @@ function ReceptionView() {
               </table>
             </div>
           </div>
+          {detailRowPreview && (
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4" onClick={() => setDetailRowPreview(null)}>
+              <div className="w-full max-w-3xl rounded-2xl bg-white dark:bg-slate-900 p-4 shadow-2xl border border-slate-200 dark:border-slate-700" onClick={e => e.stopPropagation()}>
+                <div className="flex items-start justify-between">
+                  <h4 className="text-lg font-bold text-slate-900 dark:text-white">Aperçu — {detailRowPreview.reference}</h4>
+                  <button onClick={() => setDetailRowPreview(null)} className="text-slate-400 hover:text-slate-600">{ic.x()}</button>
+                </div>
+                <div className="mt-4 flex gap-4">
+                  <div className="w-1/3">
+                    {detailRowPreview.photo && detailRowPreview.photo.startsWith('http') ? (
+                      <img src={detailRowPreview.photo} alt={detailRowPreview.reference} className="w-full rounded-md object-cover" />
+                    ) : (
+                      <div className="h-36 w-full rounded-md bg-slate-100 flex items-center justify-center text-slate-500">No image</div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-slate-700 dark:text-slate-200"><span className="font-semibold">Gamme:</span> {detailRowPreview.gamme}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200"><span className="font-semibold">Genre:</span> {detailRowPreview.genre}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200"><span className="font-semibold">Forme:</span> {detailRowPreview.forme}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200"><span className="font-semibold">Emplacement:</span> {detailRowPreview.emplacement}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200"><span className="font-semibold">Enregistré par:</span> {detailRowPreview.enregistréPar}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200"><span className="font-semibold">Heure:</span> {detailRowPreview.heure}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200 mt-2"><span className="font-semibold">Statut:</span> {detailRowPreview.status}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -5088,7 +5113,7 @@ function ReceptionView() {
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-300'
                     : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-300'}`}>
                     {receptionState === 'complete' ? ic.check('w-3.5 h-3.5') : ic.truck('w-3.5 h-3.5')}
-                    <span>{receptionState === 'complete' ? 'Commande reçue en stock général' : 'En transit vers le stock Général'}</span>
+                    <span>{receptionState === 'complete' ? 'Commande reçue en stock général' : (receptionState === 'recording' ? 'En cours d\'enregistrement' : 'En transit vers le stock Général')}</span>
                   </div>
                 )}
                 {/* Destination(s) de la session, une fois sa liste envoyée. Plusieurs villes
