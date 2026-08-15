@@ -850,7 +850,8 @@ interface Movement {
   brand?: string
   reference?: string
   barcode?: string
-  location_code?: string
+  from_location_code?: string
+  to_location_code?: string
   [key: string]: any
 }
 
@@ -1323,7 +1324,7 @@ function SessionsGate({
                 <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
                   {row.brand || row.marque || 'Monture'} {row.reference ? `· ${row.reference}` : ''}
                 </p>
-                <p className="truncate text-xs text-slate-400">{row.barcode || '—'} · {row.location_code || '—'}</p>
+                <p className="truncate text-xs text-slate-400">{row.barcode || '—'} · {row.to_location_code || row.from_location_code || '—'}</p>
               </div>
               <span className="flex-shrink-0 text-xs tabular-nums text-slate-400">{formatRecordTime(row.created_at)}</span>
             </div>
@@ -1532,6 +1533,12 @@ function recordPhoto(record: any): string {
     || recordField(record, 'monture_image') || recordField(record, 'frame_image')
 }
 
+/** Récupère la photo de la branche avec les variantes de noms de champs. */
+function recordPhotoBranche(record: any): string {
+  return recordField(record, 'photo_branche_url') || recordField(record, 'branche_image')
+    || recordField(record, 'branch_image') || recordField(record, 'branche_url')
+}
+
 const HISTORIQUE_PAGE_SIZE = 10
 
 const SELECT = 'rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-[#2563eb]'
@@ -1692,10 +1699,17 @@ function HistoriqueScreen({ movements, onPrint, onReturn, hasSession }: {
             </div>
 
             <div className="p-4 space-y-4">
-              <div className="h-44 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
-                {recordPhoto(selectedRecord)
-                  ? <img src={recordPhoto(selectedRecord)} alt={recordField(selectedRecord, 'reference') || 'Monture'} className="h-full w-full object-cover" />
-                  : <div className="flex h-full items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo</div>}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="h-44 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                  {recordPhoto(selectedRecord)
+                    ? <img src={recordPhoto(selectedRecord)} alt={recordField(selectedRecord, 'reference') || 'Monture'} className="h-full w-full object-cover" />
+                    : <div className="flex h-full items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo de monture</div>}
+                </div>
+                <div className="h-44 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                  {recordPhotoBranche(selectedRecord)
+                    ? <img src={recordPhotoBranche(selectedRecord)} alt={recordField(selectedRecord, 'reference') || 'Branche'} className="h-full w-full object-cover" />
+                    : <div className="flex h-full items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo de branche</div>}
+                </div>
               </div>
 
               <div className="grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
@@ -1704,7 +1718,7 @@ function HistoriqueScreen({ movements, onPrint, onReturn, hasSession }: {
                 <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Forme</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'shape') || '—'}</span></div>
                 <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Genre</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'gender') || '—'}</span></div>
                 <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Couleur</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'color') || '—'}</span></div>
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Taille</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'size') || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Emplacement</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'to_location_code') || recordField(selectedRecord, 'from_location_code') || '—'}</span></div>
               </div>
 
               <div className="flex flex-wrap gap-2">
