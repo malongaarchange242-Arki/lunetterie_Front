@@ -302,19 +302,19 @@ const PRESENTOIR_SLOT = /^PR\d+-\d+$/
 
 /** Où sont parties les montures d'une proforma.
  *
- *  Le serveur ne le stocke pas : aucune migration ne crée de colonne `destination` sur
- *  `proformas`, et le front n'en envoie pas non plus. Les filtres qui lisaient
- *  `proforma.destination` rendaient donc toujours une liste vide — d'où « Labo payé (0) »
- *  et « Réserve (0) » en permanence, même sur des proformas réglées.
- *
- *  On la déduit de l'état réel, que cet écran charge déjà :
+ *  Migration 035 : `proformas.destination` existe côté serveur, mais CloseIfComplete n'y
+ *  écrit que "labo" — jamais "reserve". Une monture vendue et expédiée au laboratoire ne
+ *  revient pas en arrière, la colonne peut la figer une fois pour toutes. Une monture
+ *  réservée, elle, peut être libérée plus tard sans que la proforma ne bouge : la figer ici
+ *  referait le bug que ce calcul à la volée existait pour éviter (« Réserve » affiché sur une
+ *  monture qui ne l'est plus). "reserve" reste donc déduit de l'état réel à chaque affichage :
  *   - réserve : une monture du document est mise de côté au nom du client (statut RESERVEE) ;
- *   - labo : une ligne a été encaissée, et le règlement expédie aussitôt la monture au
- *     laboratoire (sales_and_reserves_service.go CreateSale).
+ *   - labo : `proforma.destination` posé par le serveur, avec repli sur l'ancien calcul par
+ *     ligne (`outcome === 'VENDUE'`) pour les documents chargés avant que ce champ existe.
  *
- *  La réserve l'emporte : elle dit où la monture se trouve maintenant, quand `outcome` ne
- *  dit que ce que la Caisse a tranché. En pratique les deux s'excluent — une monture vendue
- *  quitte le statut RESERVEE. */
+ *  La réserve l'emporte sur la valeur serveur : elle dit où la monture se trouve maintenant,
+ *  quand `destination` ne dit que ce que la Caisse a tranché un jour. En pratique les deux
+ *  s'excluent — une monture vendue quitte le statut RESERVEE. */
 function resolveDestination(proforma: Proforma, reservedBarcodes: Set<string>): string {
   const items = proforma.items || []
 
@@ -324,6 +324,7 @@ function resolveDestination(proforma: Proforma, reservedBarcodes: Set<string>): 
   })
   if (enReserve) return 'reserve'
 
+  if (proforma.destination === 'labo') return 'labo'
   if (items.some(item => String(item.outcome || '').toUpperCase() === 'VENDUE')) return 'labo'
 
   return ''

@@ -6,7 +6,6 @@ import './index.css'
 import logoUrl from '../logo.jpeg'
 import { GlassTable, downloadCSV } from './GlassTable'
 import { calculateGlassSimilarity, getGamme, normalizeAttr } from './glassSimilarity'
-import { businessBlocKeyOf, businessBlocLabel } from './businessBloc'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 
@@ -129,16 +128,15 @@ function groupByAttr(glasses: Glass[], pick: (g: Glass) => string | undefined) {
     .sort((a, b) => b.count - a.count)
 }
 
-/** Le présentoir est classé par logique commerciale A–F, pas par l'emplacement réel
- * du rayon. Cela correspond exactement à la règle métier demandée pour le blocage. */
+/** Le meuble du présentoir : la partie fixe de `location_code` (« PR03-12 » →
+ *  « PR03 », AGENTS.md § Emplacements), la position après le dernier tiret variant à
+ *  l'intérieur d'un même bloc. Sans emplacement renseigné, la monture n'est encore
+ *  affectée à aucun bloc physique. */
 function blocKeyOf(glass: Glass) {
-  return businessBlocKeyOf({
-    gender: glass.gender,
-    price: glass.price,
-    status: glass.status,
-    is_offered: (glass as any).is_offered,
-    offered: (glass as any).offered,
-  })
+  const code = String(glass.location_code || '').trim()
+  if (!code) return 'Non affecté'
+  const idx = code.lastIndexOf('-')
+  return idx > 0 ? code.slice(0, idx) : code
 }
 
 /**
@@ -814,17 +812,14 @@ function PresentoirParBloc({ glasses }: { glasses: Glass[] }) {
                 : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
             }`}
           >
-            {bloc.cle === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${bloc.cle}`}
+            Bloc {bloc.cle}
           </button>
         ))}
       </div>
 
       <Card>
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-bold text-slate-900 dark:text-white">{blocCourant.cle === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${blocCourant.cle}`}</p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">{businessBlocLabel(blocCourant.cle)}</p>
-          </div>
+          <p className="text-sm font-bold text-slate-900 dark:text-white">Bloc {blocCourant.cle}</p>
           <span className="flex-shrink-0 rounded-full bg-blue-50 dark:bg-blue-500/15 px-3 py-1 text-xs font-semibold text-blue-700 dark:text-blue-300">
             {blocCourant.montures.length} monture{blocCourant.montures.length > 1 ? 's' : ''}
           </span>
@@ -925,7 +920,7 @@ function PresentoirParBloc({ glasses }: { glasses: Glass[] }) {
             <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3.5 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm border-b border-slate-100 dark:border-slate-700">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{glassRef(preview)}</p>
-                <p className="text-xs text-slate-400 truncate">{blocKeyOf(preview) === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${blocKeyOf(preview)}`} · {businessBlocLabel(blocKeyOf(preview))}</p>
+                <p className="text-xs text-slate-400 truncate">Bloc {blocKeyOf(preview)}</p>
               </div>
               <button
                 onClick={() => setPreview(null)}
@@ -3284,6 +3279,404 @@ function VentesScreen({ data, user }: { data: StoreData; user: any }) {
   )
 }
 
+// ── Étiquette de présentoir (code-barres + emplacement) ─────────────────────────
+// Même gabarit 56 mm que l'écran Scan côté réception (scan.tsx). Dupliqué plutôt que
+// partagé : chaque poste de ce projet vit dans son propre bundle (vite.config.ts),
+// sans module commun entre eux hormis GlassTable et glassSimilarity.
+const LABEL_CSS = `
+  @page { margin: 0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, system-ui, sans-serif; color: #000; }
+  .lb { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 56mm; padding: 1.6mm; }
+  .lb .location { font-size: 10px; font-weight: 800; text-align: center; }
+  .lb .shop { font-size: 9px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+  .lb .marque { font-size: 12px; font-weight: 700; }
+  .lb .ref { font-size: 9px; font-weight: 700; color: #333; font-family: ui-monospace, monospace; }
+  .lb svg { margin: 0.5mm 0; max-width: 100%; }
+  .lb .meta { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 8px; font-size: 8px; font-variant-numeric: tabular-nums; }
+  .lb .meta span { white-space: nowrap; }
+  .lb .meta span:last-child { font-weight: 800; font-size: 9px; }
+`
+
+const LABEL_PX = { width: 212, pad: 6, gap: 2, barcodeMargin: 2 }
+
+const LABEL_FONT = {
+  location: '800 10px Inter, system-ui, sans-serif',
+  shop: '800 9px Inter, system-ui, sans-serif',
+  marque: '700 12px Inter, system-ui, sans-serif',
+  ref: '700 9px ui-monospace, monospace',
+  meta: '8px Inter, system-ui, sans-serif',
+}
+
+/** Interlignes : le canvas ne connaît pas line-height, chaque ligne avance à la main. */
+const LABEL_LINE = { location: 11, shop: 10, marque: 14, ref: 10, meta: 9 }
+
+/** showValue=false : le texte intégré au SVG rétrécit avec les barres et devient
+ *  illisible dans une carte étroite. On l'affiche alors séparément en HTML. */
+async function drawBarcode(target: SVGSVGElement, value: string, showValue = true) {
+  if (!value) return
+  const module = await import('jsbarcode')
+  const JsBarcode = (module.default || module) as any
+  if (typeof JsBarcode !== 'function') return
+
+  target.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  target.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+
+  JsBarcode(target, value, {
+    format: 'CODE128',
+    lineColor: '#0f172a',
+    background: '#ffffff',
+    width: 1.15,
+    height: 24,
+    fontSize: 20,
+    margin: 2,
+    displayValue: showValue,
+  })
+
+  // JsBarcode fixe parfois seulement les attributs du SVG sans les dimensions de la
+  // vue, ou les laisse à 0 quand l'élément est temporaire. Sans viewBox exploitable,
+  // la barre n'a ni largeur ni hauteur à l'impression / export d'image.
+  const explicitWidth = Number.parseFloat(String(target.getAttribute('width') ?? '')) || 0
+  const explicitHeight = Number.parseFloat(String(target.getAttribute('height') ?? '')) || 0
+  const vb = target.viewBox?.baseVal
+  const vbWidth = vb && vb.width > 0 ? vb.width : 0
+  const vbHeight = vb && vb.height > 0 ? vb.height : 0
+
+  if ((explicitWidth > 0 && explicitHeight > 0) || (vbWidth > 0 && vbHeight > 0)) {
+    target.setAttribute('viewBox', `0 0 ${Math.max(explicitWidth || vbWidth, 1)} ${Math.max(explicitHeight || vbHeight, 1)}`)
+    return
+  }
+
+  const fallbackWidth = 200
+  const fallbackHeight = 50
+  target.setAttribute('width', String(fallbackWidth))
+  target.setAttribute('height', String(fallbackHeight))
+  target.setAttribute('viewBox', `0 0 ${fallbackWidth} ${fallbackHeight}`)
+}
+
+function BarcodePreview({ value, className = '' }: { value: string; className?: string }) {
+  const ref = useRef<SVGSVGElement>(null)
+  useEffect(() => {
+    if (ref.current) void drawBarcode(ref.current, value, false)
+  }, [value])
+  return <svg ref={ref} className={`max-w-full h-auto ${className}`} />
+}
+
+async function downloadDataUrl(dataUrl: string, filename: string) {
+  // Passage par un Blob plutôt que par le data: URL posé directement en href : Safari
+  // ignore l'attribut download sur un href data: et se contente d'ouvrir l'image.
+  const blob = await fetch(dataUrl).then(response => response.blob())
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
+function loadImage(source: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error("Le code-barres n'a pas pu être converti en image."))
+    image.src = source
+  })
+}
+
+/** Découpe un texte trop large, comme le ferait le flux HTML de l'étiquette : un nom
+ *  de marque long doit descendre d'une ligne, pas déborder de l'image. Coupe aussi
+ *  après chaque tiret, comme le ferait un navigateur, pour qu'un code d'emplacement
+ *  du type « PR03-12 » se replie correctement. */
+function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  const raw = String(text || '').trim()
+  if (!raw) return ['—']
+
+  const words = raw.split(/\s+/)
+  const tokens: { text: string; spaceBefore: boolean }[] = []
+  words.forEach((word, wordIndex) => {
+    const parts = word.split(/(?<=-)/)
+    parts.forEach((part, partIndex) => {
+      tokens.push({ text: part, spaceBefore: partIndex === 0 && wordIndex > 0 })
+    })
+  })
+
+  const lines: string[] = []
+  let line = ''
+  for (const token of tokens) {
+    const candidate = token.spaceBefore ? `${line} ${token.text}` : `${line}${token.text}`
+    if (line === '' || ctx.measureText(candidate).width <= maxWidth) line = candidate
+    else {
+      lines.push(line)
+      line = token.text
+    }
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
+/** Le contenu d'une étiquette, détaché de ce qu'elle décrit — même structure que
+ *  celle de scan.tsx : 56 mm de large, même police, même CODE128. */
+interface PrintableLabel {
+  title: string
+  reference: string
+  barcodeValue: string
+  metaLeft: string
+  metaRight: string
+  filePrefix: string
+}
+
+/** Redessine l'étiquette sur un canvas au lieu de photographier le HTML : sans
+ *  bibliothèque tierce, aucun navigateur ne convertit du HTML en image de façon
+ *  fiable. Toute retouche du gabarit imprimé doit être reportée ici. */
+async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; width: number; height: number }) {
+  const contentWidth = LABEL_PX.width - LABEL_PX.pad * 2
+
+  const ruler = document.createElement('canvas').getContext('2d')
+  if (!ruler) throw new Error('Canvas non supporté par ce navigateur.')
+
+  ruler.font = LABEL_FONT.location
+  const locationLines = wrapCanvasText(ruler, data.metaLeft || '—', contentWidth)
+  ruler.font = LABEL_FONT.marque
+  const marqueLines = wrapCanvasText(ruler, data.title || '—', contentWidth)
+  ruler.font = LABEL_FONT.ref
+  const refLines = wrapCanvasText(ruler, data.reference || '—', contentWidth)
+
+  let barcodeImage: HTMLImageElement | null = null
+  let barcodeWidth = 0
+  let barcodeHeight = 0
+  const safeBarcodeWidth = barcode.width > 0 ? barcode.width : 180
+  const safeBarcodeHeight = barcode.height > 0 ? barcode.height : 48
+  if (barcode.svg) {
+    barcodeImage = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(barcode.svg)}`)
+    const ratio = Math.min(1, contentWidth / safeBarcodeWidth)
+    barcodeWidth = safeBarcodeWidth * ratio
+    barcodeHeight = safeBarcodeHeight * ratio
+  }
+
+  const height = LABEL_PX.pad
+    + locationLines.length * LABEL_LINE.location
+    + LABEL_PX.gap + LABEL_LINE.shop
+    + LABEL_PX.gap + marqueLines.length * LABEL_LINE.marque
+    + LABEL_PX.gap + refLines.length * LABEL_LINE.ref
+    + LABEL_PX.gap + LABEL_LINE.meta
+    + (barcodeHeight ? LABEL_PX.gap + LABEL_PX.barcodeMargin * 2 + barcodeHeight : 0)
+    + LABEL_PX.pad
+
+  // ×3 : une étiquette de 56 mm rendue à 96 dpi ressort floue dès qu'on la réimprime.
+  const scale = 3
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(LABEL_PX.width * scale)
+  canvas.height = Math.round(height * scale)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas non supporté par ce navigateur.')
+
+  ctx.scale(scale, scale)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, LABEL_PX.width, height)
+  ctx.textBaseline = 'top'
+
+  const center = LABEL_PX.width / 2
+  let y = LABEL_PX.pad
+
+  ctx.textAlign = 'center'
+  ctx.fillStyle = '#000000'
+  ctx.font = LABEL_FONT.location
+  for (const line of locationLines) {
+    ctx.fillText(line, center, y)
+    y += LABEL_LINE.location
+  }
+  y += LABEL_PX.gap
+
+  ctx.font = LABEL_FONT.shop
+  ;(ctx as any).letterSpacing = '0.5px'
+  ctx.fillText('LA LUNETTERIE', center, y)
+  ;(ctx as any).letterSpacing = '0px'
+  y += LABEL_LINE.shop + LABEL_PX.gap
+
+  ctx.font = LABEL_FONT.marque
+  for (const line of marqueLines) {
+    ctx.fillText(line, center, y)
+    y += LABEL_LINE.marque
+  }
+  y += LABEL_PX.gap
+
+  ctx.font = LABEL_FONT.ref
+  ctx.fillStyle = '#333333'
+  for (const line of refLines) {
+    ctx.fillText(line, center, y)
+    y += LABEL_LINE.ref
+  }
+
+  ctx.font = LABEL_FONT.meta
+  ctx.fillStyle = '#000000'
+  ctx.textAlign = 'center'
+  ctx.fillText(data.metaRight || '—', center, y + 2)
+  y += LABEL_LINE.meta
+
+  if (barcodeImage) {
+    y += LABEL_PX.gap + LABEL_PX.barcodeMargin
+    ctx.drawImage(barcodeImage, center - barcodeWidth / 2, y, barcodeWidth, barcodeHeight)
+    y += barcodeHeight + LABEL_PX.barcodeMargin
+  }
+
+  return canvas.toDataURL('image/png')
+}
+
+/** Dessine le code-barres dans un nœud attaché — JsBarcode a besoin de mesurer un
+ *  élément rendu, un nœud détaché ressort sans dimensions — puis le sérialise à la
+ *  fois pour l'impression HTML (`markup`) et pour l'export PNG (`svg`, avec xmlns
+ *  explicite : c'est ce que charge l'<img> qui redessine l'étiquette sur le canvas). */
+async function captureBarcodeSvg(value: string) {
+  const holder = document.createElement('div')
+  holder.style.cssText = 'position:absolute;left:-9999px;top:0'
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  holder.appendChild(svg)
+  document.body.appendChild(holder)
+
+  try {
+    await drawBarcode(svg, value, false)
+    const markup = svg.outerHTML
+    const clone = svg.cloneNode(true) as SVGSVGElement
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    return {
+      markup,
+      svg: new XMLSerializer().serializeToString(clone),
+      width: Number(svg.getAttribute('width')) || Number(svg.viewBox?.baseVal.width) || 180,
+      height: Number(svg.getAttribute('height')) || Number(svg.viewBox?.baseVal.height) || 48,
+    }
+  } finally {
+    holder.remove()
+  }
+}
+
+/** Une copie image part sur le disque : la vendeuse doit pouvoir retrouver l'étiquette
+ *  d'une monture reçue sans avoir à la réimprimer. */
+async function downloadLabel(data: PrintableLabel) {
+  const barcode = await captureBarcodeSvg(data.barcodeValue)
+  const dataUrl = await labelToPngDataUrl(data, barcode)
+  await downloadDataUrl(dataUrl, `${data.filePrefix}-${data.barcodeValue || 'etiquette'}.png`)
+}
+
+/** L'étiquette part dans une fenêtre séparée plutôt qu'en masquant le reste de la
+ *  page : toute l'application vit sous un unique #root. */
+async function printLabel(data: PrintableLabel) {
+  const barcode = await captureBarcodeSvg(data.barcodeValue)
+  const popup = window.open('', '_blank', 'width=420,height=560')
+
+  // Téléchargée dans tous les cas, impression bloquée comprise : c'est justement quand
+  // rien ne sort de l'imprimante que la copie image sert le plus.
+  void labelToPngDataUrl(data, barcode)
+    .then(dataUrl => downloadDataUrl(dataUrl, `${data.filePrefix}-${data.barcodeValue || 'etiquette'}.png`))
+    .catch(error => console.error("Échec du téléchargement de l'étiquette", error))
+
+  if (!popup) {
+    window.alert("L'impression a été bloquée par le navigateur. L'étiquette part quand même en image dans vos téléchargements ; autorisez les fenêtres surgissantes pour l'imprimer.")
+    return
+  }
+  const esc = (v: string) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  popup.document.write(
+    `<!doctype html><html lang="fr"><head><meta charset="utf-8" />`
+    + `<title>Étiquette ${esc(data.barcodeValue)}</title><style>${LABEL_CSS}</style></head><body>`
+    + `<div class="lb">`
+    + `<div class="location">${esc(data.metaLeft || '—')}</div>`
+    + `<div class="shop">La Lunetterie</div>`
+    + `<div class="marque">${esc(data.title || '—')}</div>`
+    + `<div class="ref">${esc(data.reference || '—')}</div>`
+    + `<div class="meta"><span>${esc(data.metaRight || '—')}</span></div>`
+    + barcode.markup
+    + `</div>`
+    + `<script>window.onload=function(){window.print();}<\/script></body></html>`,
+  )
+  popup.document.close()
+}
+
+/** Popup ouverte à la première réception d'une monture au présentoir (scan qui la
+ *  fait passer de EN_TRANSIT à EN_PRESENTOIR) : le code-barres et le casier attribué,
+ *  avec de quoi imprimer l'étiquette ou en garder une copie PNG. */
+function PresentoirLabelModal({ label, onClose }: { label: PrintableLabel; onClose: () => void }) {
+  const [busy, setBusy] = useState<'print' | 'download' | ''>('')
+
+  async function handlePrint() {
+    setBusy('print')
+    try {
+      await printLabel(label)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function handleDownload() {
+    setBusy('download')
+    try {
+      await downloadLabel(label)
+    } catch (error) {
+      console.error("Échec du téléchargement de l'étiquette", error)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-slate-100 dark:border-slate-700">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{label.title || '—'}</p>
+            <p className="text-xs text-slate-400 truncate">{label.reference}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+            aria-label="Fermer"
+          >
+            {ic.x('w-5 h-5')}
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700">
+            <BarcodePreview value={label.barcodeValue} className="h-16" />
+            <p className="font-mono text-sm font-bold tabular-nums text-slate-900">{label.barcodeValue}</p>
+          </div>
+
+          <div className="rounded-xl bg-blue-50 dark:bg-blue-500/10 p-4 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+              Emplacement présentoir
+            </p>
+            <p className="mt-1 text-2xl font-black tabular-nums text-blue-700 dark:text-blue-300">
+              {label.metaLeft || '—'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700">
+          <button
+            type="button"
+            onClick={() => void handleDownload()}
+            disabled={busy !== ''}
+            className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:border-slate-300 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300"
+          >
+            {busy === 'download' ? 'Téléchargement…' : 'Télécharger en PNG'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handlePrint()}
+            disabled={busy !== ''}
+            className="flex-1 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {busy === 'print' ? 'Impression…' : 'Imprimer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Scan monture / présentoir ──────────────────────────────────────────────────
 function ScanScreen({ data, stationId, onReceived }: {
   data: StoreData
@@ -3304,6 +3697,10 @@ function ScanScreen({ data, stationId, onReceived }: {
   const [similar, setSimilar] = useState<Glass[] | null>(null)
   const [similarBusy, setSimilarBusy] = useState(false)
   const [similarError, setSimilarError] = useState('')
+  // L'étiquette de la monture qui vient d'arriver au présentoir pour la 1ère fois : la
+  // popup ne s'ouvre qu'à cette occasion, pas pour une simple recherche d'une monture
+  // déjà exposée.
+  const [receptionLabel, setReceptionLabel] = useState<PrintableLabel | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // La douchette écrit là où est le curseur : le champ reprend le focus après chaque
@@ -3351,6 +3748,9 @@ function ScanScreen({ data, stationId, onReceived }: {
       const attendue = data.incoming.some(item => item.barcode === glass.barcode)
       let message = attendue ? `${glassRef(glass)} reçue au présentoir.` : `${glassRef(glass)} trouvée.`
       let echec = false
+      // Défaut = le casier que le serveur a attribué tout seul au passage en
+      // EN_PRESENTOIR ; remplacé plus bas si un casier précis a été demandé à la main.
+      let emplacementFinal = glass.location_code || ''
 
       // Le casier se pose après le scan, jamais avant : c'est le scan qui vaut réception et
       // fait passer la monture EN_PRESENTOIR. Désigner une place pour une monture qui n'est
@@ -3370,6 +3770,7 @@ function ScanScreen({ data, stationId, onReceived }: {
             // La fiche affichée doit montrer le casier qu'on vient de lui donner, pas celui
             // que le serveur avait attribué tout seul une seconde plus tôt.
             setFound({ ...glass, location_code: pose })
+            emplacementFinal = pose
             message += ` Rangée en ${pose}.`
             setCasier('')
           } catch (error: any) {
@@ -3381,7 +3782,20 @@ function ScanScreen({ data, stationId, onReceived }: {
         }
       }
 
-      if (attendue) onReceived()
+      if (attendue) {
+        onReceived()
+        // Popup imprimable/téléchargeable, uniquement à la 1ère réception : une
+        // recherche d'une monture déjà au présentoir n'a pas besoin d'une nouvelle
+        // étiquette.
+        setReceptionLabel({
+          title: glass.brand || '—',
+          reference: glassRef(glass),
+          barcodeValue: glass.barcode,
+          metaLeft: emplacementFinal || 'Emplacement non attribué',
+          metaRight: fmtFCFA(glass.price),
+          filePrefix: 'etiquette',
+        })
+      }
       setStatus(message)
       setTone(echec ? 'error' : 'success')
       setCode('')
@@ -3591,6 +4005,16 @@ function ScanScreen({ data, stationId, onReceived }: {
           <PresentoirTable glasses={data.presentoir} />
         )}
       </div>
+
+      {receptionLabel && (
+        <PresentoirLabelModal
+          label={receptionLabel}
+          onClose={() => {
+            setReceptionLabel(null)
+            inputRef.current?.focus()
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { summarizeStockSummary } from './dashboardMetrics'
-import { isSessionReceived, resolveStationCity } from './App'
-import { businessBlocKeyOf, businessBlocLabel } from './businessBloc'
+import { computeReferenceLocationBreakdown, criticalReferenceRows, summarizeStockSummary } from './dashboardMetrics'
+import { resolveStationCity } from './App'
 
 describe('summarizeStockSummary', () => {
   it('aggregates active units and critical references from backend stock-summary data', () => {
@@ -34,20 +33,84 @@ describe('summarizeStockSummary', () => {
     expect(resolveStationCity({ id: 2, name: 'Présentoir', city: 'Brazzaville', type: 'SOUS_STATION' })).toBe('Brazzaville')
     expect(resolveStationCity({ id: 3, name: 'Laboratoire', city: 'Dolisie', type: 'SOUS_STATION' })).toBe('Dolisie')
   })
+})
 
-  it('groups the presentoir by the business A-F bloc rules instead of location codes', () => {
-    expect(businessBlocKeyOf({ gender: 'Homme', price: 45000 })).toBe('A')
-    expect(businessBlocKeyOf({ gender: 'Femme', price: 55000 })).toBe('B')
-    expect(businessBlocKeyOf({ gender: 'Homme', price: 85000 })).toBe('C')
-    expect(businessBlocKeyOf({ gender: 'Femme', price: 95000 })).toBe('D')
-    expect(businessBlocKeyOf({ gender: 'Enfant', price: 30000 })).toBe('E')
-    expect(businessBlocKeyOf({ gender: 'Homme', price: 0, status: 'OFFERTE' })).toBe('F')
-    expect(businessBlocLabel('A')).toBe('Classique homme')
+describe('criticalReferenceRows', () => {
+  it('classifies references as rupture, critical, or ok around the shared threshold', () => {
+    const rows = criticalReferenceRows([
+      { reference: 'REF-RUPTURE', brand: 'A', qty_total: 0 },
+      { reference: 'REF-CRITICAL', brand: 'B', qty_total: 1 },
+      { reference: 'REF-AT-THRESHOLD', brand: 'C', qty_total: 2 },
+      { reference: 'REF-OK', brand: 'D', qty_total: 3 },
+    ], 2)
+
+    const byRef = Object.fromEntries(rows.map(row => [row.reference, row]))
+    expect(byRef['REF-RUPTURE'].level).toBe('rupture')
+    expect(byRef['REF-RUPTURE'].gap).toBe(-2)
+    expect(byRef['REF-CRITICAL'].level).toBe('critical')
+    expect(byRef['REF-CRITICAL'].gap).toBe(-1)
+    expect(byRef['REF-AT-THRESHOLD'].level).toBe('critical')
+    expect(byRef['REF-OK'].level).toBe('ok')
   })
 
-  it('marks an activated reception as received even before any recorded glass', () => {
-    expect(isSessionReceived({ activatedAt: '2026-08-15T04:28:52.251Z' }, 0)).toBe(true)
-    expect(isSessionReceived({ activatedAt: null }, 1)).toBe(true)
-    expect(isSessionReceived({}, 0)).toBe(false)
+  it('sorts the lowest stock first', () => {
+    const rows = criticalReferenceRows([
+      { reference: 'REF-B', qty_total: 5 },
+      { reference: 'REF-A', qty_total: 1 },
+    ])
+    expect(rows.map(row => row.reference)).toEqual(['REF-A', 'REF-B'])
+  })
+
+  it('defaults to the shared global threshold of 2', () => {
+    const [row] = criticalReferenceRows([{ reference: 'REF-A', qty_total: 2 }])
+    expect(row.threshold).toBe(2)
+    expect(row.level).toBe('critical')
+  })
+
+  it('returns an empty array with no data', () => {
+    expect(criticalReferenceRows([])).toEqual([])
+  })
+})
+
+describe('computeReferenceLocationBreakdown', () => {
+  const stationCityMap = new Map([[1, 'Pointe-Noire'], [2, 'Brazzaville']])
+
+  it('splits active stock (général/magasin/présentoir) from réserve/labo/transit', () => {
+    const glasses = [
+      { reference: 'REF-A', status: 'EN_STOCK_GENERAL', station_id: 1 },
+      { reference: 'REF-A', status: 'EN_PRESENTOIR', station_id: 2 },
+      { reference: 'REF-A', status: 'RESERVEE', station_id: 1 },
+      { reference: 'REF-A', status: 'EN_LABORATOIRE', station_id: 1 },
+      { reference: 'REF-A', status: 'EN_TRANSIT', station_id: 1 },
+    ]
+    const breakdown = computeReferenceLocationBreakdown(glasses, stationCityMap)
+    const refA = breakdown.get('REF-A')!
+
+    expect(refA.general).toBe(1)
+    expect(refA.magasin).toBe(0)
+    expect(refA.presentoir).toBe(1)
+    expect(refA.activeTotal).toBe(2)
+    expect(refA.reserve).toBe(1)
+    expect(refA.labo).toBe(1)
+    expect(refA.transit).toBe(1)
+  })
+
+  it('lists distinct cities only for stations carrying active stock', () => {
+    const glasses = [
+      { reference: 'REF-A', status: 'EN_STOCK_GENERAL', station_id: 1 },
+      { reference: 'REF-A', status: 'EN_STOCK_SOUS_STATION', station_id: 2 },
+      { reference: 'REF-A', status: 'EN_STOCK_GENERAL', station_id: 1 },
+      { reference: 'REF-A', status: 'RESERVEE', station_id: 2 },
+    ]
+    const breakdown = computeReferenceLocationBreakdown(glasses, stationCityMap)
+    expect(breakdown.get('REF-A')!.cities).toEqual(['Brazzaville', 'Pointe-Noire'])
+  })
+
+  it('ignores glasses without a reference and unmapped statuses', () => {
+    const glasses = [
+      { status: 'EN_STOCK_GENERAL', station_id: 1 },
+      { reference: 'REF-A', status: 'VENDUE', station_id: 1 },
+    ]
+    expect(computeReferenceLocationBreakdown(glasses, stationCityMap).size).toBe(0)
   })
 })

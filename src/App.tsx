@@ -1151,9 +1151,6 @@ function exportCSV(frames: FrameRecord[], city: string) {
 const SIDEBAR_MODULES: { id: ModuleId; label: string; short: string; icon: (c?: string) => React.ReactElement }[] = [
   { id: 'reception', label: 'Expédition', short: 'Expédition', icon: ic.tag },
   { id: 'history', label: 'Suivi Global', short: 'Suivi', icon: ic.hist },
-  // La liste que le champ « Société » d'une proforma vient lire. Elle est tenue ici parce
-  // qu'elle est fermée côté magasin : la vendeuse choisit, elle n'ajoute pas.
-  { id: 'societes', label: 'Sociétés', short: 'Sociétés', icon: ic.users },
   { id: 'presentoir-bloc', label: 'Présentoir par bloc', short: 'Blocs', icon: ic.display },
 ]
 
@@ -2795,6 +2792,7 @@ function FrameDetailScreen({ frameRef, city, framesByCity }: { frameRef: string;
             ['Enregistré par', frame.enregistrePar],
             ['Date', frame.date],
             ['Ville', resolvedCity],
+            ['Emplacement', frame.emplacement || '—'],
             ['Statut', frame.status],
           ].map(([k, v]) => (
             <div key={k} className="flex justify-between items-center px-4 py-3.5">
@@ -3035,6 +3033,18 @@ function ReceptionView() {
   // finissait poussée hors de vue.
   const [showHistoryPage, setShowHistoryPage] = useState(false)
   const [stockGlasses, setStockGlasses] = useState<any[]>([])
+  // Aucune route ne relie une session de réception à la ville où ses montures sont
+  // reparties après un envoi depuis Stock général (pas de session_code sur ce type de
+  // liste) : on garde donc la correspondance ici, posée au moment du dispatch, pour que
+  // le badge « En transit vers... » puisse nommer la destination même après un
+  // rechargement de page.
+  const [dispatchedCommandCities, setDispatchedCommandCities] = useState<Record<number, string>>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem('dispatchedCommandCities') || '{}')
+    } catch {
+      return {}
+    }
+  })
   const [stockSummary, setStockSummary] = useState<any[]>([])
   const [isLoadingStock, setIsLoadingStock] = useState(false)
   const [isLoadingStockSummary, setIsLoadingStockSummary] = useState(false)
@@ -3121,10 +3131,12 @@ function ReceptionView() {
     const handleWindowFocus = () => {
       void loadReceptionCommands()
       void loadSentLists()
+      void loadStockGlasses()
     }
     const refreshInterval = window.setInterval(() => {
       void loadReceptionCommands()
       void loadSentLists()
+      void loadStockGlasses()
     }, 5000)
     window.addEventListener('focus', handleWindowFocus)
 
@@ -3895,6 +3907,14 @@ function ReceptionView() {
     setStockListSelection(prev => prev.includes(barcode) ? prev.filter(b => b !== barcode) : [...prev, barcode])
   }
 
+  function recordDispatchedCommandCities(entries: Record<number, string>) {
+    setDispatchedCommandCities(prev => {
+      const next = { ...prev, ...entries }
+      try { window.localStorage.setItem('dispatchedCommandCities', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
   // Compose une liste depuis le stock existant et l'adresse au Stock Général. La Direction
   // commande, elle n'expédie pas : c'est le magasinier qui scannera chaque monture en rayon
   // avant l'envoi réel.
@@ -3941,6 +3961,53 @@ function ReceptionView() {
       if (rejectedEntries.length) {
         message += `\n\nÉcartées (${rejectedEntries.length}) :\n` + rejectedEntries.map(([code, reason]) => `· ${code} — ${reason}`).join('\n')
       }
+
+      // Créer la liste ne fait que la préparer : sans cet appel, les montures restaient
+      // EN_STOCK_GENERAL indéfiniment. C'est /dispatch qui les bascule réellement EN_TRANSIT.
+      if (list.id) {
+        try {
+          const stationsResponse = await fetch(`${API_URL}/auth/stations`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (!stationsResponse.ok) throw new Error('stations unavailable')
+          const stationsPayload = await stationsResponse.json().catch(() => ({}))
+          const stations: any[] = stationsPayload?.data?.stations || []
+          const fromStationId = stations.find(s => String(s.type || '').toUpperCase() === 'STOCK_GENERAL')?.id
+            ?? stations.find(s => /^stock\s+(principal|g[ée]n[ée]ral)$/i.test(String(s.name || '').trim()))?.id
+          if (!fromStationId) throw new Error('Station « Stock Général » introuvable.')
+
+          const dispatchResponse = await fetch(`${API_URL}/inventory/send-lists/dispatch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ id: list.id, from_station_id: fromStationId }),
+          })
+          const dispatchPayload = await dispatchResponse.json().catch(() => ({}))
+          if (!dispatchResponse.ok || dispatchPayload?.success === false) {
+            throw new Error(dispatchPayload?.error || "Impossible d'expédier la liste.")
+          }
+
+          const dispatch = dispatchPayload?.data?.dispatch || {}
+          const dispatchedCount = Number(dispatch.sent_count ?? sent)
+          message = `Carton ${dispatch.box_code || ''} expédié vers ${stockListCity} : ${dispatchedCount} monture${dispatchedCount > 1 ? 's' : ''} EN_TRANSIT.`
+
+          // Retient, pour chaque session de réception d'origine, vers quelle ville ses
+          // montures viennent de partir : c'est ce que relit la carte de session pour
+          // afficher « En transit vers <ville> » plutôt qu'un texte générique.
+          const cityByCommandId: Record<number, string> = {}
+          for (const barcode of stockListSelection) {
+            const commandId = Number(byBarcode.get(barcode)?.reception_command_id)
+            if (Number.isFinite(commandId) && commandId > 0) cityByCommandId[commandId] = stockListCity
+          }
+          if (Object.keys(cityByCommandId).length) recordDispatchedCommandCities(cityByCommandId)
+          const skipped: Array<{ reference: string; reason: string }> = dispatch.skipped || []
+          if (skipped.length) {
+            message += `\n\nÉcartées (${skipped.length}) :\n` + skipped.map(item => `· ${item.reference} — ${item.reason}`).join('\n')
+          }
+        } catch (dispatchError: any) {
+          message += `\n\nListe enregistrée mais pas encore expédiée : ${dispatchError?.message || 'erreur inconnue'}.`
+        }
+      }
+
       window.alert(message)
 
       setStockListSelection([])
@@ -5103,6 +5170,13 @@ function ReceptionView() {
         const alreadySent = (sentListSessions[s.id] || []).length > 0
         const receptionState = getReceptionCardState(linkedCommand, receivedCount, totalCount)
         const cardBgClass = getReceptionCardClass(receptionState)
+        // Une monture partie EN_TRANSIT disparaît de /inventory/glasses (statuts par défaut
+        // EN_STOCK_GENERAL + EN_STOCK_SOUS_STATION) : si la session est complète mais qu'aucune
+        // de ses montures n'y figure plus, c'est qu'elles ont quitté le stock général depuis
+        // (envoyées via la page Stock général, cf. submitStockList).
+        const hasLeftGeneralStock = receptionState === 'complete' && totalCount > 0 &&
+          !stockGlasses.some((g: any) => Number(g.reception_command_id) === linkedCommand?.id)
+        const dispatchDestinationCity = linkedCommand?.id ? dispatchedCommandCities[linkedCommand.id] : undefined
         return (
           <div key={s.id} className={`${cardBgClass} rounded-2xl border p-4 transition-all ${receptionState === 'idle' ? 'hover:border-slate-500 dark:hover:border-slate-600 hover:shadow-sm' : ''}`}>
             <div className="flex items-start justify-between gap-3">
@@ -5113,11 +5187,11 @@ function ReceptionView() {
                   <span className="truncate">{formatReceptionNote(s.note, s.operator)}</span>
                 </div>
                 {(receptionState === 'complete' || (isSessionActivated && !alreadySent)) && (
-                  <div className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${receptionState === 'complete'
+                  <div className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${receptionState === 'complete' && !hasLeftGeneralStock
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-300'
                     : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-300'}`}>
-                    {receptionState === 'complete' ? ic.check('w-3.5 h-3.5') : ic.truck('w-3.5 h-3.5')}
-                    <span>{receptionState === 'complete' ? 'Commande reçue en stock général' : (receptionState === 'recording' ? 'En cours d\'enregistrement' : 'En transit vers le stock Général')}</span>
+                    {receptionState === 'complete' && !hasLeftGeneralStock ? ic.check('w-3.5 h-3.5') : ic.truck('w-3.5 h-3.5')}
+                    <span>{receptionState === 'complete' ? (hasLeftGeneralStock ? `En transit vers ${dispatchDestinationCity ? magasinLabel(dispatchDestinationCity) : 'le stock magasin'}` : 'Enregistrement terminé') : (receptionState === 'recording' ? 'En cours d\'enregistrement' : 'En transit vers le stock Général')}</span>
                   </div>
                 )}
                 {/* Destination(s) de la session, une fois sa liste envoyée. Plusieurs villes
@@ -5139,21 +5213,25 @@ function ReceptionView() {
                     </button>
                   )}
                   {/* La session est complète (carte verte) : elle peut partir en magasin.
-                      Une fois la liste envoyée, le bouton est grisé et inerte. */}
-                  {receptionState === 'complete' && (() => (
-                    <button
-                      type="button"
-                      onClick={() => void openSendList(s)}
-                      disabled={alreadySent}
-                      title={alreadySent ? 'La liste de cette session a déjà été envoyée au stock général' : undefined}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${alreadySent
-                        ? 'cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-                        : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'}`}
-                    >
-                      {alreadySent ? ic.check('w-3.5 h-3.5') : ic.send('w-3.5 h-3.5')}
-                      {alreadySent ? 'Liste envoyée' : 'Envoyer la liste'}
-                    </button>
-                  ))()}
+                      Une fois la liste envoyée — ou les montures expédiées depuis la page
+                      Stock général — le bouton est grisé et inerte. */}
+                  {receptionState === 'complete' && (() => {
+                    const isLocked = alreadySent || hasLeftGeneralStock
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => void openSendList(s)}
+                        disabled={isLocked}
+                        title={hasLeftGeneralStock ? 'Ces montures ont déjà été expédiées depuis le stock général' : (alreadySent ? 'La liste de cette session a déjà été envoyée au stock général' : undefined)}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${isLocked
+                          ? 'cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                          : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'}`}
+                      >
+                        {isLocked ? ic.check('w-3.5 h-3.5') : ic.send('w-3.5 h-3.5')}
+                        {hasLeftGeneralStock ? 'Déjà expédiée' : (alreadySent ? 'Liste envoyée' : 'Envoyer la liste')}
+                      </button>
+                    )
+                  })()}
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 text-right">
