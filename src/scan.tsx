@@ -1535,8 +1535,9 @@ function recordPhoto(record: any): string {
 
 /** Récupère la photo de la branche avec les variantes de noms de champs. */
 function recordPhotoBranche(record: any): string {
-  return recordField(record, 'photo_branche_url') || recordField(record, 'branche_image')
-    || recordField(record, 'branch_image') || recordField(record, 'branche_url')
+  return recordField(record, 'photo_branche_url') || recordField(record, 'PhotoBrancheURL')
+    || recordField(record, 'branche_image') || recordField(record, 'branch_image')
+    || recordField(record, 'branche_url')
 }
 
 const HISTORIQUE_PAGE_SIZE = 10
@@ -1915,7 +1916,18 @@ function ListesScreen({
           const glass = glassPayload?.data?.glass
           // `glass` porte son propre `id` : sans le rétablir il écraserait celui de la
           // ligne, or c'est sur ce dernier que porte la vérification.
-          return glass ? { ...item, ...glass, id: item.id, glass_id: glass.id } : item
+          const merged = glass ? { ...item, ...glass, id: item.id, glass_id: glass.id } : item
+          if (item.barcode === 'HA14-00759') {
+            console.log('Debug item HA14-00759:', merged)
+            console.log('Photo fields:', {
+              photo_monture_url: merged.photo_monture_url,
+              photo_branche_url: merged.photo_branche_url,
+              image_url: merged.image_url,
+              branche_image: merged.branche_image,
+              all_keys: Object.keys(merged).filter(k => k.includes('photo') || k.includes('image') || k.includes('branche'))
+            })
+          }
+          return merged
         } catch {
           return item
         }
@@ -2128,6 +2140,7 @@ function ListesScreen({
                 return {
                   key: item.id,
                   photo: recordPhoto(item),
+                  branchPhoto: recordPhotoBranche(item),
                   reference: item.reference || item.barcode,
                   brand: item.brand,
                   gender: item.gender,
