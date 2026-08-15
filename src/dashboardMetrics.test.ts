@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { summarizeStockSummary } from './dashboardMetrics'
-import { resolveStationCity } from './App'
+import { isSessionReceived, resolveStationCity } from './App'
 import { businessBlocKeyOf, businessBlocLabel } from './businessBloc'
 
 describe('summarizeStockSummary', () => {
@@ -43,5 +43,11 @@ describe('summarizeStockSummary', () => {
     expect(businessBlocKeyOf({ gender: 'Enfant', price: 30000 })).toBe('E')
     expect(businessBlocKeyOf({ gender: 'Homme', price: 0, status: 'OFFERTE' })).toBe('F')
     expect(businessBlocLabel('A')).toBe('Classique homme')
+  })
+
+  it('marks an activated reception as received even before any recorded glass', () => {
+    expect(isSessionReceived({ activatedAt: '2026-08-15T04:28:52.251Z' }, 0)).toBe(true)
+    expect(isSessionReceived({ activatedAt: null }, 1)).toBe(true)
+    expect(isSessionReceived({}, 0)).toBe(false)
   })
 })

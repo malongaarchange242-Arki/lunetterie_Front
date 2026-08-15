@@ -332,31 +332,38 @@ const SCAN_CSS = `
 `
 
 const LABEL_CSS = `
-  @page { margin: 4mm; }
+  @page { margin: 0; }
+  * { box-sizing: border-box; }
   body { margin: 0; font-family: Inter, system-ui, sans-serif; color: #000; }
-  .lb { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 60mm; padding: 4mm; }
-  .lb .shop { font-size: 10px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
-  .lb .marque { font-size: 13px; font-weight: 700; }
-  .lb .ref { font-size: 10px; color: #333; font-family: ui-monospace, monospace; }
-  .lb svg { margin: 2mm 0; max-width: 100%; }
-  .lb .meta { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 8px; font-size: 9px; font-variant-numeric: tabular-nums; }
+  .lb { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 56mm; padding: 1.6mm; }
+  .lb .location { font-size: 10px; font-weight: 800; text-align: center; }
+  .lb .shop { font-size: 9px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+  .lb .marque { font-size: 12px; font-weight: 700; }
+  .lb .ref { font-size: 9px; font-weight: 700; color: #333; font-family: ui-monospace, monospace; }
+  .lb svg { margin: 0.5mm 0; max-width: 100%; }
+  .lb .meta { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 8px; font-size: 8px; font-variant-numeric: tabular-nums; }
   .lb .meta span { white-space: nowrap; }
-  .lb .meta span:last-child { font-weight: 800; font-size: 10px; }
+  .lb .meta span:last-child { font-weight: 800; font-size: 9px; }
 `
 
-/** Le gabarit de LABEL_CSS converti en pixels CSS à 96 dpi : 60 mm de large, 4 mm de
- *  marge, 6 px entre les blocs, 2 mm autour du code-barres. */
-const LABEL_PX = { width: 227, pad: 15, gap: 6, barcodeMargin: 8 }
+/** Le gabarit de LABEL_CSS converti en pixels CSS à 96 dpi : l'étiquette réelle ne fait
+ *  que 57 × 30 mm (rouleau de l'imprimante) — 56 × ~28,5 mm ici pour garder une marge de
+ *  sécurité. Tout est compressé en conséquence : peu de marge intérieure (1,6 mm), peu
+ *  d'écart entre les blocs (2 px), polices réduites. `width` compte pour la largeur
+ *  totale (padding compris), comme le `box-sizing: border-box` côté CSS : sans ça le
+ *  padding s'ajoutait à la largeur déclarée et le rendu papier débordait le rouleau. */
+const LABEL_PX = { width: 212, pad: 6, gap: 2, barcodeMargin: 2 }
 
 const LABEL_FONT = {
-  shop: '800 10px Inter, system-ui, sans-serif',
-  marque: '700 13px Inter, system-ui, sans-serif',
-  ref: '10px ui-monospace, monospace',
-  meta: '9px Inter, system-ui, sans-serif',
+  location: '800 10px Inter, system-ui, sans-serif',
+  shop: '800 9px Inter, system-ui, sans-serif',
+  marque: '700 12px Inter, system-ui, sans-serif',
+  ref: '700 9px ui-monospace, monospace',
+  meta: '8px Inter, system-ui, sans-serif',
 }
 
 /** Interlignes : le canvas ne connaît pas line-height, chaque ligne avance à la main. */
-const LABEL_LINE = { shop: 13, marque: 17, ref: 13, meta: 12 }
+const LABEL_LINE = { location: 11, shop: 10, marque: 14, ref: 10, meta: 9 }
 
 // ── Code-barres ────────────────────────────────────────────────────────────────
 /** showValue=false : le texte intégré au SVG rétrécit avec les barres et devient
@@ -374,10 +381,15 @@ async function drawBarcode(target: SVGSVGElement, value: string, showValue = tru
     format: 'CODE128',
     lineColor: '#0f172a',
     background: '#ffffff',
-    width: 2,
-    height: 46,
+    // La largeur rendue est de toute façon retaillée à la largeur de l'étiquette (56mm),
+    // et la hauteur est contrainte par une étiquette physique de seulement 30mm de haut,
+    // texte compris : height/margin ci-dessous sont calés pour tenir sous ce plafond
+    // (~28,5mm de haut au total avec tout le reste), pas pour maximiser la taille du
+    // code-barres dans l'absolu.
+    width: 1.15,
+    height: 24,
     fontSize: 20,
-    margin: 8,
+    margin: 2,
     displayValue: showValue,
   })
 
@@ -436,29 +448,45 @@ function loadImage(source: string) {
 }
 
 /** Découpe un texte trop large, comme le ferait le flux HTML de l'étiquette : un nom
- *  de marque long doit descendre d'une ligne, pas déborder de l'image. */
+ *  de marque long doit descendre d'une ligne, pas déborder de l'image.
+ *
+ *  Coupe aussi après chaque tiret, pas seulement sur les espaces : un code d'emplacement
+ *  comme « RAYON-A-ETA-01-BAC-A-POS-06 » est un seul « mot » sans espace, et un navigateur
+ *  le renverrait déjà à la ligne à ces tirets (point de coupure standard). Sans quoi il ne
+ *  se découpait jamais et débordait du canvas. */
 function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
-  const words = String(text || '').split(/\s+/).filter(Boolean)
-  if (words.length === 0) return ['—']
+  const raw = String(text || '').trim()
+  if (!raw) return ['—']
+
+  const words = raw.split(/\s+/)
+  const tokens: { text: string; spaceBefore: boolean }[] = []
+  words.forEach((word, wordIndex) => {
+    // Lookbehind : coupe juste après chaque tiret, en le laissant collé au fragment
+    // précédent plutôt que de l'isoler sur sa propre ligne.
+    const parts = word.split(/(?<=-)/)
+    parts.forEach((part, partIndex) => {
+      tokens.push({ text: part, spaceBefore: partIndex === 0 && wordIndex > 0 })
+    })
+  })
 
   const lines: string[] = []
-  let line = words[0]
-  for (const word of words.slice(1)) {
-    const candidate = `${line} ${word}`
-    if (ctx.measureText(candidate).width <= maxWidth) line = candidate
+  let line = ''
+  for (const token of tokens) {
+    const candidate = token.spaceBefore ? `${line} ${token.text}` : `${line}${token.text}`
+    if (line === '' || ctx.measureText(candidate).width <= maxWidth) line = candidate
     else {
       lines.push(line)
-      line = word
+      line = token.text
     }
   }
-  lines.push(line)
+  if (line) lines.push(line)
   return lines
 }
 
 /** Le contenu d'une étiquette, détaché de ce qu'elle décrit.
  *
  *  Deux étiquettes sortent de cet écran — celle d'une monture et celle d'un carton
- *  d'envoi — et elles partagent tout : 60 mm de large, les mêmes polices, le même
+ *  d'envoi — et elles partagent tout : 56 mm de large, les mêmes polices, le même
  *  code-barres CODE128, la même ligne de pied. Seuls les textes changent. Dupliquer le
  *  tracé pour la seconde condamnerait les deux gabarits à diverger à la première retouche. */
 interface PrintableLabel {
@@ -468,7 +496,7 @@ interface PrintableLabel {
   reference: string
   /** La valeur encodée dans le code-barres — et le nom du fichier téléchargé. */
   barcodeValue: string
-  /** Pied de page, aligné à gauche : l'emplacement, ou la ville de destination. */
+  /** Ligne d'en-tête, centrée et en gras : l'emplacement, ou la ville de destination. */
   metaLeft: string
   /** Prix affiché sous la référence, avant le code-barres. */
   metaRight: string
@@ -490,6 +518,8 @@ async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; w
   const ruler = document.createElement('canvas').getContext('2d')
   if (!ruler) throw new Error('Canvas non supporté par ce navigateur.')
 
+  ruler.font = LABEL_FONT.location
+  const locationLines = wrapCanvasText(ruler, data.metaLeft || '—', contentWidth)
   ruler.font = LABEL_FONT.marque
   const marqueLines = wrapCanvasText(ruler, data.title || '—', contentWidth)
   ruler.font = LABEL_FONT.ref
@@ -510,14 +540,15 @@ async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; w
   }
 
   const height = LABEL_PX.pad
-    + LABEL_LINE.shop
+    + locationLines.length * LABEL_LINE.location
+    + LABEL_PX.gap + LABEL_LINE.shop
     + LABEL_PX.gap + marqueLines.length * LABEL_LINE.marque
     + LABEL_PX.gap + refLines.length * LABEL_LINE.ref
-    + (barcodeHeight ? LABEL_PX.gap + LABEL_PX.barcodeMargin * 2 + barcodeHeight : 0)
     + LABEL_PX.gap + LABEL_LINE.meta
+    + (barcodeHeight ? LABEL_PX.gap + LABEL_PX.barcodeMargin * 2 + barcodeHeight : 0)
     + LABEL_PX.pad
 
-  // ×3 : une étiquette de 60 mm rendue à 96 dpi ressort floue dès qu'on la réimprime.
+  // ×3 : une étiquette de 56 mm rendue à 96 dpi ressort floue dès qu'on la réimprime.
   const scale = 3
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(LABEL_PX.width * scale)
@@ -535,6 +566,13 @@ async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; w
 
   ctx.textAlign = 'center'
   ctx.fillStyle = '#000000'
+  ctx.font = LABEL_FONT.location
+  for (const line of locationLines) {
+    ctx.fillText(line, center, y)
+    y += LABEL_LINE.location
+  }
+  y += LABEL_PX.gap
+
   ctx.font = LABEL_FONT.shop
   // letterSpacing manque au contexte 2D des navigateurs anciens : l'affectation passe
   // par un cast pour qu'ils rendent sans interlettrage plutôt que de casser le tracé.
@@ -561,20 +599,13 @@ async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; w
   ctx.fillStyle = '#000000'
   ctx.textAlign = 'center'
   ctx.fillText(data.metaRight || '—', center, y + 2)
-  y += LABEL_LINE.meta + LABEL_PX.gap
+  y += LABEL_LINE.meta
 
   if (barcodeImage) {
-    y += LABEL_PX.barcodeMargin
+    y += LABEL_PX.gap + LABEL_PX.barcodeMargin
     ctx.drawImage(barcodeImage, center - barcodeWidth / 2, y, barcodeWidth, barcodeHeight)
-    y += barcodeHeight + LABEL_PX.barcodeMargin + LABEL_PX.gap
+    y += barcodeHeight + LABEL_PX.barcodeMargin
   }
-
-  ctx.font = LABEL_FONT.meta
-  ctx.fillStyle = '#000000'
-  ctx.textAlign = 'left'
-  ctx.fillText(data.metaLeft || '—', LABEL_PX.pad, y)
-  ctx.textAlign = 'right'
-  ctx.fillText('', LABEL_PX.width - LABEL_PX.pad, y)
 
   return canvas.toDataURL('image/png')
 }
@@ -639,12 +670,12 @@ async function printLabel(data: PrintableLabel) {
     `<!doctype html><html lang="fr"><head><meta charset="utf-8" />`
     + `<title>Étiquette ${esc(data.barcodeValue)}</title><style>${LABEL_CSS}</style></head><body>`
     + `<div class="lb">`
+    + `<div class="location">${esc(data.metaLeft || '—')}</div>`
     + `<div class="shop">La Lunetterie</div>`
     + `<div class="marque">${esc(data.title || '—')}</div>`
     + `<div class="ref">${esc(data.reference || '—')}</div>`
     + `<div class="meta"><span>${esc(data.metaRight || '—')}</span></div>`
     + markup
-    + `<div class="meta"><span>${esc(data.metaLeft || '—')}</span></div>`
     + `</div>`
     + `<script>window.onload=function(){window.print();}<\/script></body></html>`,
   )
@@ -1163,13 +1194,14 @@ function isResumable(entry: ReceptionEntry) {
   return Boolean(entry.activatedAt) || Number(entry.registeredCount || 0) > 0 || Boolean(entry.scanned)
 }
 
-function SessionCard({ entry, isActive, joining, onResume, onActivate }: {
+function SessionCard({ entry, isActive, joining, onResume, onActivate, onPreview }: {
   entry: ReceptionEntry
   /** La session déjà ouverte sur ce poste : y « revenir » ne relit rien. */
   isActive: boolean
   joining: boolean
   onResume: (code: string) => void
   onActivate: () => void
+  onPreview: () => void
 }) {
   // `targetCount` vient de la session, `quantity` de la commande d'expédition : la
   // seconde couvre les lignes que la Direction a envoyées avant tout scan.
@@ -1179,7 +1211,10 @@ function SessionCard({ entry, isActive, joining, onResume, onActivate }: {
   const resumable = isResumable(entry)
 
   return (
-    <div className={`${CARD} p-4 ${isActive ? 'ring-2 ring-[#2563eb]' : ''}`}>
+    <div
+      className={`${CARD} cursor-pointer p-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 ${isActive ? 'ring-2 ring-[#2563eb]' : ''}`}
+      onClick={onPreview}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{entry.code || entry.key}</p>
@@ -1207,7 +1242,7 @@ function SessionCard({ entry, isActive, joining, onResume, onActivate }: {
         </div>
       )}
 
-      <div className="mt-3">
+      <div className="mt-3" onClick={event => event.stopPropagation()}>
         {resumable
           ? (
             <Btn
@@ -1248,6 +1283,7 @@ function SessionsGate({
   onEnter: () => void
 }) {
   const [detailDate, setDetailDate] = useState<string | null>(null)
+  const [selectedEntry, setSelectedEntry] = useState<ReceptionEntry | null>(null)
 
   const today = todayKey()
   const counts = new Map<string, number>()
@@ -1354,6 +1390,7 @@ function SessionsGate({
                 joining={joiningCode === entry.code}
                 onResume={onResume}
                 onActivate={onActivate}
+                onPreview={() => setSelectedEntry(entry)}
               />
             ))}
           </div>
@@ -1373,6 +1410,7 @@ function SessionsGate({
                   joining={joiningCode === entry.code}
                   onResume={onResume}
                   onActivate={onActivate}
+                  onPreview={() => setSelectedEntry(entry)}
                 />
               ))}
             </div>
@@ -1417,6 +1455,58 @@ function SessionsGate({
           })}
         </div>
       </section>
+
+      {selectedEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedEntry(null)}>
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3.5 dark:border-slate-700">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Aperçu</p>
+                <p className="mt-1 truncate text-lg font-bold text-slate-900 dark:text-white">{selectedEntry.code || selectedEntry.key}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedEntry(null)}
+                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+              >
+                Fermer
+              </button>
+            </div>
+
+            <div className="space-y-4 p-4">
+              <div className="grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Commande</span><span className="mt-1 block font-semibold">{selectedEntry.orderId > 0 ? `EXP-${selectedEntry.orderId}` : '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Statut</span><span className="mt-1 block font-semibold">{selectedEntry.status === 'active' ? 'Active' : (selectedEntry.status || '—')}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Progression</span><span className="mt-1 block font-semibold tabular-nums">{Number(selectedEntry.registeredCount || 0)} / {Number(selectedEntry.targetCount || selectedEntry.quantity || 0)}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Résumé</span><span className="mt-1 block font-semibold">{commandSubtitle(selectedEntry)}</span></div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedEntry(null)
+                    onResume(String(selectedEntry.code || selectedEntry.key))
+                  }}
+                  className="flex-1 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  {ic.camera()} Continuer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedEntry(null)
+                    onActivate()
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  {ic.tag()} Activer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1458,6 +1548,7 @@ function HistoriqueScreen({ movements, onPrint, onReturn, hasSession }: {
   const [forme, setForme] = useState('')
   const [genre, setGenre] = useState('')
   const [page, setPage] = useState(1)
+  const [selectedRecord, setSelectedRecord] = useState<Movement | null>(null)
 
   const formes = useMemo(() => distinctValues(movements, 'shape'), [movements])
   const genres = useMemo(() => distinctValues(movements, 'gender'), [movements])
@@ -1527,7 +1618,11 @@ function HistoriqueScreen({ movements, onPrint, onReturn, hasSession }: {
             const photo = recordPhoto(record)
             const chips = ['gender', 'shape', 'color', 'size'].map(key => recordField(record, key)).filter(Boolean)
             return (
-              <article key={recordField(record, 'barcode') || index} className={`${CARD} flex items-center gap-3 p-3`}>
+              <article
+                key={recordField(record, 'barcode') || index}
+                onClick={() => setSelectedRecord(record)}
+                className={`${CARD} flex cursor-pointer items-center gap-3 p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60`}
+              >
                 <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-700">
                   {photo
                     ? <img src={photo} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -1558,7 +1653,10 @@ function HistoriqueScreen({ movements, onPrint, onReturn, hasSession }: {
                 </div>
 
                 <button
-                  onClick={() => onPrint(record)}
+                  onClick={event => {
+                    event.stopPropagation()
+                    onPrint(record)
+                  }}
                   className="flex-shrink-0 rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
                   title="Imprimer l'étiquette"
                   aria-label="Imprimer l'étiquette"
@@ -1568,6 +1666,61 @@ function HistoriqueScreen({ movements, onPrint, onReturn, hasSession }: {
               </article>
             )
           })}
+        </div>
+      )}
+
+      {selectedRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedRecord(null)}>
+          <div
+            className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3.5 dark:border-slate-700">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Aperçu</p>
+                <p className="mt-1 truncate text-lg font-bold text-slate-900 dark:text-white">
+                  {recordField(selectedRecord, 'reference') || recordField(selectedRecord, 'brand') || 'Monture'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRecord(null)}
+                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+              >
+                Fermer
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="h-44 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                {recordPhoto(selectedRecord)
+                  ? <img src={recordPhoto(selectedRecord)} alt={recordField(selectedRecord, 'reference') || 'Monture'} className="h-full w-full object-cover" />
+                  : <div className="flex h-full items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo</div>}
+              </div>
+
+              <div className="grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Marque</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'brand') || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Référence</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'reference') || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Forme</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'shape') || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Genre</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'gender') || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Couleur</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'color') || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Taille</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'size') || '—'}</span></div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedRecord(null)
+                    onPrint(selectedRecord)
+                  }}
+                  className="flex-1 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Imprimer l&apos;étiquette
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

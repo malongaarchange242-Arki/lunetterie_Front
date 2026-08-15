@@ -724,6 +724,7 @@ function PresentoirTable({ glasses }: { glasses: Glass[] }) {
     return {
       key,
       photo: glass.photo_monture_url,
+      branchPhoto: branchePhoto(glass) ?? undefined,
       reference: glassRef(glass),
       brand: glass.brand,
       gender: glass.gender,
@@ -1336,7 +1337,15 @@ function DashboardScreen({ data, user, onNavigate, onOpenTable }: {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+        <DashTile
+          label="Lunette en présentoir"
+          color="#0891b2"
+          icon={ic.scan}
+          primary={fmt(data.presentoir.length)}
+          note={`${data.presentoir.length} monture${data.presentoir.length > 1 ? 's' : ''}`}
+          onClick={() => onNavigate('scan')}
+        />
         <DashTile
           label="Lunettes vendues"
           color="#2563eb"

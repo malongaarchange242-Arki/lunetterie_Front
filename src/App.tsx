@@ -206,6 +206,17 @@ function normalizeGammeName(value?: string) {
   return mapping[normalized] || ''
 }
 
+function normalizeReference(value?: string) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\s\-_]+/g, '')
+    .replace(/[□]/g, '')
+    .replace(/[.]/g, '')
+}
+
 function classifyGammeFromPrice(price?: number | string) {
   const numericPrice = Number(price ?? 0)
   if (!Number.isFinite(numericPrice) || numericPrice <= 0) return 'classique'
@@ -298,6 +309,10 @@ interface ReceptionSessionResult {
   compareText?: string
 }
 
+export function isSessionReceived(linkedCommand?: { activatedAt?: string | null }, receivedCount = 0) {
+  return Boolean(linkedCommand?.activatedAt) || receivedCount > 0
+}
+
 const RECEPTION_SESSIONS: Array<{ id: string; orderId?: number; date: string; time: string; frames: number; status: string; operator: string; note?: string; quantity?: number }> = []
 
 const SUPPLIER_ORDERS_INIT: Array<{ id: string; supplier: string; quantity: number; sent: number; date: string; note: string; status: 'partial' | 'complete' | 'pending' }> = []
@@ -309,16 +324,6 @@ function fmt(n: number) {
   return String(n)
 }
 function fmtFCFA(n: number) { return `${fmt(n)} FCFA` }
-
-// Une décimale sous 10 % seulement : une monture sur 32, c'est 3,1 % et pas 3 %, alors qu'au
-// dessus la décimale n'apprend plus rien et alourdit la lecture. Espace insécable avant le
-// signe, comme le veut la typographie française.
-function fmtPct(part: number, total: number) {
-  if (!total || !Number.isFinite(part / total)) return '—'
-  const value = (part / total) * 100
-  const digits = value > 0 && value < 10 ? 1 : 0
-  return `${value.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`
-}
 
 function priceOf(frame: FrameRecord) {
   const n = Number(frame.price)
@@ -1021,7 +1026,7 @@ const STATUS_COLOR: Record<string, string> = {
 function getReceptionCardState(linkedCommand: ReceptionSessionResult | undefined, receivedCount: number, totalCount: number) {
   if (!linkedCommand) return 'idle'
   if (totalCount > 0 && receivedCount >= totalCount) return 'complete'
-  if (receivedCount > 0) return 'recording'
+  if (receivedCount > 0 || linkedCommand?.activatedAt) return 'recording'
   return 'activated'
 }
 
@@ -1046,6 +1051,7 @@ const ic = {
   tag: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1.5" fill="currentColor" stroke="none"/></svg>,
   order: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M6 4h12v16H6z"/><path d="M6 8h12"/></svg>,
   plane: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M2 12l18-8-2 8 2 8-18-8z"/><path d="M12 4v16"/></svg>,
+  truck: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h9A2.5 2.5 0 0 1 17 7.5v7.5H3z"/><path d="M17 10h3l2 2.5v2.5h-5z"/><circle cx="8" cy="17" r="2"/><circle cx="18" cy="17" r="2"/></svg>,
   box: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M3 7.5L12 3l9 4.5v9L12 21l-9-4.5v-9z"/><path d="M12 3v18"/><path d="M3 7.5l9 4.5 9-4.5"/></svg>,
   transfer: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h16"/><path d="M14 6l6 6-6 6"/><path d="M10 6l-6 6 6 6"/></svg>,
   display: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/><path d="M8 15l2-2 2 3 3-4"/></svg>,
@@ -1410,9 +1416,6 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
               <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">{item.label}</p>
               <div className="flex items-baseline gap-1.5 mt-1">
                 <p className="text-3xl font-black tabular-nums" style={{ color: item.color }}>{summary.hasData ? item.value : '—'}</p>
-                {summary.hasData && (
-                  <span className="text-sm font-bold tabular-nums text-slate-400 dark:text-slate-500">{fmtPct(item.value, item.total)}</span>
-                )}
               </div>
               {summary.hasData && (
                 <>
@@ -2948,12 +2951,17 @@ function ReceptionView() {
     void loadSessions()
     void loadReceptionCommands()
     void loadSentLists()
+    void loadStockGlasses()
     void loadStockSummary()
 
     const handleWindowFocus = () => {
       void loadReceptionCommands()
       void loadSentLists()
     }
+    const refreshInterval = window.setInterval(() => {
+      void loadReceptionCommands()
+      void loadSentLists()
+    }, 5000)
     window.addEventListener('focus', handleWindowFocus)
 
     setIsLoadingCountries(true)
@@ -2969,6 +2977,7 @@ function ReceptionView() {
       .finally(() => setIsLoadingCountries(false))
 
     return () => {
+      window.clearInterval(refreshInterval)
       window.removeEventListener('focus', handleWindowFocus)
     }
   }, [])
@@ -3190,9 +3199,13 @@ function ReceptionView() {
       const payload = await response.json().catch(() => ({}))
       const list = payload?.data?.orders || []
       const nextSessions = list.map((order: any) => {
-        const orderDate = order.order_date ? new Date(order.order_date) : new Date()
-        const dateLabel = orderDate.toLocaleDateString('fr-FR')
-        const timeLabel = orderDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+        const timestampSource = order.created_at || order.updated_at || order.order_date || new Date().toISOString()
+        const parsedDate = new Date(timestampSource)
+        const safeDate = Number.isNaN(parsedDate.getTime()) && order.order_date
+          ? new Date(`${String(order.order_date).trim()}T12:00:00`)
+          : parsedDate
+        const dateLabel = safeDate.toLocaleDateString('fr-FR')
+        const timeLabel = safeDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
         return {
           id: `EXP-${order.id}`,
           orderId: order.id,
@@ -3533,6 +3546,36 @@ function ReceptionView() {
     return matchesLocationFilters(glass, stockRayonFilter, stockEtagereFilter, stockBacFilter)
   }
 
+  function openStockSummaryPreview(item: any) {
+    const rawRef = String(item?.reference || item?.barcode || item?.code || '').trim()
+    const refKey = rawRef || '—'
+    const match = (stockGlasses || []).find((glass: any) => {
+      const candidateRefs = [
+        String(glass.reference || '').trim(),
+        String(glass.barcode || '').trim(),
+        String(glass.code || '').trim(),
+        String(glass.reference || glass.barcode || glass.code || '').trim(),
+      ].filter(Boolean)
+
+      return candidateRefs.some(value => value && refKey !== '—' && normalizeReference(value) === normalizeReference(refKey))
+    })
+
+    const preview = match || {
+      ...item,
+      reference: refKey,
+      barcode: item?.barcode || item?.code || refKey,
+      brand: item?.brand || item?.marque || '—',
+      shape: item?.shape || '—',
+      gender: item?.gender || '—',
+      status: item?.status || 'Stock général',
+      location_code: item?.location_code || item?.emplacement || '—',
+      photo_monture_url: item?.photo_monture_url || item?.photo || item?.photo_url || '',
+      photo: item?.photo_monture_url || item?.photo || item?.photo_url || '',
+    }
+
+    setSelectedStockPreview(preview)
+  }
+
   function renderStockPage() {
     const generalGlasses = (stockGlasses || []).filter((g: any) => isGeneralStockStatus(g.status))
     const magasinGlasses = (stockGlasses || []).filter((g: any) => isLocalStockStatus(g.status))
@@ -3551,7 +3594,10 @@ function ReceptionView() {
       ...configuredMagasins,
       ...discoveredMagasins,
       ...Object.keys(basketCounts),
-      ...Object.keys(restockByCity).map(city => city.trim()),
+      // Les clés de restockByCity sont mises en minuscules pour servir de clé de lookup
+      // (voir loadRestockSuggestions) : les réutiliser telles quelles dupliquait le chip
+      // avec sa casse d'origine. La casse d'affichage vient de row.city, pas de la clé.
+      ...Object.values(restockByCity).map(r => String(r.city || '').trim()).filter(Boolean),
     ])).sort((a, b) => a.localeCompare(b, 'fr'))
 
     const selectedMagasin = stockScope === 'GENERAL' ? '' : stockScope
@@ -4635,6 +4681,42 @@ function ReceptionView() {
           Sans ça la page serait vide tant qu'aucune session n'est en cours. */}
       {!showHistoryPage && !receptionSession && (
         <div className="space-y-4">
+          {selectedStockPreview && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/60">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Aperçu</p>
+                  <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{selectedStockPreview.reference || selectedStockPreview.barcode || 'Monture'}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStockPreview(null)}
+                  className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  Fermer
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-[140px_1fr]">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                  {selectedStockPreview.photo_monture_url ? (
+                    <img src={selectedStockPreview.photo_monture_url} alt={selectedStockPreview.reference || selectedStockPreview.barcode || 'Monture'} className="h-32 w-full object-cover" />
+                  ) : (
+                    <div className="flex h-32 items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo</div>
+                  )}
+                </div>
+
+                <div className="grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
+                  <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Marque</span><span className="mt-1 block font-semibold">{selectedStockPreview.brand || selectedStockPreview.marque || '—'}</span></div>
+                  <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Forme</span><span className="mt-1 block font-semibold">{selectedStockPreview.shape || '—'}</span></div>
+                  <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Genre</span><span className="mt-1 block font-semibold">{selectedStockPreview.gender || '—'}</span></div>
+                  <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Statut</span><span className="mt-1 block font-semibold">{selectedStockPreview.status || '—'}</span></div>
+                  <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60 sm:col-span-2"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Emplacement</span><span className="mt-1 block font-mono text-xs">{selectedStockPreview.location_code || selectedStockPreview.station_name || '—'}</span></div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -4670,7 +4752,11 @@ function ReceptionView() {
                         <tr><td colSpan={4} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Aucune donnée disponible pour le moment.</td></tr>
                       ) : (
                         stockSummary.slice(0, 5).map((item: any, index: number) => (
-                          <tr key={`${item.reference || 'ref'}-${index}`} className="transition-colors hover:bg-emerald-50/70 dark:hover:bg-emerald-900/10">
+                          <tr
+                            key={`${item.reference || 'ref'}-${index}`}
+                            onClick={() => openStockSummaryPreview(item)}
+                            className="cursor-pointer transition-colors hover:bg-emerald-50/70 dark:hover:bg-emerald-900/10"
+                          >
                             <td className="px-3 py-2.5 font-medium text-slate-900 dark:text-white">{item.reference || '—'}</td>
                             <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_total || 0).toLocaleString('fr-FR')}</td>
                             <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_general || 0).toLocaleString('fr-FR')}</td>
@@ -4795,8 +4881,9 @@ function ReceptionView() {
         // "Reçu" se coche au scan du code-barres de session par le magasinier.
         // Le repli sur receivedCount couvre les sessions entamées avant que le
         // serveur n'horodate l'activation.
-        const isSessionActivated = Boolean(linkedCommand?.activatedAt) || receivedCount > 0
+        const isSessionActivated = isSessionReceived(linkedCommand, receivedCount)
         const totalCount = Number(s.frames || 0)
+        const alreadySent = (sentListSessions[s.id] || []).length > 0
         const receptionState = getReceptionCardState(linkedCommand, receivedCount, totalCount)
         const cardBgClass = getReceptionCardClass(receptionState)
         return (
@@ -4808,6 +4895,14 @@ function ReceptionView() {
                 <div className="mt-2 inline-flex max-w-full items-center rounded-lg border border-blue-100 bg-blue-50/80 px-2.5 py-1.5 text-xs font-medium text-blue-700 dark:border-blue-800/60 dark:bg-blue-900/20 dark:text-blue-300">
                   <span className="truncate">{formatReceptionNote(s.note, s.operator)}</span>
                 </div>
+                {(receptionState === 'complete' || (isSessionActivated && !alreadySent)) && (
+                  <div className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${receptionState === 'complete'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-300'
+                    : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-300'}`}>
+                    {receptionState === 'complete' ? ic.check('w-3.5 h-3.5') : ic.truck('w-3.5 h-3.5')}
+                    <span>{receptionState === 'complete' ? 'Commande reçue en stock général' : 'En transit vers le stock Général'}</span>
+                  </div>
+                )}
                 {/* Destination(s) de la session, une fois sa liste envoyée. Plusieurs villes
                     possibles : la liste se compose par lots et peut partir en plusieurs fois. */}
                 {(sentListSessions[s.id] || []).length > 0 && (
@@ -4828,23 +4923,20 @@ function ReceptionView() {
                   )}
                   {/* La session est complète (carte verte) : elle peut partir en magasin.
                       Une fois la liste envoyée, le bouton est grisé et inerte. */}
-                  {receptionState === 'complete' && (() => {
-                    const alreadySent = (sentListSessions[s.id] || []).length > 0
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => void openSendList(s)}
-                        disabled={alreadySent}
-                        title={alreadySent ? 'La liste de cette session a déjà été envoyée au stock général' : undefined}
-                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${alreadySent
-                          ? 'cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-                          : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'}`}
-                      >
-                        {alreadySent ? ic.check('w-3.5 h-3.5') : ic.send('w-3.5 h-3.5')}
-                        {alreadySent ? 'Liste envoyée' : 'Envoyer la liste'}
-                      </button>
-                    )
-                  })()}
+                  {receptionState === 'complete' && (() => (
+                    <button
+                      type="button"
+                      onClick={() => void openSendList(s)}
+                      disabled={alreadySent}
+                      title={alreadySent ? 'La liste de cette session a déjà été envoyée au stock général' : undefined}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${alreadySent
+                        ? 'cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                        : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'}`}
+                    >
+                      {alreadySent ? ic.check('w-3.5 h-3.5') : ic.send('w-3.5 h-3.5')}
+                      {alreadySent ? 'Liste envoyée' : 'Envoyer la liste'}
+                    </button>
+                  ))()}
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 text-right">
@@ -6217,8 +6309,12 @@ function PresentoirBlocModule({ framesByCity, stationCities, onNavigate }: {
   framesByCity: Record<string, FrameRecord[]>; stationCities: string[]; onNavigate: (screen: NavScreen) => void
 }) {
   const cities = stationCities.length > 0 ? stationCities : Object.keys(framesByCity)
+  // Tant que la Direction n'a pas choisi de ville elle-même, on ouvre sur la première qui a
+  // réellement des montures au présentoir plutôt que la première par ordre alphabétique —
+  // sinon la page s'ouvre presque toujours sur un écran vide.
+  const cityWithData = cities.find(c => (framesByCity[c] || []).some(f => f.status === 'Présentoir'))
   const [city, setCity] = useState('')
-  const activeCity = city && cities.includes(city) ? city : (cities[0] || '')
+  const activeCity = city && cities.includes(city) ? city : (cityWithData || cities[0] || '')
   const frames = (framesByCity[activeCity] || []).filter(f => f.status === 'Présentoir')
 
   if (cities.length === 0) {
