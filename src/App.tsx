@@ -4887,7 +4887,7 @@ function ReceptionView() {
                 {receptionSession.compareText && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{receptionSession.compareText}</p>}
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button type="button" onClick={() => { void downloadAndPrintBarcode(); setIsLabelSentToStock(true) }} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-                    Imprimer et envoyer vers le stock général
+                    Imprimer et télécharger
                   </button>
                 </div>
               </div>
@@ -5429,7 +5429,7 @@ function ReceptionView() {
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
-                <button type="submit" disabled={isSavingSupplier} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-60">{isSavingSupplier ? 'Enregistrement...' : 'Enregistrer la commande'}</button>
+                <button type="submit" disabled={isSavingSupplier} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-60">{isSavingSupplier ? 'Enregistrement...' : 'Envoyer la commande'}</button>
                 <button type="button" onClick={() => setShowSupplierModal(false)} className="px-4 py-2 text-slate-500 text-sm">Annuler</button>
               </div>
             </form>
