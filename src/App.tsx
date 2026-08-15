@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
 import { buildAssistantPayload, buildStockDigest, mapChatActionToScreen } from './chatContext'
-import { summarizeStockSummary } from './dashboardMetrics'
+import { computeReferenceLocationBreakdown, criticalReferenceRows, summarizeStockSummary } from './dashboardMetrics'
 import { businessBlocKeyOf, businessBlocLabel } from './businessBloc'
 // Importé plutôt que référencé par URL : il n'y a pas de dossier public/ ici, donc un
 // chemin littéral ne serait pas copié dans dist/ au build.
@@ -19,6 +19,7 @@ type NavScreen =
   | { type: 'city'; block: 'total' | 'ca'; pays: string; city: string }
   | { type: 'suivi-detail'; pays: string; city: string; section: SuiviSection }
   | { type: 'stock-general' }
+  | { type: 'critical-references' }
   | { type: 'frame'; ref: string; city: string }
   | { type: 'module'; id: ModuleId }
 
@@ -293,6 +294,12 @@ const MOVEMENTS_DATA: Movement[] = []
 // le passe à un IN (...) sans rien valider, donc un statut mal orthographié ne renvoie
 // pas d'erreur — il fait juste disparaître les lignes concernées.
 const STOCK_STATUSES = ['EN_STOCK_GENERAL', 'EN_STOCK_SOUS_STATION', 'EN_PRESENTOIR', 'EN_LABORATOIRE', 'RESERVEE'] as const
+
+// Statuts nécessaires au détail d'une référence critique : actifs (général/magasin/
+// présentoir, qui déterminent la criticité) ET réserve/labo/transit (visibles dans le
+// détail mais qui ne comptent pas dedans). STOCK_STATUSES n'a pas EN_TRANSIT — un
+// second jeu plutôt que l'élargir, pour ne pas changer ce que d'autres écrans en tirent.
+const REFERENCE_DETAIL_STATUSES = ['EN_STOCK_GENERAL', 'EN_STOCK_SOUS_STATION', 'EN_PRESENTOIR', 'RESERVEE', 'EN_LABORATOIRE', 'EN_TRANSIT'] as const
 
 const EMPLOYEES: Array<{ id: number; name: string; role: string; station: string; group: string; status: string; avatar: string }> = []
 
@@ -1306,9 +1313,48 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
     }
   }, [cityNames.length, selectedCity, cityNames.join(',')])
 
+  // Chargement local, indépendant du useEffect racine : uniquement pour lister les
+  // villes d'une référence critique dans le tableau ci-dessous. /inventory/stock-summary
+  // ne porte pas cette information (agrégée par référence, sans station).
+  const [referenceGlasses, setReferenceGlasses] = useState<any[]>([])
+  const [referenceStations, setReferenceStations] = useState<any[]>([])
+  useEffect(() => {
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+    const headers = { Authorization: `Bearer ${token}` }
+    Promise.allSettled([
+      fetch(`${API_URL}/inventory/glasses?status=${REFERENCE_DETAIL_STATUSES.join(',')}`, { headers })
+        .then(r => (r.ok ? r.json() : Promise.reject())).then(p => p?.data?.glasses || []),
+      fetch(`${API_URL}/auth/stations`, { headers })
+        .then(r => (r.ok ? r.json() : Promise.reject())).then(p => p?.data?.stations || []),
+    ]).then(([glassesResult, stationsResult]) => {
+      setReferenceGlasses(glassesResult.status === 'fulfilled' ? glassesResult.value : [])
+      setReferenceStations(stationsResult.status === 'fulfilled' ? stationsResult.value : [])
+    })
+  }, [])
+
+  const referenceStationCityMap = useMemo(() => {
+    const map = new Map<number, string>()
+    referenceStations.forEach((station: any) => {
+      if (station?.id == null) return
+      const city = resolveStationCity(station)
+      if (city) map.set(Number(station.id), city)
+    })
+    return map
+  }, [referenceStations])
+  const referenceLocationBreakdown = useMemo(
+    () => computeReferenceLocationBreakdown(referenceGlasses, referenceStationCityMap),
+    [referenceGlasses, referenceStationCityMap]
+  )
+
   const summary = summarizeStockSummary(stockSummary)
   const selectedCityTotal = getCityTotal(stats)
   const targetCity = selectedCity || cityNames[0] || ''
+  // Tous statuts confondus dans /inventory/stock-summary (qui exclut déjà vendu/perdu/
+  // cassé/en transit/au labo/réservé) — is_critical seul ne dit ni quelle référence, ni
+  // où en est son stock par rapport au seuil.
+  const criticalRows = criticalReferenceRows(stockSummary)
+  const watchAndCriticalRows = criticalRows.filter(row => row.level !== 'ok')
 
   // Dénominateur écrit en toutes lettres sous chaque pourcentage. « du parc » était du
   // jargon de gestion de flotte : on ne devinait ni ce que le mot désignait, ni qu'il
@@ -1393,10 +1439,6 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
           { label: 'Labo', value: selectedCity ? (selectedCityStats?.labo ?? 0) : summary.laboUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#7c3aed', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'labo' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
           { label: 'Réserve', value: selectedCity ? (selectedCityStats?.reserve ?? 0) : summary.reserveUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#059669', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'placement' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
           { label: 'Présentoir', value: selectedCity ? (selectedCityStats?.presentoir ?? 0) : summary.presentoirUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#f59e0b', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'presentoire' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
-          // Rapportées au nombre de références, pas aux montures : une référence critique n'est
-          // pas une monture, et le pourcentage n'aurait aucun sens sur l'autre dénominateur.
-          // C'est cette exception qui justifie d'écrire le dénominateur sous chaque tuile.
-          { label: 'Références critiques', value: summary.criticalReferences, total: summary.totalReferences, of: referenceDenominator, color: '#10b981', screen: { type: 'stock-general' } as NavScreen },
         ].map(item => {
           const ratio = item.total > 0 ? item.value / item.total : 0
           return (
@@ -1418,6 +1460,177 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
           )
         })}
       </div>
+
+
+    </div>
+  )
+}
+
+// ── Références critiques ─────────────────────────────────────────────────────────
+/** Charge ses propres données (montures actives + réserve/labo/transit, stations) plutôt
+ *  que de recevoir celles du dashboard par props : ce détail par référence n'a de sens
+ *  que sur cet écran, pas de raison de l'y faire vivre en permanence. */
+function CriticalReferencesScreen({ onNavigate: _onNavigate }: { onNavigate: (s: NavScreen) => void }) {
+  const [glasses, setGlasses] = useState<any[]>([])
+  const [stations, setStations] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [selectedReference, setSelectedReference] = useState<string | null>(null)
+
+  useEffect(() => {
+    const token = window.localStorage.getItem('token')
+    if (!token) { setIsLoading(false); return }
+    const headers = { Authorization: `Bearer ${token}` }
+    setIsLoading(true)
+    Promise.allSettled([
+      fetch(`${API_URL}/inventory/glasses?status=${REFERENCE_DETAIL_STATUSES.join(',')}`, { headers })
+        .then(r => (r.ok ? r.json() : Promise.reject())).then(p => p?.data?.glasses || []),
+      fetch(`${API_URL}/auth/stations`, { headers })
+        .then(r => (r.ok ? r.json() : Promise.reject())).then(p => p?.data?.stations || []),
+    ]).then(([glassesResult, stationsResult]) => {
+      setGlasses(glassesResult.status === 'fulfilled' ? glassesResult.value : [])
+      setStations(stationsResult.status === 'fulfilled' ? stationsResult.value : [])
+    }).finally(() => setIsLoading(false))
+  }, [])
+
+  const stationCityMap = useMemo(() => {
+    const map = new Map<number, string>()
+    stations.forEach((station: any) => {
+      if (station?.id == null) return
+      const city = resolveStationCity(station)
+      if (city) map.set(Number(station.id), city)
+    })
+    return map
+  }, [stations])
+
+  const breakdown = useMemo(() => computeReferenceLocationBreakdown(glasses, stationCityMap), [glasses, stationCityMap])
+
+  const referenceBrand = useMemo(() => {
+    const map = new Map<string, string>()
+    glasses.forEach((glass: any) => {
+      const reference = String(glass.reference || '').trim()
+      if (!reference || map.has(reference)) return
+      if (glass.brand) map.set(reference, String(glass.brand))
+    })
+    return map
+  }, [glasses])
+
+  // Le seuil se calcule sur le même stock actif que le dashboard (activeTotal =
+  // général+magasin+présentoir) : reconstruit ici en lignes StockSummaryRow-compatibles
+  // pour réutiliser criticalReferenceRows telle quelle plutôt que dupliquer la règle.
+  const rows = useMemo(() => {
+    const synthetic = Array.from(breakdown.values()).map(entry => ({
+      reference: entry.reference,
+      brand: referenceBrand.get(entry.reference) || '—',
+      qty_total: entry.activeTotal,
+    }))
+    return criticalReferenceRows(synthetic).filter(row => row.level !== 'ok')
+  }, [breakdown, referenceBrand])
+
+  const selectedBreakdown = selectedReference ? breakdown.get(selectedReference) : undefined
+  const selectedRow = selectedReference ? rows.find(row => row.reference === selectedReference) : undefined
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Références critiques</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Stock actif (général + magasin + présentoir) au seuil (2 montures) ou en dessous. Réserve, laboratoire et
+          transit restent visibles dans le détail de chaque référence, sans compter dans le calcul.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-slate-100 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+        {isLoading ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">Chargement…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">Aucune référence critique ou en rupture pour le moment.</p>
+        ) : (
+          <div className="space-y-3">
+            {rows.map(row => {
+              const levelColor = row.level === 'rupture' ? '#dc2626' : '#d97706'
+              const pct = row.threshold > 0 ? Math.min(100, (row.stock / row.threshold) * 100) : 0
+              const cities = breakdown.get(row.reference)?.cities || []
+              return (
+                <button
+                  type="button"
+                  key={row.reference}
+                  onClick={() => setSelectedReference(row.reference)}
+                  className="w-full rounded-xl border border-slate-100 p-3 text-left transition-colors hover:border-slate-300 hover:shadow-sm dark:border-slate-700 dark:hover:border-slate-600"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-sm font-semibold text-slate-900 dark:text-white">{row.reference}</p>
+                      <p className="truncate text-xs text-slate-400 dark:text-slate-500">
+                        {row.brand}{cities.length > 0 ? ` · ${cities.join(', ')}` : ''}
+                      </p>
+                    </div>
+                    <span
+                      className="inline-flex flex-shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                      style={{ backgroundColor: `${levelColor}18`, color: levelColor }}
+                    >
+                      {row.level === 'rupture' ? 'RUPTURE' : 'CRITIQUE'}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+                      <div className="h-2 rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: levelColor }} />
+                    </div>
+                    <span className="w-12 flex-shrink-0 text-right text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">
+                      {row.stock} / {row.threshold}
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {selectedReference && selectedBreakdown && selectedRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedReference(null)}>
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-100 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-800"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-mono text-sm font-bold text-slate-900 dark:text-white">{selectedReference}</p>
+                <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">{selectedRow.brand}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedReference(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white"
+              >
+                {ic.x('w-4 h-4')}
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Stock actif</p>
+              <p className="mt-1 text-2xl font-black tabular-nums text-slate-900 dark:text-white">
+                {selectedBreakdown.activeTotal} monture{selectedBreakdown.activeTotal > 1 ? 's' : ''}
+              </p>
+              <div className="mt-2 space-y-1 text-sm">
+                <div className="flex items-center justify-between"><span className="text-slate-500 dark:text-slate-400">Stock général</span><span className="tabular-nums font-semibold text-slate-900 dark:text-white">{selectedBreakdown.general}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-500 dark:text-slate-400">Magasin</span><span className="tabular-nums font-semibold text-slate-900 dark:text-white">{selectedBreakdown.magasin}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-500 dark:text-slate-400">Présentoir</span><span className="tabular-nums font-semibold text-slate-900 dark:text-white">{selectedBreakdown.presentoir}</span></div>
+                <div className="flex items-center justify-between border-t border-slate-100 pt-1 dark:border-slate-700"><span className="font-semibold text-slate-700 dark:text-slate-200">Total actif</span><span className="tabular-nums font-bold text-slate-900 dark:text-white">{selectedBreakdown.activeTotal}</span></div>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Autres positions</p>
+              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Ne comptent pas dans le calcul de criticité.</p>
+              <div className="mt-2 space-y-1 text-sm">
+                <div className="flex items-center justify-between"><span className="text-slate-500 dark:text-slate-400">Réserve</span><span className="tabular-nums font-semibold text-slate-900 dark:text-white">{selectedBreakdown.reserve}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-500 dark:text-slate-400">Laboratoire</span><span className="tabular-nums font-semibold text-slate-900 dark:text-white">{selectedBreakdown.labo}</span></div>
+                <div className="flex items-center justify-between"><span className="text-slate-500 dark:text-slate-400">Transit</span><span className="tabular-nums font-semibold text-slate-900 dark:text-white">{selectedBreakdown.transit}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -5851,6 +6064,7 @@ function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose
       case 'city': return `ville:${screen.pays}/${screen.city}`
       case 'suivi-detail': return `suivi:${screen.section}`
       case 'stock-general': return 'stock-general'
+      case 'critical-references': return 'critical-references'
       case 'frame': return `ref:${screen.ref}`
       case 'module': return `module:${screen.id}`
       default: return 'dashboard'
@@ -6586,6 +6800,7 @@ export default function App() {
       case 'city': return <CityDetailScreen block={current.block} pays={current.pays} city={current.city} onNavigate={navigate} cityStockCounts={cityStockCounts} framesByCity={framesByCity} revenueByCity={revenueByCity} />
       case 'suivi-detail': return <SuiviDetailScreen pays={current.pays} city={current.city} section={current.section} cityStockCounts={cityStockCounts} framesByCity={framesByCity} onNavigate={navigate} />
       case 'stock-general': return <StockGeneralScreen onNavigate={navigate} />
+      case 'critical-references': return <CriticalReferencesScreen onNavigate={navigate} />
       case 'frame': return <FrameDetailScreen frameRef={current.ref} city={current.city} framesByCity={framesByCity} />
       case 'module': return current.id === 'presentoir-bloc'
         ? <PresentoirBlocModule framesByCity={framesByCity} stationCities={stationCities} onNavigate={navigate} />
