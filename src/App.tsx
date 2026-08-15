@@ -3022,6 +3022,7 @@ function ReceptionView() {
   const [showSupplierModal, setShowSupplierModal] = useState(false)
   const [isSavingSupplier, setIsSavingSupplier] = useState(false)
   const [receptionSession, setReceptionSession] = useState<ReceptionSessionResult | null>(null)
+  const [isLabelSentToStock, setIsLabelSentToStock] = useState(false)
   const [receptionCommands, setReceptionCommands] = useState<ReceptionSessionResult[]>([])
   const [detailSessionGlasses, setDetailSessionGlasses] = useState<any[]>([])
   const [isLoadingDetailSessionGlasses, setIsLoadingDetailSessionGlasses] = useState(false)
@@ -4569,6 +4570,10 @@ function ReceptionView() {
   }
 
   useEffect(() => {
+    setIsLabelSentToStock(false)
+  }, [receptionSession?.code])
+
+  useEffect(() => {
     if (!receptionSession || !barcodeRef.current) return
 
     import('jsbarcode').then(module => {
@@ -4876,11 +4881,13 @@ function ReceptionView() {
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 <p>Monture(s) prévues</p>
                 <p className="mt-2 text-3xl font-black text-blue-600 dark:text-blue-400 tabular-nums">{receptionSession.targetCount}</p>
-                <div className="mt-3 rounded-full bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">● En attente</div>
+                <div className="mt-3 rounded-full bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                  {isLabelSentToStock ? 'En transit vers le stock général' : '● En attente'}
+                </div>
                 {receptionSession.compareText && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{receptionSession.compareText}</p>}
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <button type="button" onClick={downloadAndPrintBarcode} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-                    Imprimer et télécharger
+                  <button type="button" onClick={() => { void downloadAndPrintBarcode(); setIsLabelSentToStock(true) }} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                    Imprimer et envoyer vers le stock général
                   </button>
                 </div>
               </div>
