@@ -4470,6 +4470,7 @@ function ReceptionView() {
         compareText: `Commande ${supplier} · ${targetCount} monture(s)`,
       }
       setReceptionSession(newCommand)
+      setIsLabelSentToStock(true)
       setReceptionCommands(prev => [...prev.filter(cmd => cmd.orderId !== orderId), newCommand])
       setShowReceptionSessionCard(true)
     } catch {
@@ -4568,10 +4569,6 @@ function ReceptionView() {
       window.alert(error?.message || "Impossible de préparer l'étiquette.")
     }
   }
-
-  useEffect(() => {
-    setIsLabelSentToStock(false)
-  }, [receptionSession?.code])
 
   useEffect(() => {
     if (!receptionSession || !barcodeRef.current) return
