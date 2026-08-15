@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
 import { buildAssistantPayload, buildStockDigest, mapChatActionToScreen } from './chatContext'
-import { computeReferenceLocationBreakdown, criticalReferenceRows, summarizeStockSummary } from './dashboardMetrics'
+import { summarizeStockSummary } from './dashboardMetrics'
 import { businessBlocKeyOf, businessBlocLabel } from './businessBloc'
 // Importé plutôt que référencé par URL : il n'y a pas de dossier public/ ici, donc un
 // chemin littéral ne serait pas copié dans dist/ au build.
@@ -1313,54 +1313,14 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
     }
   }, [cityNames.length, selectedCity, cityNames.join(',')])
 
-  // Chargement local, indépendant du useEffect racine : uniquement pour lister les
-  // villes d'une référence critique dans le tableau ci-dessous. /inventory/stock-summary
-  // ne porte pas cette information (agrégée par référence, sans station).
-  const [referenceGlasses, setReferenceGlasses] = useState<any[]>([])
-  const [referenceStations, setReferenceStations] = useState<any[]>([])
-  useEffect(() => {
-    const token = window.localStorage.getItem('token')
-    if (!token) return
-    const headers = { Authorization: `Bearer ${token}` }
-    Promise.allSettled([
-      fetch(`${API_URL}/inventory/glasses?status=${REFERENCE_DETAIL_STATUSES.join(',')}`, { headers })
-        .then(r => (r.ok ? r.json() : Promise.reject())).then(p => p?.data?.glasses || []),
-      fetch(`${API_URL}/auth/stations`, { headers })
-        .then(r => (r.ok ? r.json() : Promise.reject())).then(p => p?.data?.stations || []),
-    ]).then(([glassesResult, stationsResult]) => {
-      setReferenceGlasses(glassesResult.status === 'fulfilled' ? glassesResult.value : [])
-      setReferenceStations(stationsResult.status === 'fulfilled' ? stationsResult.value : [])
-    })
-  }, [])
-
-  const referenceStationCityMap = useMemo(() => {
-    const map = new Map<number, string>()
-    referenceStations.forEach((station: any) => {
-      if (station?.id == null) return
-      const city = resolveStationCity(station)
-      if (city) map.set(Number(station.id), city)
-    })
-    return map
-  }, [referenceStations])
-  const referenceLocationBreakdown = useMemo(
-    () => computeReferenceLocationBreakdown(referenceGlasses, referenceStationCityMap),
-    [referenceGlasses, referenceStationCityMap]
-  )
-
   const summary = summarizeStockSummary(stockSummary)
   const selectedCityTotal = getCityTotal(stats)
   const targetCity = selectedCity || cityNames[0] || ''
-  // Tous statuts confondus dans /inventory/stock-summary (qui exclut déjà vendu/perdu/
-  // cassé/en transit/au labo/réservé) — is_critical seul ne dit ni quelle référence, ni
-  // où en est son stock par rapport au seuil.
-  const criticalRows = criticalReferenceRows(stockSummary)
-  const watchAndCriticalRows = criticalRows.filter(row => row.level !== 'ok')
 
   // Dénominateur écrit en toutes lettres sous chaque pourcentage. « du parc » était du
   // jargon de gestion de flotte : on ne devinait ni ce que le mot désignait, ni qu'il
   // changeait de sens sur la tuile des références.
   const montureDenominator = `sur ${summary.totalUnits.toLocaleString('fr-FR')} monture${summary.totalUnits > 1 ? 's' : ''}`
-  const referenceDenominator = `sur ${summary.totalReferences.toLocaleString('fr-FR')} référence${summary.totalReferences > 1 ? 's' : ''}`
 
   const totalRevenue = Object.values(cityStockCounts).reduce((sum, stats) => sum + (stats?.revenue || 0), 0)
   const revenueCities = Object.values(cityStockCounts).filter(stats => (stats?.revenue || 0) > 0).length
