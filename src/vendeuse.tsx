@@ -5,7 +5,7 @@ import './index.css'
 // serait pas copié dans dist/ au build.
 import logoUrl from '../logo.jpeg'
 import { GlassTable, downloadCSV } from './GlassTable'
-import { calculateGlassSimilarity, getGamme, normalizeAttr } from './glassSimilarity'
+import { calculateGlassSimilarity, getGamme, normalizeAttr, rankSimilarGlasses } from './glassSimilarity'
 import { buildAssistantPayload, buildStockDigest } from './chatContext'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
@@ -4791,7 +4791,38 @@ function VendeuseChatBot({ onClose, stationId, stationName, screen }: {
       })
       : allMovements
 
-    return buildStockDigest({ glasses, movements, users: [], stations: [], receptionCommands: [], supplierOrders: [] })
+    const digest = buildStockDigest({ glasses, movements, users: [], stations: [], receptionCommands: [], supplierOrders: [] })
+
+    // Détail des montures au présentoir, avec pour chacune ses meilleures alternatives —
+    // même calcul que le tableau Présentoir à l'écran (genre 20 % / forme 50 % / gamme
+    // 30 %, glassSimilarity.ts) : la vendeuse doit obtenir du chatbot les mêmes
+    // correspondances que celles qu'elle verrait en comparant elle-même à l'écran, pas une
+    // estimation approximative faite au jugé sur la liste brute.
+    const presentoirGlasses = glasses.filter((g: any) => String(g.status || '').toUpperCase() === 'EN_PRESENTOIR')
+    const presentoir = presentoirGlasses.map((glass: any) => ({
+      barcode: glass.barcode,
+      reference: glass.reference,
+      marque: glass.brand,
+      genre: glass.gender,
+      forme: glass.shape,
+      couleur: glass.color,
+      matiere: glass.material,
+      gamme: getGamme(glass.price),
+      prix: glass.price,
+      emplacement: glass.location_code,
+      montures_similaires: rankSimilarGlasses(glass, presentoirGlasses)
+        .filter(entry => entry.score > 0.5)
+        .slice(0, 5)
+        .map(entry => ({
+          barcode: entry.glass.barcode,
+          reference: entry.glass.reference,
+          marque: entry.glass.brand,
+          couleur: entry.glass.color,
+          similarite_pourcent: Math.round(entry.score * 100),
+        })),
+    }))
+
+    return { ...digest, presentoir_detail: presentoir }
   }
 
   async function send() {
