@@ -308,6 +308,7 @@ function mapGlassStatusToUI(status?: string) {
   if (normalized === 'EN_PRESENTOIR') return 'Présentoir'
   if (normalized === 'EN_LABORATOIRE') return 'Laboratoire'
   if (normalized === 'RESERVEE' || normalized === 'RESERVE') return 'Réservé'
+  if (normalized === 'RESERVEE_ENVOI') return 'En transit vers Stock magasin'
   if (normalized === 'VENDUE' || normalized === 'VENDU') return 'Vendu'
 
   return 'Stock général'
@@ -4381,10 +4382,14 @@ function ReceptionView() {
 
     const labels = Array.from(new Set(
       matches
-        // Un code d'emplacement quand il y en a un (stock général/local, présentoir) ;
-        // sinon le statut lisible (Laboratoire, Réservé, Vendu, ...), pour ne jamais
-        // laisser une monture qui existe bel et bien passer pour absente.
-        .map((glass: any) => String(glass.location_code || '').trim() || mapGlassStatusToUI(glass.status))
+        // Réservée par une liste d'envoi pas encore dispatchée : son emplacement en rayon
+        // n'a plus de sens à afficher, la monture est en train de partir. Sinon, un code
+        // d'emplacement quand il y en a un (stock général/local, présentoir) ; à défaut le
+        // statut lisible (Laboratoire, Réservé, Vendu, ...), pour ne jamais laisser une
+        // monture qui existe bel et bien passer pour absente.
+        .map((glass: any) => String(glass.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI'
+          ? `En transit vers Stock magasin${glass.reserved_for_city ? ` (${magasinLabel(glass.reserved_for_city)})` : ''}`
+          : String(glass.location_code || '').trim() || mapGlassStatusToUI(glass.status))
         .filter(Boolean),
     ))
 
@@ -4793,7 +4798,11 @@ function ReceptionView() {
                     <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.gender || '—'}</td>
                     <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.status || '—'}</td>
                     <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.created_at ? String(g.created_at).slice(0, 10) : '—'}</td>
-                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.location_code || g.station_name || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">
+                      {reserved
+                        ? `En transit vers Stock magasin${g.reserved_for_city ? ` (${magasinLabel(g.reserved_for_city)})` : ''}`
+                        : (g.location_code || g.station_name || '—')}
+                    </td>
                   </tr>
                   )
                 })
