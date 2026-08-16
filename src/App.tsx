@@ -1774,7 +1774,6 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
   const [expandedCountries, setExpandedCountries] = useState<string[]>([])
   const [isLoadingCountries, setIsLoadingCountries] = useState(false)
   const [expandedCities, setExpandedCities] = useState<string[]>([])
-  const [stockGeneralExpanded, setStockGeneralExpanded] = useState(false)
 
   useEffect(() => {
     const token = window.localStorage.getItem('token')
@@ -2134,62 +2133,43 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
         {/* Stock Général — le reliquat qui n'a pas encore quitté l'entrepôt central. Même
             gabarit que les pays pour que la lecture soit immédiate, avec une bordure
             pointillée : ce n'est pas un pays, c'est ce qui n'est encore parti nulle part.
-            En « Total lunette » le clic ouvre l'inventaire ; en « Suivi » il déplie les deux
-            flux de l'entrepôt, puisque le suivi parle de mouvements et non de quantités. */}
+            En « Total lunette » le clic ouvre l'inventaire ; en « Suivi » c'est un simple
+            bandeau d'info, sans interaction — le suivi de ce bloc se lit dans les pays
+            au-dessus, pas ici. */}
         {block !== 'ca' && (
           <div className="relative">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-4 h-4 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-shrink-0 z-10" />
-              <button
-                onClick={() => block === 'suivi'
-                  ? setStockGeneralExpanded(open => !open)
-                  : onNavigate({ type: 'stock-general' })}
-                className="flex-1 flex items-center justify-between px-5 py-3.5 bg-slate-50 dark:bg-slate-900/40 border border-dashed border-slate-300 dark:border-slate-600 rounded-2xl hover:shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-all"
-              >
-                <span className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2.5">
-                  {/* Icône de trait plutôt qu'un emoji : les drapeaux des pays au-dessus sont
-                      des emojis parce qu'ils identifient un pays, l'entrepôt central non. */}
-                  {ic.warehouse('w-6 h-6 text-slate-400 dark:text-slate-500 flex-shrink-0')}
-                  <span>Stock Général</span>
-                </span>
-                <div className="flex items-center gap-3">
+              {block === 'suivi' ? (
+                <div className="flex-1 flex items-center justify-between px-5 py-3.5 bg-slate-50 dark:bg-slate-900/40 border border-dashed border-slate-300 dark:border-slate-600 rounded-2xl">
+                  <span className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2.5">
+                    {ic.warehouse('w-6 h-6 text-slate-400 dark:text-slate-500 flex-shrink-0')}
+                    <span>Stock Général</span>
+                  </span>
                   <span className="text-sm font-black text-slate-900 dark:text-white tabular-nums">
                     {stockGeneralFrames.toLocaleString('fr-FR')}
                   </span>
-                  <span className="text-slate-400">
-                    {block === 'suivi' && stockGeneralExpanded ? ic.chevDown() : ic.chevRight()}
-                  </span>
                 </div>
-              </button>
-            </div>
-
-            {/* L'entrepôt central n'a pas de villes sous lui, mais deux flux : ce qui y entre
-                depuis le fournisseur, ce qui en sort vers les magasins. Les deux mènent au
-                module Expédition : c'est là que vivent déjà la création d'un arrivage
-                fournisseur (« Nouvelle ») et l'envoi de listes vers le stock magasin. */}
-            {block === 'suivi' && stockGeneralExpanded && (
-              <div className="ml-6 border-l border-dashed border-slate-200 dark:border-slate-700 pl-4 space-y-2">
-                {[
-                  { label: 'Arrivage fournisseur', color: '#2563eb' },
-                  { label: 'Expédition vers le stock magasin', color: '#0891b2' },
-                ].map(flow => (
-                  <div key={flow.label} className="relative">
-                    <div className="absolute -left-4 top-4 w-4 h-px bg-slate-200 dark:bg-slate-700" />
-                    <div className="flex items-center gap-2">
-                      <div className="w-3.5 h-3.5 rounded-full border-2 bg-white dark:bg-slate-900 flex-shrink-0 z-10" style={{ borderColor: flow.color }} />
-                      <button
-                        type="button"
-                        onClick={() => onNavigate({ type: 'module', id: 'reception' })}
-                        className="flex-1 flex items-center justify-between px-4 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:shadow-sm hover:border-slate-300 dark:hover:border-slate-600 transition-all text-left"
-                      >
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">{flow.label}</span>
-                        {ic.chevRight('w-3.5 h-3.5 text-slate-300')}
-                      </button>
-                    </div>
+              ) : (
+                <button
+                  onClick={() => onNavigate({ type: 'stock-general' })}
+                  className="flex-1 flex items-center justify-between px-5 py-3.5 bg-slate-50 dark:bg-slate-900/40 border border-dashed border-slate-300 dark:border-slate-600 rounded-2xl hover:shadow-sm hover:border-slate-400 dark:hover:border-slate-500 transition-all"
+                >
+                  <span className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2.5">
+                    {/* Icône de trait plutôt qu'un emoji : les drapeaux des pays au-dessus sont
+                        des emojis parce qu'ils identifient un pays, l'entrepôt central non. */}
+                    {ic.warehouse('w-6 h-6 text-slate-400 dark:text-slate-500 flex-shrink-0')}
+                    <span>Stock Général</span>
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-black text-slate-900 dark:text-white tabular-nums">
+                      {stockGeneralFrames.toLocaleString('fr-FR')}
+                    </span>
+                    <span className="text-slate-400">{ic.chevRight()}</span>
                   </div>
-                ))}
-              </div>
-            )}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

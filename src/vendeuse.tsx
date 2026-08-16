@@ -1511,7 +1511,8 @@ const GLASS_COLUMNS: Column<Glass>[] = [
 
 const SOLD_COLUMNS: Column<Glass>[] = [
   ...GLASS_COLUMNS.filter(c => c.key !== 'location'),
-  { key: 'soldAt', label: 'Vendue le', value: g => fmtDate(g.sold_at || g.updated_at || g.created_at) },
+  { key: 'status', label: 'Statut', value: g => g.status || '' },
+  { key: 'soldAt', label: 'Envoyée le', value: g => fmtDate(g.sold_at || g.updated_at || g.created_at) },
 ]
 
 // Un casier de présentoir libéré aujourd'hui (vente, réserve, mise en caisse), avec la
@@ -1632,6 +1633,31 @@ function buildProformaLines(proformas: Proforma[], sold: Glass[]): ProformaLine[
     }
   }
   return lines
+}
+
+/** Une ligne par monture de proforma, tous statuts confondus (en attente, vendue, rendue)
+ *  — pas seulement celles déjà encaissées comme le donnait data.sold seul. La vendeuse a
+ *  envoyé la monture à la caisse dès la proforma créée ; elle veut la retrouver ici sans
+ *  attendre que la Caisse ait tranché. */
+function buildSoldViewGlasses(proformas: Proforma[], sold: Glass[]): Glass[] {
+  const soldBarcodes = new Set(sold.map(glass => glass.barcode))
+  const rows: Glass[] = []
+
+  for (const proforma of proformas) {
+    for (const item of proforma.items || []) {
+      rows.push({
+        barcode: item.barcode || '',
+        reference: item.reference,
+        brand: item.brand,
+        shape: item.shape || item.forme,
+        color: item.color,
+        price: item.unit_price,
+        status: ligneStatut(item, soldBarcodes),
+        sold_at: item.settled_at || proforma.settled_at || proforma.created_at,
+      })
+    }
+  }
+  return rows
 }
 
 // ── Liste Ventes & proformas ───────────────────────────────────────────────────
@@ -1976,6 +2002,7 @@ function TableScreen({ table, data, user, stationId, claimsError, onBack }: {
   }
 
   const proformaLines = useMemo(() => buildProformaLines(data.proformas, data.sold), [data.proformas, data.sold])
+  const soldViewGlasses = useMemo(() => buildSoldViewGlasses(data.proformas, data.sold), [data.proformas, data.sold])
 
   const LINE_COLUMNS: Column<ProformaLine>[] = [
     { key: 'code', label: 'Code', value: line => line.code, onClick: line => setDetail({ kind: 'proforma', proforma: line.proforma }) },
@@ -2045,7 +2072,7 @@ function TableScreen({ table, data, user, stationId, claimsError, onBack }: {
           </div>
 
           {soldSubTab === 'ventes' ? (
-            <DataTable columns={SOLD_COLUMNS} rows={data.sold} filename={`lunettes-vendues-${stamp}`} empty="Aucune vente enregistrée." />
+            <DataTable columns={SOLD_COLUMNS} rows={soldViewGlasses} filename={`lunettes-vendues-${stamp}`} empty="Aucune vente enregistrée." />
           ) : replacement.loading ? (
             <p className="py-10 text-center text-sm text-slate-400">Chargement…</p>
           ) : replacement.error ? (
