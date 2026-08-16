@@ -4758,20 +4758,26 @@ function ReceptionView() {
               ) : pageRows.length === 0 ? (
                 <tr><td colSpan={9} className="px-3 py-6 text-center text-green-700">Aucune lunette trouvée.</td></tr>
               ) : (
-                pageRows.map((g: any, idx: number) => (
+                pageRows.map((g: any, idx: number) => {
+                  const reserved = isReservedForShipment(g)
+                  return (
                   <tr
                     key={`stock-${g.id || idx}`}
                     onClick={() => setSelectedStockPreview(g)}
-                    className={`cursor-pointer transition-colors ${stockListSelection.includes(String(g.barcode || ''))
-                      ? 'bg-blue-50 dark:bg-blue-900/20'
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                    title={reserved ? 'Déjà réservée par une liste d\'envoi pas encore expédiée' : undefined}
+                    className={`cursor-pointer transition-colors ${reserved
+                      ? 'opacity-50'
+                      : stockListSelection.includes(String(g.barcode || ''))
+                        ? 'bg-blue-50 dark:bg-blue-900/20'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
                   >
                     <td className="px-2 py-2" onClick={event => event.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={stockListSelection.includes(String(g.barcode || ''))}
                         onChange={() => toggleStockSelection(String(g.barcode || ''))}
-                        className="h-4 w-4 cursor-pointer accent-blue-600"
+                        disabled={reserved}
+                        className="h-4 w-4 cursor-pointer accent-blue-600 disabled:cursor-not-allowed"
                       />
                     </td>
                     <td className="px-2 py-2" onClick={event => event.stopPropagation()}>
@@ -4789,7 +4795,8 @@ function ReceptionView() {
                     <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.created_at ? String(g.created_at).slice(0, 10) : '—'}</td>
                     <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.location_code || g.station_name || '—'}</td>
                   </tr>
-                ))
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -6698,6 +6705,33 @@ function PlaceholderView({ title }: { title: string }) {
   )
 }
 
+// La réponse de l'IA arrive en markdown (gras, listes, titres...), pensé pour l'affichage.
+// Lu tel quel par SpeechSynthesisUtterance, le synthétiseur prononce les délimiteurs
+// ("astérisque astérisque") au lieu de les traiter comme une mise en forme muette.
+function sanitizeForSpeech(text: string) {
+  return text
+    // Liens et images : seul le texte visible se prononce, pas l'URL.
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // Gras/italique/barré, du plus large délimiteur au plus étroit pour ne pas couper
+    // un ** au milieu d'un ***.
+    .replace(/(\*\*\*|___)(.*?)\1/g, '$2')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/~~(.*?)~~/g, '$1')
+    // Code : les blocs disparaissent (illisibles à l'oral), l'inline garde son contenu.
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]*)`/g, '$1')
+    // Titres, citations, puces et numérotation en début de ligne.
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/^[-*+]\s+/gm, '')
+    .replace(/^\d+\.\s+/gm, '')
+    // Ce qui subsiste (astérisque isolé, dièse, tilde...) : supprimé plutôt qu'épelé.
+    .replace(/[*_#>`~]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 // ── Chatbot ────────────────────────────────────────────────────────────────────
 function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose: () => void; onNavigate: (s: NavScreen) => void; currentScreen: NavScreen; stockSummary: Array<any> }) {
   const [messages, setMessages] = useState<ChatMsg[]>([
@@ -6808,7 +6842,7 @@ function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose
       }
 
       if ('speechSynthesis' in window) {
-        const u = new SpeechSynthesisUtterance(reply)
+        const u = new SpeechSynthesisUtterance(sanitizeForSpeech(reply))
         u.lang = 'fr-FR'; u.rate = 0.9
         speechSynthesis.cancel(); speechSynthesis.speak(u)
       }
