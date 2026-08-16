@@ -2113,7 +2113,9 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
             </div>
 
             {/* L'entrepôt central n'a pas de villes sous lui, mais deux flux : ce qui y entre
-                depuis le fournisseur, ce qui en sort vers les magasins. */}
+                depuis le fournisseur, ce qui en sort vers les magasins. Les deux mènent au
+                module Expédition : c'est là que vivent déjà la création d'un arrivage
+                fournisseur (« Nouvelle ») et l'envoi de listes vers le stock magasin. */}
             {block === 'suivi' && stockGeneralExpanded && (
               <div className="ml-6 border-l border-dashed border-slate-200 dark:border-slate-700 pl-4 space-y-2">
                 {[
@@ -2124,9 +2126,14 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
                     <div className="absolute -left-4 top-4 w-4 h-px bg-slate-200 dark:bg-slate-700" />
                     <div className="flex items-center gap-2">
                       <div className="w-3.5 h-3.5 rounded-full border-2 bg-white dark:bg-slate-900 flex-shrink-0 z-10" style={{ borderColor: flow.color }} />
-                      <div className="flex-1 flex items-center px-4 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      <button
+                        type="button"
+                        onClick={() => onNavigate({ type: 'module', id: 'reception' })}
+                        className="flex-1 flex items-center justify-between px-4 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:shadow-sm hover:border-slate-300 dark:hover:border-slate-600 transition-all text-left"
+                      >
                         <span className="font-semibold text-slate-800 dark:text-slate-200">{flow.label}</span>
-                      </div>
+                        {ic.chevRight('w-3.5 h-3.5 text-slate-300')}
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -4387,7 +4394,11 @@ function ReceptionView() {
   }
 
   function renderStockPage() {
-    const generalGlasses = (stockGlasses || []).filter((g: any) => isGeneralStockStatus(g.status))
+    // RESERVEE_ENVOI reste affichée ici (grisée, non sélectionnable) plutôt que masquée : une
+    // monture déjà prise par une liste pas encore dispatchée doit rester visible pour qu'on ne
+    // la croie pas disparue, sans pouvoir la remettre dans une deuxième liste en parallèle.
+    const generalGlasses = (stockGlasses || []).filter((g: any) =>
+      isGeneralStockStatus(g.status) || String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI')
     const magasinGlasses = (stockGlasses || []).filter((g: any) => isLocalStockStatus(g.status))
 
     const configuredMagasins = magasinOptions.map(option => String(option.city || '').trim()).filter(Boolean)
@@ -4641,7 +4652,12 @@ function ReceptionView() {
     const start = (currentPage - 1) * STOCK_PAGE_SIZE
     const pageRows = generalGlasses.slice(start, start + STOCK_PAGE_SIZE)
 
-    const allSelected = generalGlasses.length > 0 && generalGlasses.every((g: any) => stockListSelection.includes(String(g.barcode || '')))
+    // RESERVEE_ENVOI : déjà prise par une autre liste pas encore dispatchée, on ne la propose
+    // plus à la sélection — la re-sélectionner créerait deux listes concurrentes sur la même
+    // monture. « Tout sélectionner » ne porte donc que sur les montures encore libres.
+    const isReservedForShipment = (g: any) => String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI'
+    const selectableGlasses = generalGlasses.filter((g: any) => !isReservedForShipment(g))
+    const allSelected = selectableGlasses.length > 0 && selectableGlasses.every((g: any) => stockListSelection.includes(String(g.barcode || '')))
 
     return (
       <div className="space-y-3">
@@ -4721,7 +4737,7 @@ function ReceptionView() {
                   <input
                     type="checkbox"
                     checked={allSelected}
-                    onChange={() => setStockListSelection(allSelected ? [] : generalGlasses.map((g: any) => String(g.barcode || '')).filter(Boolean))}
+                    onChange={() => setStockListSelection(allSelected ? [] : selectableGlasses.map((g: any) => String(g.barcode || '')).filter(Boolean))}
                     title="Tout sélectionner"
                     className="h-4 w-4 cursor-pointer accent-blue-600"
                   />
