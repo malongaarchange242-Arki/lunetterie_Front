@@ -531,6 +531,56 @@ function isLocalStockStatus(status: string) {
   return normalized === 'EN_STOCK_SOUS_STATION'
 }
 
+// Une monture qui a quitté un poste sans confirmation d'arrivée au poste suivant ne doit
+// compter ni dans la source ni dans la destination : EN_TRANSIT sert pour toutes les jambes
+// du pipeline (stock général → magasin, mais aussi VENDUE → labo, cf. AGENTS.md), et
+// RESERVEE_ENVOI est la même situation pour une réserve en partance (cf. ligne 4343).
+function isTransitStatus(status: string) {
+  const normalized = String(status || '').trim().toUpperCase()
+  return normalized === 'EN_TRANSIT' || normalized === 'RESERVEE_ENVOI'
+}
+
+type SessionReferenceRow = {
+  reference: string
+  total: number
+  general: number
+  transit: number
+  local: number
+  presentoir: number
+  caisse: number
+  labo: number
+  vendu: number
+  // Code-barres des montures derrière cette référence : suivi individuel oblige, un clic
+  // sur la ligne ouvre le trajet du premier — utile surtout quand total = 1, le cas courant
+  // d'une session de réception (une référence = une monture reçue).
+  barcodes: string[]
+}
+
+// Répartit les montures d'une session par référence sur tout le pipeline documenté dans
+// AGENTS.md, transit compris entre chaque paire de postes — sans lui, une monture partie
+// sans arrivée confirmée disparaîtrait de toutes les colonnes.
+// RESERVEE (réserve posée depuis le présentoir, pas son envoi) reste comptée avec
+// Présentoir : la monture est toujours physiquement à ce poste, seul son statut change.
+function buildSessionReferenceRows(glasses: any[]): SessionReferenceRow[] {
+  const rows = new Map<string, SessionReferenceRow>()
+  glasses.forEach((glass: any) => {
+    const reference = String(glass.reference || glass.barcode || 'REF-SANS-NOM')
+    const row = rows.get(reference) || { reference, total: 0, general: 0, transit: 0, local: 0, presentoir: 0, caisse: 0, labo: 0, vendu: 0, barcodes: [] }
+    row.total += 1
+    if (glass.barcode) row.barcodes.push(String(glass.barcode))
+    const status = String(glass.status || '').trim().toUpperCase()
+    if (isTransitStatus(status)) row.transit += 1
+    else if (isLocalStockStatus(status)) row.local += 1
+    else if (status === 'EN_PRESENTOIR' || status === 'RESERVEE' || status === 'RESERVE') row.presentoir += 1
+    else if (status === 'EN_CAISSE') row.caisse += 1
+    else if (status === 'EN_LABORATOIRE' || status === 'PRETE_A_LIVRER') row.labo += 1
+    else if (status === 'VENDUE' || status === 'VENDU') row.vendu += 1
+    else row.general += 1
+    rows.set(reference, row)
+  })
+  return Array.from(rows.values()).sort((a, b) => a.reference.localeCompare(b.reference, 'fr'))
+}
+
 // Découpe un code d'emplacement « RAYON-A-ETA-01-BAC-B-POS-12 ». Hissé au niveau module :
 // la page Expédition et l'écran Stock général filtrent sur les mêmes trois axes, deux copies
 // finiraient par diverger.
@@ -3098,6 +3148,19 @@ function HistoryView() {
   const [liveItems, setLiveItems] = useState<Movement[]>(MOVEMENTS_DATA)
   const [knownStations, setKnownStations] = useState<any[]>([])
   const [quickSearch, setQuickSearch] = useState('')
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
+
+  // Sessions de réception (EXP-N), reprises en lecture seule depuis l'écran Expédition —
+  // même source que ReceptionView.loadSessions / loadReceptionCommands.
+  const [receptionSessions, setReceptionSessions] = useState<typeof RECEPTION_SESSIONS>([])
+  const [receptionSessionCommands, setReceptionSessionCommands] = useState<ReceptionSessionResult[]>([])
+  const [isLoadingReceptionSessions, setIsLoadingReceptionSessions] = useState(false)
+
+  // Détail d'une session au clic sur sa carte : montures réellement enregistrées dans
+  // cette session, et où chacune se trouve maintenant (général / transit / magasin).
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null)
+  const [sessionGlassesById, setSessionGlassesById] = useState<Record<string, any[]>>({})
+  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
 
   // Panneau « Suivi en direct » d'une monture.
   const [trackedBarcode, setTrackedBarcode] = useState<string | null>(null)
@@ -3105,6 +3168,10 @@ function HistoryView() {
   const [isTrackLoading, setIsTrackLoading] = useState(false)
   const [trackError, setTrackError] = useState(false)
   const [, setNowTick] = useState(0)
+  // Statut réel de la monture (pas déduit du journal des mouvements) : une expédition en
+  // cours ne pose pas toujours de ligne EXPEDITION dans /inventory/movements, alors que le
+  // champ status de la monture, lui, est à jour immédiatement.
+  const [trackGlass, setTrackGlass] = useState<any | null>(null)
 
   // Visionneuse photo plein écran.
   const [lightbox, setLightbox] = useState<{ url: string; caption: string } | null>(null)
@@ -3199,6 +3266,56 @@ function HistoryView() {
       .catch(() => setKnownStations([]))
   }, [])
 
+  // Sessions de réception : mêmes deux appels que ReceptionView (la liste des sessions,
+  // puis leur commande de scan liée pour la date de réception réelle).
+  useEffect(() => {
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+    const headers = { Authorization: `Bearer ${token}` }
+    setIsLoadingReceptionSessions(true)
+
+    Promise.all([
+      fetch(`${API_URL}/inventory/expeditions`, { headers })
+        .then(response => (response.ok ? response.json() : Promise.reject()))
+        .then(payload => payload?.data?.orders || [])
+        .catch(() => []),
+      fetch(`${API_URL}/inventory/reception-commands`, { headers })
+        .then(response => (response.ok ? response.json() : Promise.reject()))
+        .then(payload => payload?.data?.commands || [])
+        .catch(() => []),
+    ]).then(([orders, commands]) => {
+      const nextSessions = orders.map((order: any) => {
+        const timestampSource = order.created_at || order.updated_at || order.order_date || new Date().toISOString()
+        const parsedDate = new Date(timestampSource)
+        const safeDate = Number.isNaN(parsedDate.getTime()) && order.order_date
+          ? new Date(`${String(order.order_date).trim()}T12:00:00`)
+          : parsedDate
+        return {
+          id: `EXP-${order.id}`,
+          orderId: order.id,
+          date: safeDate.toLocaleDateString('fr-FR'),
+          time: safeDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+          frames: Number(order.quantity || 0),
+          status: 'Enregistré',
+          operator: order.supplier || '—',
+          note: order.note || '',
+          quantity: Number(order.quantity || 0),
+        }
+      })
+      const nextCommands: ReceptionSessionResult[] = commands.map((command: any) => ({
+        id: Number(command.id || 0),
+        orderId: Number(command.supplier_order_id || 0),
+        code: String(command.code || ''),
+        targetCount: Number(command.target_count || 0),
+        registeredCount: Number(command.registered_count || 0),
+        status: String(command.status || ''),
+        activatedAt: command.activated_at || null,
+      })).filter((cmd: ReceptionSessionResult) => cmd.orderId > 0 && cmd.code)
+      setReceptionSessions(nextSessions)
+      setReceptionSessionCommands(nextCommands)
+    }).finally(() => setIsLoadingReceptionSessions(false))
+  }, [])
+
   // Suivi en direct : chargement puis polling toutes les 12s tant que le panneau est ouvert.
   useEffect(() => {
     if (!trackedBarcode) return
@@ -3218,11 +3335,19 @@ function HistoryView() {
         })
         .catch(() => { if (!cancelled) setTrackError(true) })
         .finally(() => { if (!cancelled) setIsTrackLoading(false) })
+
+      // Sans station_id dans l'URL : avec, ce même endpoint pose la monture à ce poste
+      // (GetGlassByBarcode, cf. commentaire ligne ~2850) — un suivi ne doit rien déplacer.
+      fetch(`${API_URL}/inventory/glasses/${encodeURIComponent(trackedBarcode)}`, { headers })
+        .then(response => (response.ok ? response.json() : Promise.reject()))
+        .then(payload => { if (!cancelled) setTrackGlass(payload?.data?.glass || payload?.data || null) })
+        .catch(() => { if (!cancelled) setTrackGlass(null) })
     }
 
     setIsTrackLoading(true)
     setTrackMovements([])
     setTrackError(false)
+    setTrackGlass(null)
     fetchTrack()
     const poll = window.setInterval(fetchTrack, 12000)
     return () => { cancelled = true; window.clearInterval(poll) }
@@ -3251,10 +3376,19 @@ function HistoryView() {
   }
 
   function handleQuickSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Enter' && quickSearch.trim()) {
-      openTrack(quickSearch.trim())
-      setQuickSearch('')
-    }
+    if (event.key !== 'Enter' || !quickSearch.trim()) return
+    // Entrée sélectionne la première suggestion affichée, sinon replie sur l'ancien
+    // comportement (code-barres exact tapé en entier).
+    const first = searchSuggestions[0]
+    openTrack(first ? first.barcode : quickSearch.trim())
+    setQuickSearch('')
+    setIsSearchFocused(false)
+  }
+
+  function selectSearchSuggestion(barcode: string) {
+    openTrack(barcode)
+    setQuickSearch('')
+    setIsSearchFocused(false)
   }
 
   function selectStage(stage: MvtStage) {
@@ -3263,12 +3397,49 @@ function HistoryView() {
     setSelectedLocalStation(null)
   }
 
+  async function toggleSessionDetail(session: (typeof RECEPTION_SESSIONS)[number], linkedCommand: ReceptionSessionResult | undefined) {
+    if (expandedSessionId === session.id) {
+      setExpandedSessionId(null)
+      return
+    }
+    setExpandedSessionId(session.id)
+    if (sessionGlassesById[session.id] || !linkedCommand?.id) return
+
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+
+    setLoadingSessionId(session.id)
+    try {
+      const response = await fetch(`${API_URL}/inventory/glasses?reception_command_id=${linkedCommand.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) throw new Error('glasses unavailable')
+      const payload = await response.json().catch(() => ({}))
+      setSessionGlassesById(prev => ({ ...prev, [session.id]: payload?.data?.glasses || [] }))
+    } catch {
+      setSessionGlassesById(prev => ({ ...prev, [session.id]: [] }))
+    } finally {
+      setLoadingSessionId(null)
+    }
+  }
+
   const pipeline: MvtStage[] = ['shipped', 'received', 'display', 'caisse', 'labo', 'sold']
 
   // Une ligne par monture (sa position la plus récente), pas le journal brut : mêmes
   // compteurs de cartes que historique.html (dedupeByMonture), pour que « 3 montures au
   // présentoir » compte des montures et non des allers-retours.
   const dedupedAll = useMemo(() => dedupeMovementsByBarcode(liveItems), [liveItems])
+
+  // Suggestions de recherche : sur les mouvements déjà chargés (mêmes 300 derniers que les
+  // cartes d'étape), pas un nouvel appel — la barre retrouve une monture avec de l'activité
+  // récente, pas tout le catalogue jamais enregistré.
+  const searchSuggestions = useMemo(() => {
+    const q = quickSearch.trim().toLowerCase()
+    if (!q) return [] as Movement[]
+    return dedupedAll
+      .filter(m => m.barcode.toLowerCase().includes(q) || (m.reference || '').toLowerCase().includes(q) || (m.brand || '').toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [quickSearch, dedupedAll])
   const activeMeta = STAGE_META[selectedStage]
   const stageMovements = useMemo(() => dedupedAll.filter(m => m.stage === selectedStage), [dedupedAll, selectedStage])
 
@@ -3303,6 +3474,8 @@ function HistoryView() {
   const trackSorted = [...trackMovements].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
   const trackPhotoUrl = trackSorted.map(movementPhotoUrl).find(Boolean) || null
   const trackLabel = trackSorted.length ? [trackSorted[0].brand, trackSorted[0].reference].filter(Boolean).join(' ') : ''
+  // Trajet lu comme un colis DHL : la 1ère étape en haut, la plus récente en bas.
+  const trackChronological = [...trackSorted].reverse()
 
   return (
     <div className="space-y-5">
@@ -3324,9 +3497,50 @@ function HistoryView() {
               value={quickSearch}
               onChange={e => setQuickSearch(e.target.value)}
               onKeyDown={handleQuickSearchKeyDown}
+              onFocus={() => setIsSearchFocused(true)}
+              // Délai avant fermeture : sans lui, le blur ferme le menu avant que le clic sur
+              // une suggestion n'ait le temps de se déclencher.
+              onBlur={() => window.setTimeout(() => setIsSearchFocused(false), 150)}
               placeholder="Suivre un code-barres..."
               className="w-48 rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
+
+            {isSearchFocused && quickSearch.trim() && (
+              // max-w en vh du viewport, pas seulement w-72 : sur un petit mobile, un menu
+              // ancré à gauche de l'input mais large de 288px peut sortir de l'écran et forcer
+              // un défilement horizontal de toute la page.
+              <div className="absolute left-0 top-full z-20 mt-1.5 max-h-80 w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                {searchSuggestions.length === 0 ? (
+                  <p className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400">
+                    Aucune monture trouvée dans l'activité récente.
+                  </p>
+                ) : (
+                  searchSuggestions.map(m => {
+                    const meta = STAGE_META[m.stage]
+                    const label = [m.brand, m.reference].filter(Boolean).join(' ')
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => selectSearchSuggestion(m.barcode)}
+                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
+                      >
+                        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800">
+                          {m.photoUrl ? <img src={m.photoUrl} alt="" className="h-full w-full object-cover" /> : ic.glasses('w-4 h-4')}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-mono text-xs font-bold text-slate-900 dark:text-white">{m.barcode}</span>
+                          {label && <span className="block truncate text-xs text-slate-500 dark:text-slate-400">{label}</span>}
+                        </span>
+                        <span className="flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ backgroundColor: `${meta.color}1f`, color: meta.color }}>
+                          {meta.label}
+                        </span>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -3347,179 +3561,126 @@ function HistoryView() {
 
       {activeTab !== 'lunettes' ? (
         <EmployeesView />
+      ) : isLoadingReceptionSessions ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-400">
+          Chargement des sessions...
+        </div>
+      ) : receptionSessions.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-400">
+          Aucune session de réception pour le moment.
+        </div>
       ) : (
-      <>
-        {/* .stage-grid — sélecteur du détail, toujours affiché.
-            Mobile : carrousel horizontal à accroche, les cartes débordent volontairement
-            de la marge du conteneur (-mx-4/px-4) pour que le défilement aille bord à bord.
-            sm+ : sm:grid reprend la main sur le flex et on revient à une vraie grille. */}
-        <div className={`${CARD_ROW_CLASS} sm:grid-cols-3 xl:grid-cols-6`}>
-          {pipeline.map(stage => {
-            const items = dedupedAll.filter(m => m.stage === stage)
-            const meta = STAGE_META[stage]
-            const isActive = stage === selectedStage
+        <div className="flex flex-col gap-4">
+          {receptionSessions.map(s => {
+            const linkedCommand = receptionSessionCommands.find(cmd => cmd.orderId === s.orderId)
+            const receivedCount = linkedCommand ? Number(linkedCommand.registeredCount || 0) : 0
+            const totalCount = Number(s.frames || 0)
+            const receptionState = getReceptionCardState(linkedCommand, receivedCount, totalCount)
+            const cardBgClass = getReceptionCardClass(receptionState)
+            const receivedAt = linkedCommand?.activatedAt ? formatMovementDate(linkedCommand.activatedAt) : null
+            const isExpanded = expandedSessionId === s.id
+            const isLoadingDetail = loadingSessionId === s.id
+            const referenceRows = buildSessionReferenceRows(sessionGlassesById[s.id] || [])
             return (
-              <button
-                key={stage}
-                type="button"
-                onClick={() => selectStage(stage)}
-                aria-pressed={isActive}
-                className={`${CARD_CLASS} sm:aspect-square ${isActive
-                  ? 'bg-white dark:bg-slate-900'
-                  : 'border-slate-200 bg-white hover:border-blue-200 dark:border-slate-700 dark:bg-slate-900'}`}
-                style={isActive ? { borderColor: meta.color, backgroundColor: `${meta.color}0f` } : undefined}
+              <div
+                key={s.id}
+                onClick={() => void toggleSessionDetail(s, linkedCommand)}
+                className={`${cardBgClass} cursor-pointer rounded-2xl border p-4 transition-colors hover:brightness-[0.98]`}
               >
-                <span
-                  className="flex h-[42px] w-[42px] items-center justify-center rounded-lg"
-                  style={isActive
-                    ? { backgroundColor: meta.color, color: '#fff' }
-                    : { backgroundColor: `${meta.color}1f`, color: meta.color }}
-                >
-                  {meta.icon}
-                </span>
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{meta.label}</span>
-                <span className="mt-auto text-[28px] font-extrabold leading-none tracking-tight tabular-nums text-slate-900 dark:text-white">{items.length}</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">{items.length > 1 ? 'montures' : 'monture'}</span>
-              </button>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2"><span className="font-bold text-slate-900 dark:text-white text-sm">{s.id}</span><Badge status={s.status} /></div>
+                    <p className="text-xs text-slate-400 mt-1">{s.date} à {s.time}</p>
+                    <div className="mt-2 inline-flex max-w-full items-center rounded-lg border border-blue-100 bg-blue-50/80 px-2.5 py-1.5 text-xs font-medium text-blue-700 dark:border-blue-800/60 dark:bg-blue-900/20 dark:text-blue-300">
+                      <span className="truncate">{formatReceptionNote(s.note, s.operator)}</span>
+                    </div>
+                    {receptionState === 'complete' && (
+                      <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-300">
+                        {ic.check('w-3.5 h-3.5')}
+                        <span>Enregistrement terminé</span>
+                      </div>
+                    )}
+                    {/* Traçabilité horaire : la réception coche « Reçu » et amorce
+                        l'enregistrement au même instant côté serveur (activated_at) — il n'y a
+                        pas encore de champ distinct pour l'un ou l'autre. La fin n'est pas
+                        horodatée du tout (seul le compte registered_count l'atteste) : à
+                        confirmer avec le backend avant d'afficher autre chose qu'un tiret. */}
+                    <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                      <div>
+                        <p className="text-slate-400">Reçu le</p>
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">{receivedAt ? `${receivedAt.date} ${receivedAt.time}` : '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400">Début enregistrement</p>
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">{receivedAt ? receivedAt.time : '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400">Fin enregistrement</p>
+                        <p className="font-semibold text-slate-700 dark:text-slate-200">—</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2 text-right">
+                    <div>
+                      <p className="text-3xl font-black text-blue-600 dark:text-blue-400 tabular-nums">{s.frames}</p>
+                      <p className="text-xs text-slate-400">quantité</p>
+                    </div>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="mt-3 border-t border-slate-400/40 pt-3 dark:border-slate-700/70" onClick={e => e.stopPropagation()}>
+                    {isLoadingDetail ? (
+                      <p className="py-3 text-center text-xs text-slate-500 dark:text-slate-400">Chargement des montures...</p>
+                    ) : referenceRows.length === 0 ? (
+                      <p className="py-3 text-center text-xs text-slate-500 dark:text-slate-400">Aucune monture enregistrée pour cette session.</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-2xl border border-emerald-200 dark:border-emerald-700">
+                        <div className="min-w-[920px]">
+                          <table className="w-full min-w-full divide-y divide-emerald-200 text-xs dark:divide-emerald-700 sm:text-sm">
+                            <thead className="bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200">
+                              <tr>
+                                <th className="px-3 py-2.5 text-left font-semibold">Référence</th>
+                                <th className="px-3 py-2.5 text-left font-semibold">Total</th>
+                                <th className="px-3 py-2.5 text-left font-semibold">Stock général</th>
+                                <th className="px-3 py-2.5 text-left font-semibold">En transit</th>
+                                <th className="px-3 py-2.5 text-left font-semibold">Stock local</th>
+                                <th className="px-3 py-2.5 text-left font-semibold">Présentoir</th>
+                                <th className="px-3 py-2.5 text-left font-semibold">Caisse</th>
+                                <th className="px-3 py-2.5 text-left font-semibold">Labo</th>
+                                <th className="px-3 py-2.5 text-left font-semibold">Vendu</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-emerald-100 bg-white dark:divide-emerald-800 dark:bg-slate-900">
+                              {referenceRows.map(row => (
+                                <tr
+                                  key={row.reference}
+                                  onClick={() => row.barcodes[0] && openTrack(row.barcodes[0])}
+                                  className={row.barcodes[0] ? 'cursor-pointer transition-colors hover:bg-emerald-50/70 dark:hover:bg-emerald-900/10' : undefined}
+                                  title={row.barcodes[0] ? 'Voir le trajet complet de cette monture' : undefined}
+                                >
+                                  <td className="px-3 py-2.5 font-medium text-slate-900 dark:text-white">{row.reference}</td>
+                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.total}</td>
+                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.general}</td>
+                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.transit}</td>
+                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.local}</td>
+                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.presentoir}</td>
+                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.caisse}</td>
+                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.labo}</td>
+                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.vendu}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             )
           })}
         </div>
-
-        {isLocalDrilldown && !selectedLocalStation ? (
-          /* Sous-niveau « Stock local » : choix de la ville avant la période, comme
-             renderLocalStationBlocks dans historique.js. */
-          <div className={`overflow-hidden ${BLOCK_CLASS}`}>
-            <h3 className="flex items-center gap-2 border-b border-slate-200 px-5 py-4 text-[15px] font-bold text-slate-900 dark:border-slate-700 dark:text-white">
-              <span style={{ color: activeMeta.color }}>{ic.hist('w-[17px] h-[17px]')}</span>
-              {activeMeta.label}
-            </h3>
-            {localStationNames.length === 0 ? (
-              <div className="px-5 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
-                Aucune monture en stock local pour le moment.
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3">
-                {localStationNames.map(([name, count]) => (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => setSelectedLocalStation(name)}
-                    className="flex flex-col items-start gap-1.5 rounded-2xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-blue-200 dark:border-slate-700 dark:bg-slate-900"
-                  >
-                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{stationDisplayLabel(name)}</span>
-                    <span className="text-xl font-extrabold tabular-nums text-slate-900 dark:text-white">{count}</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{count > 1 ? 'montures' : 'monture'}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <>
-            {/* Sous-niveau « période », comme PERIODS dans historique.js — un clic de plus
-                désélectionne, pour revenir à toute l'étape. */}
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              {PERIODS.map(p => {
-                const isActive = selectedPeriod === p.key
-                return (
-                  <button
-                    key={p.key}
-                    type="button"
-                    onClick={() => setSelectedPeriod(prev => (prev === p.key ? null : p.key))}
-                    aria-pressed={isActive}
-                    className={`flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm transition-colors ${isActive
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-900/20 dark:text-blue-300'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'}`}
-                  >
-                    <span className="font-semibold">{p.label}</span>
-                    <span className="tabular-nums">{periodCounts[p.key]}</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* .stage-activity — le détail de l'étape (et éventuellement de la ville/période)
-                sélectionnée, directement sous les cartes. */}
-            <div className={`overflow-hidden ${BLOCK_CLASS}`}>
-              <h3 className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-5 py-4 text-[15px] font-bold text-slate-900 dark:border-slate-700 dark:text-white">
-                {isLocalDrilldown && selectedLocalStation && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedLocalStation(null)}
-                    className="flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                  >
-                    {ic.back('w-4 h-4')} Villes
-                  </button>
-                )}
-                <span style={{ color: activeMeta.color }}>{ic.hist('w-[17px] h-[17px]')}</span>
-                {activeMeta.label}
-                {selectedLocalStation && <span className="text-slate-400 dark:text-slate-500"> · {stationDisplayLabel(selectedLocalStation)}</span>}
-                <span className="ml-1 text-sm font-medium text-slate-500 dark:text-slate-400">· {filteredMovements.length} monture{filteredMovements.length > 1 ? 's' : ''}</span>
-              </h3>
-
-              {filteredMovements.length === 0 ? (
-                <div className="px-5 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
-                  Aucune monture pour cette sélection.
-                </div>
-              ) : (
-                <div className="flex flex-col">
-                  {filteredMovements.map((mvt, idx) => {
-                    const meta = STAGE_META[mvt.stage]
-                    const label = [mvt.brand, mvt.reference].filter(Boolean).join(' ')
-                    return (
-                      <div key={mvt.id} className="flex items-center gap-3.5 border-b border-slate-100 px-5 py-3.5 transition-colors last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60">
-                        {/* .glass-photo — vignette réelle si connue, icône sinon. */}
-                        <button
-                          type="button"
-                          onClick={() => mvt.photoUrl && setLightbox({ url: mvt.photoUrl, caption: `${mvt.barcode}${label ? ' — ' + label : ''}` })}
-                          disabled={!mvt.photoUrl}
-                          title={mvt.photoUrl ? 'Voir la photo' : 'Aucune photo disponible'}
-                          className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-slate-400 disabled:cursor-default dark:border-slate-700 dark:bg-slate-800"
-                        >
-                          {mvt.photoUrl ? (
-                            <img src={mvt.photoUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-                          ) : (
-                            ic.glasses('w-[18px] h-[18px]')
-                          )}
-                        </button>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-baseline gap-2">
-                            <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">{mvt.barcode}</span>
-                            {label && <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>}
-                            {idx === 0 && (
-                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Nouveau</span>
-                            )}
-                          </div>
-                          {mvt.notes && <p className="mt-0.5 text-xs italic text-slate-500 dark:text-slate-400">{mvt.notes}</p>}
-                          <div className="mt-1.5 flex flex-wrap items-center gap-2.5 text-xs">
-                            <span className="inline-block rounded-full px-[9px] py-0.5 text-xs font-bold" style={{ backgroundColor: `${meta.color}1f`, color: meta.color }}>
-                              {meta.label}
-                            </span>
-                            <span className="text-slate-600 dark:text-slate-300">
-                              {mvt.from} <span className="text-slate-400">→</span> {mvt.to}
-                            </span>
-                            <span className="text-slate-400">{mvt.date} à {mvt.time} · Par {mvt.operator}</span>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => openTrack(mvt.barcode)}
-                          className="flex flex-shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
-                        >
-                          <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-white" aria-hidden="true" />
-                          Suivi en direct
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </>
       )}
 
       {/* Panneau « Suivi en direct » d'une monture, comme #trackPanel dans historique.js. */}
@@ -3559,38 +3720,58 @@ function HistoryView() {
             <div className="flex-1 overflow-y-auto p-4">
               {isTrackLoading ? (
                 <div className="py-10 text-center text-sm text-slate-400">Chargement de la trajectoire…</div>
-              ) : trackSorted.length === 0 ? (
+              ) : trackChronological.length === 0 ? (
                 <div className="py-10 text-center text-sm text-slate-400">Aucun mouvement enregistré pour cette monture.</div>
               ) : (
+                // Lecture façon suivi de colis (DHL) : une étape franchie en haut, la position
+                // actuelle en bas, une coche par étape déjà passée.
                 <div className="space-y-4">
-                  {trackSorted.map((m, index) => {
-                    const color = movementActionColor(m.action)
-                    const icon = movementActionIcon(m.action)
+                  {trackChronological.map((m, index) => {
+                    const isCurrent = index === trackChronological.length - 1
                     const fromCell = [stationDisplayLabel(m.from_station_name), m.from_location_code].filter(Boolean).join(' · ')
                     const toCell = [stationDisplayLabel(m.to_station_name), m.to_location_code].filter(Boolean).join(' · ')
                     const userName = [m.user_first_name, m.user_last_name].filter(Boolean).join(' ')
+                    const { date, time } = formatMovementDate(m.created_at)
+                    // Le statut réel de la monture fait foi, pas le journal : une expédition en
+                    // cours ne pose pas toujours de ligne EXPEDITION dans /inventory/movements
+                    // (vu en pratique sur DFGHJ852-963 — le journal ne montrait que la réception
+                    // fournisseur), alors que trackGlass.status reflète l'état actuel.
+                    const isCurrentlyInTransit = isCurrent && isTransitStatus(String(trackGlass?.status || ''))
+                    const destination = stationDisplayLabel(trackGlass?.station_name) || stationDisplayLabel(m.to_station_name)
+                    const stepLabel = isCurrentlyInTransit
+                      ? `En transit vers ${destination || 'destination non confirmée'}`
+                      : movementActionLabel(m.action)
+                    const color = isCurrentlyInTransit ? STAGE_META.shipped.color : movementActionColor(m.action)
+                    const icon = isCurrentlyInTransit ? ic.plane : movementActionIcon(m.action)
                     return (
                       <div key={m.id ?? index} className="flex gap-3">
                         <div className="flex flex-shrink-0 flex-col items-center">
-                          <span className="flex h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: `${color}1f`, color }}>
+                          <span className="relative flex h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: `${color}1f`, color }}>
                             {icon('w-4 h-4')}
+                            {isCurrentlyInTransit ? (
+                              <span className="absolute -bottom-1 -right-1 h-3.5 w-3.5 animate-pulse rounded-full border-2 border-white bg-blue-600 dark:border-slate-900" aria-hidden="true" />
+                            ) : (
+                              <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-white text-white dark:border-slate-900" style={{ backgroundColor: color }}>
+                                {ic.check('w-2 h-2')}
+                              </span>
+                            )}
                           </span>
-                          {index < trackSorted.length - 1 && <span className="mt-1 w-px flex-1 bg-slate-200 dark:bg-slate-700" />}
+                          {index < trackChronological.length - 1 && <span className="mt-1 w-px flex-1 bg-slate-200 dark:bg-slate-700" />}
                         </div>
                         <div className="min-w-0 flex-1 pb-2">
                           <div className="flex flex-wrap items-baseline justify-between gap-2">
                             <span className="text-sm font-semibold text-slate-900 dark:text-white">
-                              {movementActionLabel(m.action)}
-                              {index === 0 && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Position actuelle</span>}
+                              {stepLabel}
+                              {isCurrent && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Position actuelle</span>}
                             </span>
-                            <span className="text-xs text-slate-400">{relativeTimeFr(m.created_at)}</span>
+                            <span className="text-xs text-slate-400">{date} à {time}</span>
                           </div>
                           {(fromCell || toCell) && (
                             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                               {fromCell || '—'} {toCell && <><span className="text-slate-400">→</span> {toCell}</>}
                             </p>
                           )}
-                          {userName && <p className="mt-0.5 text-xs text-slate-400">Par {userName}</p>}
+                          {userName && <p className="mt-0.5 text-xs text-slate-400">Par {userName} · {relativeTimeFr(m.created_at)}</p>}
                         </div>
                       </div>
                     )
@@ -3654,7 +3835,9 @@ function ReceptionView() {
   // Bascule d'affichage seulement : une monture RESERVEE_ENVOI reste toujours protégée côté
   // serveur (SplitAvailableBarcodes refuse une deuxième liste sur la même monture) — ce
   // réglage ne change que ce que l'admin voit ici, pas ce qui est permis.
-  const [greyReserved, setGreyReserved] = useState(true)
+  // Faux par défaut : le tableau s'ouvre sur la liste complète, le filtre « Griser » est un
+  // choix actif de l'admin, pas l'état de départ.
+  const [greyReserved, setGreyReserved] = useState(false)
   const [stockPage, setStockPage] = useState(1)
   // Sélection pour composer une liste depuis le stock existant. On garde les codes-barres et
   // non les indices de ligne : la sélection doit survivre au changement de page et de filtre.
@@ -4662,20 +4845,23 @@ function ReceptionView() {
   }
 
   function renderGeneralStockTable(generalGlasses: any[], magasins: string[]) {
-    const totalPages = Math.max(1, Math.ceil(generalGlasses.length / STOCK_PAGE_SIZE))
+    // RESERVEE_ENVOI : déjà prise par une autre liste pas encore dispatchée. Le radio
+    // « Griser / Ne pas griser » bascule entre deux vues, pas juste un style : « Griser »
+    // isole les montures réservées (pour voir ce qui est déjà engagé ailleurs), « Ne pas
+    // griser » revient à la liste complète, montures réservées traitées normalement. Le
+    // serveur reste le vrai garde-fou (SplitAvailableBarcodes) quel que soit ce réglage.
+    const isReservedStatus = (g: any) => String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI'
+    const displayedGlasses = greyReserved ? generalGlasses.filter(isReservedStatus) : generalGlasses
+    const isReservedForShipment = (g: any) => greyReserved && isReservedStatus(g)
+
+    const totalPages = Math.max(1, Math.ceil(displayedGlasses.length / STOCK_PAGE_SIZE))
     // Page bornée à l'affichage : si un filtre réduit la liste entre deux rendus, on retombe
     // sur la dernière page existante au lieu d'afficher une tranche vide.
     const currentPage = Math.min(stockPage, totalPages)
     const start = (currentPage - 1) * STOCK_PAGE_SIZE
-    const pageRows = generalGlasses.slice(start, start + STOCK_PAGE_SIZE)
+    const pageRows = displayedGlasses.slice(start, start + STOCK_PAGE_SIZE)
 
-    // RESERVEE_ENVOI : déjà prise par une autre liste pas encore dispatchée. Par défaut on ne
-    // la propose plus à la sélection — la re-sélectionner créerait deux listes concurrentes
-    // sur la même monture — mais greyReserved (radio « Griser / Ne pas griser ») permet à
-    // l'admin de les traiter comme des montures normales à l'écran ; le serveur reste le vrai
-    // garde-fou (SplitAvailableBarcodes) quel que soit ce réglage.
-    const isReservedForShipment = (g: any) => greyReserved && String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI'
-    const selectableGlasses = generalGlasses.filter((g: any) => !isReservedForShipment(g))
+    const selectableGlasses = displayedGlasses.filter((g: any) => !isReservedForShipment(g))
     const allSelected = selectableGlasses.length > 0 && selectableGlasses.every((g: any) => stockListSelection.includes(String(g.barcode || '')))
 
     return (
@@ -4733,7 +4919,7 @@ function ReceptionView() {
           disabled={isSendingStockList || !stockListCity || stockListSelection.length === 0}
           className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isSendingStockList ? 'Enregistrement…' : 'Envoyer au Stock Général'}
+          {isSendingStockList ? 'Enregistrement…' : 'Envoyer'}
         </button>
         {stockListSelection.length > 0 && (
           <button
@@ -4830,7 +5016,7 @@ function ReceptionView() {
       {totalPages > 1 && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
-            {(start + 1).toLocaleString('fr-FR')}–{Math.min(start + STOCK_PAGE_SIZE, generalGlasses.length).toLocaleString('fr-FR')} sur {generalGlasses.length.toLocaleString('fr-FR')}
+            {(start + 1).toLocaleString('fr-FR')}–{Math.min(start + STOCK_PAGE_SIZE, displayedGlasses.length).toLocaleString('fr-FR')} sur {displayedGlasses.length.toLocaleString('fr-FR')}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -5623,22 +5809,21 @@ function ReceptionView() {
 
             <div className="mt-4 space-y-3">
               <div className="overflow-x-auto rounded-2xl border border-emerald-200 dark:border-emerald-700">
-                <div className="min-w-[620px]">
+                <div className="min-w-[520px]">
                   <table className="w-full min-w-full divide-y divide-emerald-200 dark:divide-emerald-700 text-xs sm:text-sm">
                     <thead className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-200">
                       <tr>
                         <th className="px-3 py-2.5 text-left font-semibold">Référence</th>
                         <th className="px-3 py-2.5 text-left font-semibold">Total</th>
                         <th className="px-3 py-2.5 text-left font-semibold">Stock général</th>
-                        <th className="px-3 py-2.5 text-left font-semibold">Stock local</th>
                         <th className="px-3 py-2.5 text-left font-semibold">Emplacement</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-emerald-100 bg-white dark:divide-emerald-800 dark:bg-slate-900">
                       {isLoadingStockSummary ? (
-                        <tr><td colSpan={5} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Chargement…</td></tr>
+                        <tr><td colSpan={4} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Chargement…</td></tr>
                       ) : stockSummary.length === 0 ? (
-                        <tr><td colSpan={5} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Aucune donnée disponible pour le moment.</td></tr>
+                        <tr><td colSpan={4} className="px-3 py-4 text-center text-emerald-700 dark:text-emerald-300">Aucune donnée disponible pour le moment.</td></tr>
                       ) : (
                         stockSummary.slice(0, 5).map((item: any, index: number) => (
                           <tr
@@ -5649,7 +5834,6 @@ function ReceptionView() {
                             <td className="px-3 py-2.5 font-medium text-slate-900 dark:text-white">{item.reference || '—'}</td>
                             <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_total || 0).toLocaleString('fr-FR')}</td>
                             <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_general || 0).toLocaleString('fr-FR')}</td>
-                            <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_local || 0).toLocaleString('fr-FR')}</td>
                             <td className="px-3 py-2.5 font-mono text-xs text-slate-700 dark:text-slate-300">{getStockLocationLabel(item)}</td>
                           </tr>
                         ))

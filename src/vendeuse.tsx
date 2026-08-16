@@ -1351,7 +1351,10 @@ function DashboardScreen({ data, user, onNavigate, onOpenTable }: {
   onOpenTable: (t: TableId) => void
 }) {
   const pendingProformas = data.proformas.filter(p => String(p.status || '').toUpperCase() === 'EN_ATTENTE')
-  const soldValue = data.sold.reduce((sum, g) => sum + (Number(g.price) || 0), 0)
+  // « Lunettes vendues » ne comptait que les montures encaissées (souvent 0, une vente ne
+  // reste pas VENDUE longtemps — cf. commentaire sur data.sold) : ça donnait l'impression
+  // qu'aucune proforma n'était partie, alors qu'elle attend juste son tour à la caisse.
+  const sentProformasValue = data.proformas.reduce((sum, p) => sum + proformaTotal(p), 0)
   const clients = buildClients(data.proformas)
   const openClaims = data.claims.filter(c => String(c.status || '').toUpperCase() === 'OUVERTE')
   const clientsPending = clients.filter(c => c.pending > 0).length
@@ -1371,8 +1374,8 @@ function DashboardScreen({ data, user, onNavigate, onOpenTable }: {
           label="Lunettes vendues"
           color="#2563eb"
           icon={ic.glasses}
-          primary={fmt(data.sold.length)}
-          note={fmtFCFA(soldValue)}
+          primary={fmt(data.proformas.length)}
+          note={fmtFCFA(sentProformasValue)}
           onClick={() => onOpenTable('lunettes')}
         />
         <DashTile
