@@ -3812,12 +3812,6 @@ function ReceptionView() {
   const [stockFormeFilter, setStockFormeFilter] = useState<string>('all')
   const [stockGenreFilter, setStockGenreFilter] = useState<string>('all')
   const [stockGammeFilter, setStockGammeFilter] = useState<string>('all')
-  // Bascule d'affichage seulement : une monture RESERVEE_ENVOI reste toujours protégée côté
-  // serveur (SplitAvailableBarcodes refuse une deuxième liste sur la même monture) — ce
-  // réglage ne change que ce que l'admin voit ici, pas ce qui est permis.
-  // Faux par défaut : le tableau s'ouvre sur la liste complète, le filtre « Griser » est un
-  // choix actif de l'admin, pas l'état de départ.
-  const [greyReserved, setGreyReserved] = useState(false)
   const [stockPage, setStockPage] = useState(1)
   // Sélection pour composer une liste depuis le stock existant. On garde les codes-barres et
   // non les indices de ligne : la sélection doit survivre au changement de page et de filtre.
@@ -4683,18 +4677,6 @@ function ReceptionView() {
               </select>
               <button onClick={() => { setStockFormeFilter('all'); setStockGenreFilter('all'); setStockGammeFilter('all') }} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700">Reset</button>
             </div>
-            {/* Purement visuel (voir la définition de greyReserved) : le backend refuse quand
-                même une monture RESERVEE_ENVOI dans une deuxième liste, que ce soit coché ou non. */}
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800/60">
-              <label className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200">
-                <input type="radio" name="grey-reserved" checked={greyReserved} onChange={() => setGreyReserved(true)} className="h-3.5 w-3.5 accent-blue-600" />
-                Griser
-              </label>
-              <label className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200">
-                <input type="radio" name="grey-reserved" checked={!greyReserved} onChange={() => setGreyReserved(false)} className="h-3.5 w-3.5 accent-blue-600" />
-                Ne pas griser
-              </label>
-            </div>
           </div>
         </div>
 
@@ -4825,14 +4807,12 @@ function ReceptionView() {
   }
 
   function renderGeneralStockTable(generalGlasses: any[], magasins: string[]) {
-    // RESERVEE_ENVOI : déjà prise par une autre liste pas encore dispatchée. Le radio
-    // « Griser / Ne pas griser » bascule entre deux vues, pas juste un style : « Griser »
-    // isole les montures réservées (pour voir ce qui est déjà engagé ailleurs), « Ne pas
-    // griser » revient à la liste complète, montures réservées traitées normalement. Le
-    // serveur reste le vrai garde-fou (SplitAvailableBarcodes) quel que soit ce réglage.
-    const isReservedStatus = (g: any) => String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI'
-    const displayedGlasses = greyReserved ? generalGlasses.filter(isReservedStatus) : generalGlasses
-    const isReservedForShipment = (g: any) => greyReserved && isReservedStatus(g)
+    // RESERVEE_ENVOI : déjà prise par une autre liste pas encore dispatchée. Toujours
+    // grisée et non sélectionnable dans la liste complète — pas besoin de la chercher dans
+    // une vue séparée. Le serveur reste le vrai garde-fou (SplitAvailableBarcodes) quel que
+    // soit ce qui est affiché ici.
+    const isReservedForShipment = (g: any) => String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI'
+    const displayedGlasses = generalGlasses
 
     const totalPages = Math.max(1, Math.ceil(displayedGlasses.length / STOCK_PAGE_SIZE))
     // Page bornée à l'affichage : si un filtre réduit la liste entre deux rendus, on retombe
