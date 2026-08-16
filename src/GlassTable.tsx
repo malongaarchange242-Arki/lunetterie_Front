@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 /* ==========================================================================
    LE TABLEAU DE MONTURES, PARTAGÉ PAR TOUS LES POSTES.
@@ -146,6 +146,7 @@ export function GlassTable({ rows, before = [], after = [], emptyLabel = 'Aucune
   // Entrée, que le tableau est seul à savoir lire.
   const [jour, setJour] = useState('')
   const [selectedPreview, setSelectedPreview] = useState<GlassTableRow | null>(null)
+  const dateInputRef = useRef<HTMLInputElement>(null)
 
   const visibles = jour
     ? rows.filter(row => String(row.entry || '').slice(0, 10) === jour)
@@ -179,17 +180,29 @@ export function GlassTable({ rows, before = [], after = [], emptyLabel = 'Aucune
   const barre = (
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-700">
       <div className="flex items-center gap-2">
-        {/* Un `input type=date` plutôt qu'un calendrier maison : il ouvre celui du système,
-            déjà traduit, accessible au clavier et tactile sur téléphone. `showPicker` fait
-            que le clic n'importe où sur le champ l'ouvre, pas seulement sur l'icône. */}
-        <input
-          type="date"
-          value={jour}
-          onChange={event => setJour(event.target.value)}
-          onClick={event => { (event.currentTarget as any).showPicker?.() }}
-          aria-label="Filtrer par date d'entrée"
-          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 outline-none focus:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-        />
+        {/* L'`input type=date` reste seul aux commandes (clic, clavier, calendrier système,
+            tactile) mais son propre rendu textuel est invisible : vide, un navigateur y
+            affiche son format brut (ex. « aaaa-mm-dd ») au lieu d'une vraie date. Le `div` en
+            dessous affiche donc notre propre libellé — « Toutes les dates » ou la date choisie
+            formatée en fr-FR — pendant que l'input, transparent, capte le clic et l'ouvre via
+            `showPicker` comme avant. */}
+        <div className="relative">
+          <div
+            aria-hidden="true"
+            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+          >
+            {jour ? jour.split('-').reverse().join('/') : 'Toutes les dates'}
+          </div>
+          <input
+            ref={dateInputRef}
+            type="date"
+            value={jour}
+            onChange={event => setJour(event.target.value)}
+            onClick={event => { (event.currentTarget as any).showPicker?.() }}
+            aria-label="Filtrer par date d'entrée"
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+        </div>
         {jour && (
           <button
             type="button"

@@ -4772,8 +4772,12 @@ function VendeuseChatBot({ onClose, stationId, stationName, screen }: {
   async function loadAssistantDigest(): Promise<Record<string, unknown>> {
     if (!stationId) return {}
 
+    // Sans `status` explicite, /inventory/glasses ne renvoie QUE EN_STOCK_GENERAL,
+    // EN_STOCK_SOUS_STATION et RESERVEE_ENVOI (repli côté serveur, glass_handler.go) — ni
+    // EN_PRESENTOIR ni les autres. Sans cette liste, le présentoir restait invisible du
+    // chatbot alors même que le journal des mouvements, lui, le mentionnait.
     const results = await Promise.allSettled([
-      apiFetch(`/inventory/glasses?station_id=${stationId}`),
+      apiFetch(`/inventory/glasses?station_id=${stationId}&status=EN_PRESENTOIR,EN_STOCK_SOUS_STATION,RESERVEE,VENDUE,EN_LABORATOIRE,PRETE_A_LIVRER`),
       apiFetch('/inventory/movements?limit=300&offset=0'),
     ])
     const [glassesR, movementsR] = results
