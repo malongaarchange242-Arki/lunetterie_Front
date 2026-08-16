@@ -6,6 +6,7 @@ import './index.css'
 import logoUrl from '../logo.jpeg'
 import { GlassTable, downloadCSV } from './GlassTable'
 import { calculateGlassSimilarity, getGamme, normalizeAttr } from './glassSimilarity'
+import { buildAssistantPayload, buildStockDigest } from './chatContext'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 
@@ -309,6 +310,10 @@ const ic = {
   clock: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
   search: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>,
   download: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><path d="M12 15V3" /></svg>,
+  bot: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M12 11V7M9 7h6"/><circle cx="9" cy="16" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="16" r="1" fill="currentColor" stroke="none"/></svg>,
+  whatsapp: (c = 'w-6 h-6') => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2.5A9.5 9.5 0 0 0 4.1 16.8L3.5 20.5l3.8-.6a9.5 9.5 0 1 0 4.74-17.4Zm5.2 13.4c-.2.6-.98 1.1-1.6 1.2-.4.1-.9.1-1.5-.1-.4-.1-.9-.3-1.5-.6a7.2 7.2 0 0 1-2.6-2.3c-.5-.6-.9-1.2-1.1-1.8-.1-.4 0-.8.3-1.1l.4-.4c.1-.1.2-.2.3-.2.1 0 .2 0 .3.1l.3.2c.1.1.2.2.2.4l.1.3c0 .2-.1.4-.2.5-.1.1-.2.2-.3.3-.1.1-.2.2-.1.3.1.3.2.6.4.9.3.5.7 1 .9 1.4.2.3.4.6.6.9.1.2.2.3.2.5 0 .1-.1.2-.2.3l-.2.2c-.2.2-.4.3-.7.4ZM12 6.1c-.4 0-.7.3-.7.7v.6c0 .3.2.5.5.6.6.1 1.2.2 1.7.5.5.3.9.7 1.2 1.2.2.3.2.7.1 1.1a.7.7 0 0 1-.6.5H13c-.4 0-.7.3-.7.7 0 .3.3.6.6.7.6.2 1.2.3 1.8.3 1.3 0 2.5-.5 3.3-1.4.8-.9 1.2-2.1 1.2-3.3 0-2.2-1.5-4-3.6-4.4-.7-.1-1.4-.1-2.1-.1Z"/></svg>,
+  send: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>,
+  mic: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>,
   chevRight: (c = 'w-4 h-4') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M9 18l6-6-6-6" /></svg>,
   users: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" /></svg>,
   print: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" rx="1" /></svg>,
@@ -1506,6 +1511,49 @@ const SOLD_COLUMNS: Column<Glass>[] = [
   { key: 'soldAt', label: 'Vendue le', value: g => fmtDate(g.sold_at || g.updated_at || g.created_at) },
 ]
 
+// Un casier de présentoir libéré aujourd'hui (vente, réserve, mise en caisse), avec la
+// monture qui l'occupait — models.EmptySlot côté serveur (location_repository.go
+// FindEmptyPresentoirSlotsToday). Le code de l'emplacement dit quoi remplir, la monture
+// dit quoi y remettre.
+interface ReplacementSlot {
+  code: string
+  barcode: string
+  reference?: string
+  brand?: string
+}
+
+const REPLACEMENT_COLUMNS: Column<ReplacementSlot>[] = [
+  { key: 'code', label: 'Emplacement', value: s => s.code },
+  { key: 'ref', label: 'Référence', value: s => s.reference || '' },
+  { key: 'brand', label: 'Marque', value: s => s.brand || '' },
+  { key: 'barcode', label: 'Code-barres', value: s => s.barcode || '' },
+]
+
+/** Charge les casiers présentoir vidés aujourd'hui, à la demande (l'onglet
+ *  « Remplacement » n'est pas toujours consulté) plutôt qu'à chaque ouverture de
+ *  « Lunettes vendues ». */
+function useReplacementSlots(stationId: number | null) {
+  const [slots, setSlots] = useState<ReplacementSlot[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [loaded, setLoaded] = useState(false)
+
+  function load() {
+    if (!stationId) return
+    setLoading(true)
+    setError('')
+    apiFetch(`/inventory/presentoir/empty-slots?station_id=${stationId}`)
+      .then(payload => {
+        setSlots(Array.isArray(payload?.data?.slots) ? payload.data.slots : [])
+        setLoaded(true)
+      })
+      .catch((err: any) => setError(err?.message || 'Impossible de charger les emplacements à remplacer.'))
+      .finally(() => setLoading(false))
+  }
+
+  return { slots, loading, error, loaded, load }
+}
+
 /** Le serveur ne connaît que OUVERTE et TRAITEE (`models.Claim`). Un statut inconnu
  *  ressort tel quel, souligné par le remplacement des tirets bas : mieux vaut un mot
  *  brut à l'écran qu'une case vide si la liste s'enrichit côté serveur. */
@@ -1905,6 +1953,17 @@ function TableScreen({ table, data, user, stationId, claimsError, onBack }: {
 }) {
   const stamp = new Date().toISOString().slice(0, 10)
   const [detail, setDetail] = useState<Detail | null>(null)
+  // Sous-onglet de « Lunettes vendues » : quoi remplacer au présentoir, à côté de ce
+  // qui a été vendu — les deux vues partagent la même page plutôt qu'une nouvelle tuile.
+  const [soldSubTab, setSoldSubTab] = useState<'ventes' | 'remplacement'>('ventes')
+  const replacement = useReplacementSlots(stationId)
+
+  useEffect(() => {
+    if (table === 'lunettes' && soldSubTab === 'remplacement' && !replacement.loaded && !replacement.loading) {
+      replacement.load()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table, soldSubTab])
 
   // Revenir au tableau de bord depuis une fiche passerait par deux clics ; le bouton
   // de retour rend d'abord la fiche, puis seulement le tableau.
@@ -1966,7 +2025,37 @@ function TableScreen({ table, data, user, stationId, claimsError, onBack }: {
       <>
 
       {table === 'lunettes' && (
-        <DataTable columns={SOLD_COLUMNS} rows={data.sold} filename={`lunettes-vendues-${stamp}`} empty="Aucune vente enregistrée." />
+        <>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSoldSubTab('ventes')}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all ${soldSubTab === 'ventes' ? 'bg-blue-600 text-white' : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-500'}`}
+            >
+              Lunettes vendues
+            </button>
+            <button
+              onClick={() => setSoldSubTab('remplacement')}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all ${soldSubTab === 'remplacement' ? 'bg-blue-600 text-white' : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-500'}`}
+            >
+              Remplacement
+            </button>
+          </div>
+
+          {soldSubTab === 'ventes' ? (
+            <DataTable columns={SOLD_COLUMNS} rows={data.sold} filename={`lunettes-vendues-${stamp}`} empty="Aucune vente enregistrée." />
+          ) : replacement.loading ? (
+            <p className="py-10 text-center text-sm text-slate-400">Chargement…</p>
+          ) : replacement.error ? (
+            <p className="py-10 text-center text-sm text-red-500">{replacement.error}</p>
+          ) : (
+            <>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Casiers de présentoir libérés aujourd'hui (vente, réserve, mise en caisse) — la monture qui les occupait dit quoi y remettre.
+              </p>
+              <DataTable columns={REPLACEMENT_COLUMNS} rows={replacement.slots} filename={`remplacement-presentoir-${stamp}`} empty="Aucun emplacement à remplacer aujourd'hui." />
+            </>
+          )}
+        </>
       )}
 
       {table === 'proformas' && (
@@ -4624,6 +4713,169 @@ function TopBar({ current, override, dark, onToggleDark, onReload, loading }: {
   )
 }
 
+// ── Chatbot ────────────────────────────────────────────────────────────────────
+// Même assistant que celui de la Direction (App.tsx), mais avec un digest volontairement
+// réduit : ni les autres magasins, ni la liste des employés, ni les commandes fournisseur.
+// Une vendeuse n'a pas à voir le stock ou le personnel d'une autre ville — seulement ce qui
+// se passe dans son propre magasin.
+interface ChatMsg { role: 'user' | 'assistant'; content: string }
+
+function sanitizeForSpeech(text: string) {
+  return text
+    // Liens et images : seul le texte visible se prononce, pas l'URL.
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // Gras/italique/barré, du plus large délimiteur au plus étroit pour ne pas couper
+    // un ** au milieu d'un ***.
+    .replace(/(\*\*\*|___)(.*?)\1/g, '$2')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/~~(.*?)~~/g, '$1')
+    // Code : les blocs disparaissent (illisibles à l'oral), l'inline garde son contenu.
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]*)`/g, '$1')
+    // Titres, citations, puces et numérotation en début de ligne.
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/^[-*+]\s+/gm, '')
+    .replace(/^\d+\.\s+/gm, '')
+    // Ce qui subsiste (astérisque isolé, dièse, tilde...) : supprimé plutôt qu'épelé.
+    .replace(/[*_#>`~]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+function VendeuseChatBot({ onClose, stationId, stationName, screen }: {
+  onClose: () => void
+  stationId: number | null
+  stationName?: string
+  screen: Screen
+}) {
+  const [messages, setMessages] = useState<ChatMsg[]>([
+    { role: 'assistant', content: "Bonjour ! Je suis Lunette, votre assistant IA. Posez-moi vos questions sur le stock et les ventes de votre magasin." },
+  ])
+  const [input, setInput] = useState('')
+  const [listening, setListening] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  const [status, setStatus] = useState('')
+  const endRef = useRef<HTMLDivElement>(null)
+  // Le digest est chargé dès l'ouverture du chat, mais `send` peut partir avant la fin :
+  // on garde la promesse pour l'attendre plutôt que de partir avec un contexte vide.
+  const digestRef = useRef<Promise<Record<string, unknown>> | null>(null)
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  useEffect(() => { digestRef.current = loadAssistantDigest() }, [stationId])
+
+  // Un seul appel, filtré sur la station : contrairement au digest de la Direction, celui-ci
+  // ne croise ni employés ni commandes fournisseur — la vendeuse n'a besoin de voir ni l'un
+  // ni l'autre pour répondre à une cliente.
+  async function loadAssistantDigest(): Promise<Record<string, unknown>> {
+    if (!stationId) return {}
+
+    const results = await Promise.allSettled([
+      apiFetch(`/inventory/glasses?station_id=${stationId}`),
+      apiFetch('/inventory/movements?limit=300&offset=0'),
+    ])
+    const [glassesR, movementsR] = results
+    const glasses = glassesR.status === 'fulfilled' ? (glassesR.value?.data?.glasses || []) : []
+
+    // Le journal ne se filtre pas par station côté serveur : on ne garde que les
+    // mouvements qui touchent ce magasin, comme le fait déjà responsable.tsx.
+    const station = String(stationName || '').trim().toLowerCase()
+    const allMovements = movementsR.status === 'fulfilled' ? (movementsR.value?.data?.movements || []) : []
+    const movements = station
+      ? allMovements.filter((m: any) => {
+        const from = String(m.from_station_name || '').trim().toLowerCase()
+        const to = String(m.to_station_name || '').trim().toLowerCase()
+        return from === station || to === station
+      })
+      : allMovements
+
+    return buildStockDigest({ glasses, movements, users: [], stations: [], receptionCommands: [], supplierOrders: [] })
+  }
+
+  async function send() {
+    if (!input.trim() || isSending) return
+    const q = input.trim()
+    const history = messages
+    setMessages(prev => [...prev, { role: 'user', content: q }])
+    setInput('')
+    setIsSending(true)
+    setStatus('')
+
+    try {
+      const token = getToken()
+      const digest = await (digestRef.current ?? Promise.resolve({}))
+      const response = await fetch(`${API_URL}/ai/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(buildAssistantPayload(q, history, {
+          screen: `vendeuse:${screen}`,
+          summary: { stationId, stationName },
+          digest,
+        })),
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      const reply = payload?.data?.reply || "Je ne peux pas joindre le service IA pour le moment."
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }])
+
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(sanitizeForSpeech(reply))
+        u.lang = 'fr-FR'; u.rate = 0.9
+        speechSynthesis.cancel(); speechSynthesis.speak(u)
+      }
+    } catch {
+      const fallback = 'Le service de chat est actuellement indisponible. Réessayez dans un instant.'
+      setMessages(prev => [...prev, { role: 'assistant', content: fallback }])
+      setStatus('Service indisponible')
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  function toggleMic() {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SR) return
+    const r = new SR(); r.lang = 'fr-FR'
+    r.onresult = (e: any) => { setInput(e.results[0][0].transcript); setListening(false) }
+    r.onerror = () => setListening(false); r.onend = () => setListening(false)
+    if (listening) { r.stop(); setListening(false) } else { r.start(); setListening(true) }
+  }
+
+  return (
+    <div className="fixed bottom-4 right-4 w-80 bg-white dark:bg-slate-950 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden z-50" style={{ height: 400 }}>
+      <div className="px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2">
+          {ic.bot('w-4 h-4 text-white')}
+          <span className="font-bold text-white text-sm">Lunette AI</span>
+          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+        </div>
+        <button onClick={onClose} className="text-blue-200 hover:text-white transition-colors">{ic.x('w-4 h-4')}</button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${m.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-bl-sm'}`}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        <div ref={endRef} />
+      </div>
+      <div className="px-3 py-2.5 border-t border-slate-100 dark:border-slate-800 flex gap-2 flex-shrink-0">
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} disabled={isSending} placeholder="Posez une question..." className="flex-1 px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-slate-200 dark:border-slate-700 disabled:opacity-60" />
+        <button onClick={toggleMic} className={`p-2 rounded-xl transition-all ${listening ? 'bg-red-500 text-white scale-110' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-blue-600'}`}>{ic.mic()}</button>
+        <button onClick={send} disabled={isSending} className="p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors active:scale-95 disabled:opacity-60">{ic.send()}</button>
+      </div>
+      {status && <p className="px-3 pb-2 text-[11px] text-slate-500 dark:text-slate-400">{status}</p>}
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 function VendeusePage() {
   const [ready, setReady] = useState(false)
@@ -4631,6 +4883,12 @@ function VendeusePage() {
   const [screen, setScreen] = useState<Screen>('dashboard')
   const [table, setTable] = useState<TableId | null>(null)
   const [dark, setDark] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  // Bouton flottant déplaçable, même geste que la Direction (App.tsx) : le pouce peut le
+  // sortir du coin s'il masque un bouton de l'écran en dessous.
+  const [chatButtonPos, setChatButtonPos] = useState<{ x: number; y: number } | null>(null)
+  const chatButtonDragRef = useRef({ active: false, startX: 0, startY: 0, originX: 0, originY: 0, moved: false })
+  const preventChatButtonClickRef = useRef(false)
 
   // Le tableau détaillé se superpose à l'écran courant : changer de section par la
   // barre latérale doit donc le refermer, sinon on resterait coincé dedans.
@@ -4674,6 +4932,60 @@ function VendeusePage() {
   const stationId = user?.station_id ? Number(user.station_id) : null
   const { data, loading, error, claimsError, reload } = useStoreData(ready ? stationId : null)
 
+  // Glisser le bouton compte comme un déplacement, pas comme un clic : sans ce garde-fou,
+  // relâcher après un glissement rouvrirait le chat au même geste.
+  function handleChatButtonPointerDown(event: React.PointerEvent<HTMLButtonElement>) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const originX = chatButtonPos?.x ?? rect.left
+    const originY = chatButtonPos?.y ?? rect.top
+
+    chatButtonDragRef.current = {
+      active: true,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX,
+      originY,
+      moved: false,
+    }
+    preventChatButtonClickRef.current = false
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      if (!chatButtonDragRef.current.active) return
+      const dx = moveEvent.clientX - chatButtonDragRef.current.startX
+      const dy = moveEvent.clientY - chatButtonDragRef.current.startY
+
+      if (!chatButtonDragRef.current.moved && Math.abs(dx) + Math.abs(dy) < 4) return
+      chatButtonDragRef.current.moved = true
+
+      const nextX = chatButtonDragRef.current.originX + dx
+      const nextY = chatButtonDragRef.current.originY + dy
+      const clampedX = Math.max(12, Math.min(nextX, window.innerWidth - 64))
+      const clampedY = Math.max(12, Math.min(nextY, window.innerHeight - 64))
+      setChatButtonPos({ x: clampedX, y: clampedY })
+    }
+
+    const handleUp = () => {
+      if (chatButtonDragRef.current.active && chatButtonDragRef.current.moved) {
+        preventChatButtonClickRef.current = true
+      }
+      chatButtonDragRef.current.active = false
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+    }
+
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  function handleChatButtonClick() {
+    if (preventChatButtonClickRef.current) {
+      preventChatButtonClickRef.current = false
+      return
+    }
+    setChatOpen(v => !v)
+  }
+
   if (!ready) return null
 
   return (
@@ -4708,6 +5020,25 @@ function VendeusePage() {
         </div>
 
         <MobileNav current={screen} onNavigate={navigate} />
+
+        <button
+          onClick={handleChatButtonClick}
+          onPointerDown={handleChatButtonPointerDown}
+          className="fixed z-50 flex items-center justify-center w-16 h-16 rounded-full bg-blue-600 shadow-[0_10px_30px_rgba(37,99,235,0.35)] hover:bg-blue-500 transition-all active:scale-95"
+          style={{ touchAction: 'none', ...(chatButtonPos ? { left: chatButtonPos.x, top: chatButtonPos.y } : { bottom: 20, right: 20 }) }}
+          aria-label="Ouvrir Lunette AI"
+        >
+          {ic.whatsapp('w-8 h-8 text-white')}
+        </button>
+
+        {chatOpen && (
+          <VendeuseChatBot
+            onClose={() => setChatOpen(false)}
+            stationId={stationId}
+            stationName={user?.station_name}
+            screen={screen}
+          />
+        )}
       </div>
     </div>
   )

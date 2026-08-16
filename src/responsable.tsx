@@ -414,9 +414,9 @@ function useStoreData(stationId: number | null, stationName: string, enabled: bo
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  async function load(silent = false) {
+  async function load() {
     if (!enabled) return
-    if (!silent) setLoading(true)
+    setLoading(true)
     setError('')
 
     const scope = stationId ? `station_id=${stationId}&` : ''
@@ -509,29 +509,7 @@ function useStoreData(stationId: number | null, stationName: string, enabled: bo
     setLoading(false)
   }
 
-  useEffect(() => {
-    void load()
-    if (!enabled) return
-
-    // silent : le rafraîchissement automatique ne doit pas réafficher le squelette de
-    // chargement — seul le montage initial (ou un reload() explicite après une action) le
-    // fait. Même cadence que la Direction (App.tsx) : 15 s, uniquement onglet visible.
-    const handleWindowFocus = () => { void load(true) }
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') handleWindowFocus()
-    }
-    const refreshInterval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') handleWindowFocus()
-    }, 15000)
-    window.addEventListener('focus', handleWindowFocus)
-    document.addEventListener('visibilitychange', handleVisibility)
-
-    return () => {
-      window.clearInterval(refreshInterval)
-      window.removeEventListener('focus', handleWindowFocus)
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
-  }, [stationId, stationName, enabled])
+  useEffect(() => { void load() }, [stationId, stationName, enabled])
 
   return { data, loading, error, reload: load }
 }
