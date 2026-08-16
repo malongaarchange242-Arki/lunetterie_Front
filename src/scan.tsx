@@ -2173,7 +2173,7 @@ function ListesScreen({
           <Btn variant="primary" onClick={() => void send()} disabled={dispatched || !complete || sending}>
             {ic.send()}
             {dispatched
-              ? 'Liste envoyée'
+              ? `En transit vers le stock magasin${(open.destination_station_name || open.city) ? ` (${open.destination_station_name || open.city})` : ''}`
               : sending ? 'Envoi en cours…'
               : complete ? `Envoyer (${items.length})`
               : `Envoyer — ${items.length - done} à vérifier`}
@@ -2948,8 +2948,8 @@ function ScanPage() {
     }
   }, [])
 
-  const loadLists = useCallback(async () => {
-    setLoadingLists(true)
+  const loadLists = useCallback(async (silent = false) => {
+    if (!silent) setLoadingLists(true)
     try {
       const payload = await apiFetch('/inventory/send-lists')
       setLists(Array.isArray(payload.data?.lists) ? payload.data.lists : [])
@@ -2970,8 +2970,8 @@ function ScanPage() {
    *  Direction l'a envoyée ; la session, elle, ne se relit que code par code, ceux qu'on a
    *  retenus au scan. Croiser les deux sur `supplier_order_id` rattache l'avancement à sa
    *  commande. */
-  const loadCommands = useCallback(async () => {
-    setLoadingCommands(true)
+  const loadCommands = useCallback(async (silent = false) => {
+    if (!silent) setLoadingCommands(true)
     try {
       const codes = loadScannedCodes()
       const scannedSet = new Set(codes)
@@ -3098,6 +3098,33 @@ function ScanPage() {
       }
     })()
   }, [loadMovements, loadLists, loadCommands])
+
+  // Rafraîchissement silencieux de « Mes sessions » / « Listes reçues » — seulement sur ces
+  // deux écrans de consultation, jamais pendant l'assistant : un magasinier au milieu d'une
+  // capture caméra ou d'une vérification ne doit pas voir ses données bouger sous lui.
+  // Même cadence que la Direction (App.tsx) : 15 s, uniquement onglet visible.
+  useEffect(() => {
+    if (screen !== 'sessions' && screen !== 'listes') return
+
+    const refresh = () => {
+      void loadCommands(true)
+      if (screen === 'listes') void loadLists(true)
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') refresh()
+    }, 15000)
+    window.addEventListener('focus', handleVisibility)
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      window.removeEventListener('focus', handleVisibility)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [screen, loadCommands, loadLists])
 
   // ── Réinitialisation ─────────────────────────────────────────────────────────
   function resetAll(skipConfirm = false) {

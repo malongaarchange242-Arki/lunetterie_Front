@@ -1096,11 +1096,25 @@ function SavPage() {
     })()
   }, [])
 
-  async function reload() {
-    setLoading(true)
+  async function reload(silent = false) {
+    if (!silent) setLoading(true)
     try {
       const { clients: rows, error } = await loadClients()
-      setClients(rows)
+      // Une observation ou un message en cours de frappe n'est envoyé qu'après une pause
+      // de 600 ms (setObservations/setMessage) : la copie fraîchement rechargée du serveur
+      // est donc en retard sur ce qui est affiché tant que ce minuteur n'a pas encore
+      // écrit. Sans cette préservation, un rafraîchissement arrivant pendant la frappe
+      // effacerait ce que l'agent vient de taper.
+      const editingIds = new Set(Object.keys(observationTimers.current).map(Number))
+      setClients(previous => {
+        if (editingIds.size === 0) return rows
+        const byId = new Map(previous.map(client => [client.id, client]))
+        return rows.map(row => {
+          if (!editingIds.has(row.id)) return row
+          const local = byId.get(row.id)
+          return local ? { ...row, observations: local.observations, message: local.message } : row
+        })
+      })
       setLoadError(error)
     } catch (error: any) {
       setLoadError(error?.message || 'Chargement impossible.')
@@ -1109,7 +1123,29 @@ function SavPage() {
     }
   }
 
-  useEffect(() => { if (ready) void reload() }, [ready])
+  useEffect(() => {
+    if (!ready) return
+    void reload()
+
+    // silent : le rafraîchissement automatique ne doit pas réafficher le squelette de
+    // chargement — seul le montage initial (ou un reload() explicite après une action) le
+    // fait. Même cadence que la Direction (App.tsx) : 15 s, uniquement onglet visible.
+    const handleWindowFocus = () => { void reload(true) }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') handleWindowFocus()
+    }
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') handleWindowFocus()
+    }, 15000)
+    window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [ready])
 
   // Nettoie les minuteurs en attente : sans ça, un envoi partirait après le démontage.
   useEffect(() => () => {

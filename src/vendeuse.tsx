@@ -1079,8 +1079,8 @@ function useStoreData(stationId: number | null) {
   // permanence sur tout le poste, pour une table que personne n'a ouverte.
   const [claimsError, setClaimsError] = useState('')
 
-  async function load() {
-    setLoading(true)
+  async function load(silent = false) {
+    if (!silent) setLoading(true)
     setError('')
     // allSettled : une liste indisponible ne doit pas vider les cinq autres. Le poste
     // doit rester utilisable même si un seul endpoint tombe.
@@ -1204,7 +1204,28 @@ function useStoreData(stationId: number | null) {
     setLoading(false)
   }
 
-  useEffect(() => { void load() }, [stationId])
+  useEffect(() => {
+    void load()
+
+    // silent : le rafraîchissement automatique ne doit pas réafficher le squelette de
+    // chargement — seul le montage initial (ou un reload() explicite après un scan) le
+    // fait. Même cadence que la Direction (App.tsx) : 15 s, uniquement onglet visible.
+    const handleWindowFocus = () => { void load(true) }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') handleWindowFocus()
+    }
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') handleWindowFocus()
+    }, 15000)
+    window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [stationId])
 
   return { data, loading, error, claimsError, reload: load }
 }

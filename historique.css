@@ -1,0 +1,287 @@
+/* Historique des mouvements — page autonome (pas de sidebar), réutilise admin.css pour
+   le look des blocs/topbar. Vue par étapes du parcours (Stock Général → Stock local →
+   Présentoir → Laboratoire), avec détail par période puis liste d'activité. */
+
+.main-content { margin-left: 0; }
+
+.page-content { padding: 22px 28px 40px; }
+
+/* La barre de recherche rapide passe sur sa propre ligne quand la place manque
+   à côté du thème/Retour/Actualiser, plutôt que de les écraser tous. */
+@media (max-width: 640px) {
+    .topbar .topbar-actions { flex-wrap: wrap; }
+    .topbar .topbar-actions #quickTrackBox { order: 3; flex: 1 1 100%; }
+}
+
+/* Badges d'action, réutilisés dans la liste d'activité et le suivi */
+.badge {
+    display: inline-block;
+    padding: 4px 11px;
+    border-radius: var(--radius-full, 999px);
+    font-size: 12px;
+    font-weight: 700;
+    background: var(--line-soft);
+    color: var(--ink-soft);
+    white-space: nowrap;
+}
+.badge.success { background: var(--success-tint); color: var(--success); }
+.badge.warning { background: var(--warning-tint); color: var(--warning); }
+.badge.danger { background: var(--danger-tint); color: var(--danger); }
+
+/* ==========================================================================
+   BLOCS D'ÉTAPE ET DE PÉRIODE
+   ========================================================================== */
+.stage-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.period-grid {
+    grid-template-columns: repeat(4, 1fr);
+    padding: 18px 22px;
+    margin: 0;
+    border: 1px solid var(--line);
+    border-top: none;
+    background: var(--paper);
+}
+.period-block { aspect-ratio: auto; padding: 16px; gap: 6px; }
+.period-block .date-block-value { font-size: 22px; margin-top: 4px; }
+.period-block.active { border-color: var(--primary); background: var(--primary-tint); }
+.period-block.active .date-block-icon { background: var(--primary); color: #fff; }
+
+/* ==========================================================================
+   ACTIVITÉ RÉCENTE — une ligne par monture, photo + suivi
+   ========================================================================== */
+.stage-activity {
+    margin-top: 22px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+.activity-heading {
+    display: flex; align-items: center; gap: 8px;
+    padding: 16px 20px; font-size: 15px; font-weight: 700;
+    border-bottom: 1px solid var(--line);
+}
+.activity-heading .i { width: 17px; height: 17px; color: var(--primary); }
+.activity-list { display: flex; flex-direction: column; }
+.activity-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 20px; border-bottom: 1px solid var(--line-soft);
+}
+.activity-row:last-child { border-bottom: none; }
+.activity-main { flex: 1; min-width: 0; }
+.activity-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.activity-sub { font-size: 12px; color: var(--ink-soft); }
+.activity-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
+.activity-where { color: var(--ink-soft); }
+.activity-date { color: var(--muted); }
+
+.glass-photo {
+    flex-shrink: 0; width: 44px; height: 44px; border-radius: var(--radius-sm);
+    border: 1px solid var(--line); background: var(--line-soft); color: var(--muted);
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    cursor: pointer; padding: 0; transition: transform .15s var(--ease), box-shadow .15s var(--ease);
+}
+.glass-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.glass-photo .i { width: 18px; height: 18px; }
+.glass-photo:hover { transform: scale(1.06); box-shadow: var(--shadow-sm); }
+
+.track-btn.btn { gap: 7px; flex-shrink: 0; }
+.track-btn .live-dot { width: 6px; height: 6px; background: #fff; box-shadow: none; animation: live-pulse-white 1.8s infinite; }
+@keyframes live-pulse-white {
+    0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, .6); }
+    70% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+
+@media (max-width: 720px) {
+    .page-content { padding: 16px; }
+    .stage-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .stage-grid .date-block { aspect-ratio: auto; padding: 16px; }
+    .stage-grid .date-block .date-block-value { margin-top: 4px; }
+    .period-grid { grid-template-columns: repeat(2, 1fr); padding: 14px; }
+    .activity-row { flex-wrap: wrap; }
+    .track-btn.btn { width: 100%; justify-content: center; }
+}
+
+/* ==========================================================================
+   PANNEAU DE SUIVI — timeline temps réel
+   ========================================================================== */
+.track-backdrop {
+    position: fixed; inset: 0; z-index: 3000;
+    background: rgba(15, 23, 42, .45);
+    backdrop-filter: blur(2px);
+    display: flex; justify-content: flex-end;
+    opacity: 0; pointer-events: none;
+    transition: opacity .25s var(--ease);
+}
+.track-backdrop.open { opacity: 1; pointer-events: auto; }
+
+.track-panel {
+    width: min(440px, 100%);
+    height: 100%;
+    background: var(--paper);
+    box-shadow: var(--shadow-lg);
+    display: flex; flex-direction: column;
+    transform: translateX(100%);
+    transition: transform .3s var(--ease);
+}
+.track-backdrop.open .track-panel { transform: translateX(0); }
+
+@media (max-width: 640px) {
+    .track-backdrop { align-items: flex-end; justify-content: center; }
+    .track-panel {
+        width: 100%; height: min(88vh, 720px);
+        border-radius: 22px 22px 0 0;
+        transform: translateY(100%);
+    }
+    .track-backdrop.open .track-panel { transform: translateY(0); }
+}
+
+.track-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+    padding: 20px 22px 16px; border-bottom: 1px solid var(--line); flex-shrink: 0;
+}
+.track-eyebrow {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--primary); margin-bottom: 6px;
+}
+.track-eyebrow .i { width: 13px; height: 13px; }
+.track-head h2 { font-size: 19px; font-weight: 800; font-family: var(--font-mono, inherit); letter-spacing: -.2px; }
+.track-head p { font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; }
+
+.track-photo {
+    position: relative; flex-shrink: 0; width: 56px; height: 56px; border-radius: var(--radius);
+    border: 1px solid var(--line); background: var(--line-soft); color: var(--muted);
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    cursor: pointer; padding: 0; order: -1;
+}
+.track-photo:disabled { cursor: default; }
+.track-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.track-photo img[hidden] { display: none; }
+.track-photo .i { width: 22px; height: 22px; }
+.track-photo-zoom {
+    position: absolute; inset: auto 0 0 0; display: flex; align-items: center; justify-content: center;
+    padding: 3px 0; background: rgba(15, 23, 42, .55); opacity: 0; transition: opacity .15s var(--ease);
+}
+.track-photo-zoom .i { width: 12px; height: 12px; color: #fff; }
+.track-photo:not(:disabled):hover .track-photo-zoom { opacity: 1; }
+.track-photo:disabled .track-photo-zoom { display: none; }
+.track-head-info { flex: 1; min-width: 0; }
+
+/* ==========================================================================
+   VISIONNEUSE PHOTO (lightbox)
+   ========================================================================== */
+.lightbox-backdrop {
+    position: fixed; inset: 0; z-index: 4000;
+    background: rgba(5, 7, 12, .9);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    padding: 40px 20px;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s var(--ease);
+}
+.lightbox-backdrop.open { opacity: 1; pointer-events: auto; }
+.lightbox-backdrop img { max-width: min(720px, 100%); max-height: 72vh; border-radius: var(--radius); box-shadow: var(--shadow-lg); }
+.lightbox-caption { color: #dbe3f0; font-size: 13px; font-weight: 600; text-align: center; }
+.lightbox-close {
+    position: absolute; top: 20px; right: 20px;
+    background: rgba(255, 255, 255, .12); color: #fff;
+}
+.lightbox-close:hover { background: rgba(255, 255, 255, .22); }
+
+.track-status {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 22px; font-size: 12.5px; color: var(--ink-soft);
+    background: var(--line-soft); flex-shrink: 0;
+}
+.live-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--success);
+    box-shadow: 0 0 0 0 rgba(15, 157, 112, .5);
+    animation: live-pulse 1.8s infinite;
+    flex-shrink: 0;
+}
+@keyframes live-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(15, 157, 112, .5); }
+    70% { box-shadow: 0 0 0 7px rgba(15, 157, 112, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(15, 157, 112, 0); }
+}
+.track-status.offline .live-dot { background: var(--muted); animation: none; }
+.track-status.error .live-dot { background: var(--danger); animation: none; }
+
+.track-body { flex: 1; overflow-y: auto; padding: 22px; }
+
+.track-loading, .track-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; padding: 60px 20px; color: var(--muted); font-size: 13.5px; text-align: center;
+}
+.spinner {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 3px solid var(--line); border-top-color: var(--primary);
+    animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Timeline verticale */
+.timeline { position: relative; }
+.timeline::before {
+    content: '';
+    position: absolute; left: 17px; top: 6px; bottom: 6px; width: 2px;
+    background: linear-gradient(var(--line), var(--line) 92%, transparent);
+}
+.timeline-step {
+    position: relative;
+    display: flex; gap: 16px;
+    padding-bottom: 26px;
+    animation: step-in .4s var(--ease) both;
+}
+.timeline-step:last-child { padding-bottom: 0; }
+@keyframes step-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.timeline-step.is-new .step-card { animation: flash-new 1.6s var(--ease); }
+@keyframes flash-new {
+    0% { box-shadow: 0 0 0 3px rgba(37, 99, 235, .5); }
+    100% { box-shadow: var(--shadow-sm); }
+}
+
+.step-dot-wrap { position: relative; z-index: 1; flex-shrink: 0; width: 36px; display: flex; justify-content: center; }
+.step-dot {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface); border: 2px solid var(--line); color: var(--ink-soft);
+}
+.step-dot .i { width: 16px; height: 16px; }
+.timeline-step.current .step-dot {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-deep) 100%);
+    border-color: transparent; color: #fff;
+    box-shadow: 0 0 0 4px var(--primary-tint);
+}
+.timeline-step.action-success .step-dot { color: var(--success); border-color: var(--success-tint); }
+.timeline-step.action-warning .step-dot { color: var(--warning); border-color: var(--warning-tint); }
+.timeline-step.action-danger .step-dot { color: var(--danger); border-color: var(--danger-tint); }
+.timeline-step.current.action-success .step-dot,
+.timeline-step.current.action-warning .step-dot,
+.timeline-step.current.action-danger .step-dot { color: #fff; border-color: transparent; }
+.timeline-step.current.action-success .step-dot { background: linear-gradient(135deg, var(--success), #0c8a61); box-shadow: 0 0 0 4px var(--success-tint); }
+.timeline-step.current.action-warning .step-dot { background: linear-gradient(135deg, var(--warning), #96590a); box-shadow: 0 0 0 4px var(--warning-tint); }
+.timeline-step.current.action-danger .step-dot { background: linear-gradient(135deg, var(--danger), #c62b27); box-shadow: 0 0 0 4px var(--danger-tint); }
+
+.step-card {
+    flex: 1; min-width: 0;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 14px; box-shadow: var(--shadow-sm);
+}
+.step-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.step-action { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.step-time { font-size: 11.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.step-route { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.step-route .arrow { color: var(--muted); }
+.step-user { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.timeline-step.current .step-card { border-color: var(--primary-tint); }
+.current-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--primary); background: var(--primary-tint);
+    padding: 2px 8px; border-radius: 999px; margin-left: 8px;
+}

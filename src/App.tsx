@@ -91,9 +91,67 @@ function getEmployeeAvatar(name?: string) {
 }
 
 interface Movement {
-  id: string; stage: MvtStage; frames: number
-  from: string; to: string; date: string; time: string
+  id: string; numericId: number; stage: MvtStage; frames: number
+  from: string; to: string; toRaw: string; date: string; time: string; createdAtIso: string
   operator: string; notes?: string
+  barcode: string; reference?: string; brand?: string; photoUrl?: string | null
+}
+
+// Champs bruts renvoyés par /inventory/movements pour une monture, utile aussi bien à la
+// liste d'activité qu'au panneau « Suivi en direct » — même source de vérité que
+// PhotoMontureURL/PhotoBrancheURL côté modèle Go (models/movement.go MovementListItem).
+function movementPhotoUrl(entry: any): string | null {
+  return (entry && (entry.photo_monture_url || entry.photo_branche_url)) || null
+}
+
+type PeriodKey = 'today' | 'week' | 'month' | 'older'
+const PERIODS: { key: PeriodKey; label: string }[] = [
+  { key: 'today', label: "Aujourd'hui" },
+  { key: 'week', label: 'Cette semaine' },
+  { key: 'month', label: 'Ce mois-ci' },
+  { key: 'older', label: 'Plus ancien' },
+]
+
+// Période mutuellement exclusive d'après la date du mouvement — la somme des 4 compteurs
+// correspond donc toujours au total de l'étape, comme dans historique.html (periodOf).
+function periodOf(dateIso?: string): PeriodKey {
+  const d = new Date(dateIso || '')
+  if (Number.isNaN(d.getTime())) return 'older'
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfWeek = new Date(startOfToday.getTime() - 7 * 24 * 3600 * 1000)
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  if (d >= startOfToday) return 'today'
+  if (d >= startOfWeek) return 'week'
+  if (d >= startOfMonth) return 'month'
+  return 'older'
+}
+
+// Un seul mouvement par monture (le plus récent) : la position actuelle plutôt que le
+// journal brut, comme dedupeByMonture() dans historique.js — deux montures ne se
+// distinguent que par leur code-barres, et une monture apparue trois fois ne doit compter
+// qu'une fois dans les cartes d'étape.
+function dedupeMovementsByBarcode(movements: Movement[]): Movement[] {
+  const byBarcode = new Map<string, Movement>()
+  for (const m of movements) {
+    const existing = byBarcode.get(m.barcode)
+    if (!existing || m.createdAtIso > existing.createdAtIso) byBarcode.set(m.barcode, m)
+  }
+  return Array.from(byBarcode.values()).sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso))
+}
+
+function relativeTimeFr(iso?: string) {
+  const date = new Date(iso || '')
+  if (Number.isNaN(date.getTime())) return ''
+  const diffSec = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000))
+  if (diffSec < 5) return 'à l’instant'
+  if (diffSec < 60) return `il y a ${diffSec} s`
+  const diffMin = Math.round(diffSec / 60)
+  if (diffMin < 60) return `il y a ${diffMin} min`
+  const diffH = Math.round(diffMin / 60)
+  if (diffH < 24) return `il y a ${diffH} h`
+  const diffD = Math.round(diffH / 24)
+  return `il y a ${diffD} j`
 }
 
 function normalizeMovementStage(action?: string, toStationName?: string): MvtStage {
@@ -157,7 +215,7 @@ if (typeof window !== 'undefined' && window.fetch) {
 
 const COUNTRIES: CountryItem[] = []
 
-type RevenueRow = { ref: string; montant: number; date: string; client: string; status: string }
+type RevenueRow = { id?: number; ref: string; montant: number; date: string; client: string; status: string }
 
 function normalizeShapeName(value?: string) {
   const raw = String(value || '').trim()
@@ -963,6 +1021,7 @@ function buildCityRevenue(
 
     if (!rowsByCity[city]) rowsByCity[city] = []
     rowsByCity[city].push({
+      id: proforma.id,
       // Le code sert de clé de liste : sans lui, deux proformas se recouvriraient à
       // l'affichage. L'identifiant prend le relais quand il manque.
       ref: proforma.code || `#${proforma.id ?? rowsByCity[city].length + 1}`,
@@ -1114,6 +1173,52 @@ const STAGE_META: Record<MvtStage, { label: string; color: string; bg: string; i
   caisse: { label: 'En caisse', color: '#0891b2', bg: 'bg-cyan-50 dark:bg-cyan-900/20', icon: ic.cash() },
   labo: { label: 'Au laboratoire', color: '#d97706', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: ic.flask() },
   sold: { label: 'Vendu', color: '#059669', bg: 'bg-emerald-50 dark:bg-emerald-900/20', icon: ic.check() },
+}
+
+// Le panneau « Suivi en direct » affiche l'historique brut d'une monture, y compris les
+// actions hors pipeline (réception fournisseur, rangement) qu'écarte normalizeMovementStage
+// pour les cartes d'étape — il lui faut donc son propre libellé par action, comme
+// ACTION_LABELS dans historique.js.
+const MOVEMENT_ACTION_LABELS: Record<string, string> = {
+  RECEPTION_FOURNISSEUR: 'Réception fournisseur',
+  RANGEMENT: 'Rangement',
+  EXPEDITION: 'Expédition',
+  RECEPTION_STATION: 'Réception station',
+  PRESENTOIR: 'Mise en présentoir',
+  RETRAIT_PRESENTOIR: 'Retrait présentoir',
+  RESERVATION: 'Réservation',
+  MISE_EN_CAISSE: 'Mise en caisse',
+  LABORATOIRE: 'Envoi laboratoire',
+  CONTROLE_QUALITE: 'Contrôle qualité',
+  LIVRAISON: 'Livraison',
+  VENTE: 'Vente',
+  VENDUE: 'Vente',
+  RETOUR: 'Retour',
+  INVENTAIRE: 'Inventaire',
+  PERTE: 'Perte',
+  CASSE: 'Casse',
+}
+function movementActionLabel(action?: string) {
+  const key = String(action || '').trim().toUpperCase()
+  return MOVEMENT_ACTION_LABELS[key] || key || 'Mouvement'
+}
+function movementActionIcon(action?: string) {
+  const key = String(action || '').trim().toUpperCase()
+  if (key === 'RECEPTION_FOURNISSEUR' || key === 'RECEPTION_STATION') return ic.box
+  if (key === 'EXPEDITION' || key === 'LIVRAISON') return ic.plane
+  if (key === 'PRESENTOIR' || key === 'RETRAIT_PRESENTOIR') return ic.store
+  if (key === 'LABORATOIRE' || key === 'CONTROLE_QUALITE') return ic.flask
+  if (key === 'MISE_EN_CAISSE') return ic.cash
+  if (key === 'VENTE' || key === 'VENDUE') return ic.check
+  if (key === 'RETOUR') return ic.back
+  return ic.glasses
+}
+function movementActionColor(action?: string) {
+  const key = String(action || '').trim().toUpperCase()
+  if (key === 'PERTE' || key === 'CASSE') return '#dc2626'
+  if (key === 'RESERVATION' || key === 'RETRAIT_PRESENTOIR') return '#d97706'
+  if (key === 'PRESENTOIR' || key === 'LIVRAISON' || key === 'RECEPTION_FOURNISSEUR' || key === 'RECEPTION_STATION') return '#16a34a'
+  return '#64748b'
 }
 
 const ROLE_COLOR: Record<string, string> = {
@@ -1437,16 +1542,36 @@ function CriticalReferencesScreen({ onNavigate: _onNavigate }: { onNavigate: (s:
     const token = window.localStorage.getItem('token')
     if (!token) { setIsLoading(false); return }
     const headers = { Authorization: `Bearer ${token}` }
-    setIsLoading(true)
-    Promise.allSettled([
-      fetch(`${API_URL}/inventory/glasses?status=${REFERENCE_DETAIL_STATUSES.join(',')}`, { headers })
-        .then(r => (r.ok ? r.json() : Promise.reject())).then(p => p?.data?.glasses || []),
-      fetch(`${API_URL}/auth/stations`, { headers })
-        .then(r => (r.ok ? r.json() : Promise.reject())).then(p => p?.data?.stations || []),
-    ]).then(([glassesResult, stationsResult]) => {
-      setGlasses(glassesResult.status === 'fulfilled' ? glassesResult.value : [])
-      setStations(stationsResult.status === 'fulfilled' ? stationsResult.value : [])
-    }).finally(() => setIsLoading(false))
+
+    // silent : les rafraîchissements périodiques ne doivent pas réafficher le squelette de
+    // chargement, seul le premier montage le fait.
+    const load = (silent: boolean) => {
+      if (!silent) setIsLoading(true)
+      Promise.allSettled([
+        fetch(`${API_URL}/inventory/glasses?status=${REFERENCE_DETAIL_STATUSES.join(',')}`, { headers })
+          .then(r => (r.ok ? r.json() : Promise.reject())).then(p => p?.data?.glasses || []),
+        fetch(`${API_URL}/auth/stations`, { headers })
+          .then(r => (r.ok ? r.json() : Promise.reject())).then(p => p?.data?.stations || []),
+      ]).then(([glassesResult, stationsResult]) => {
+        setGlasses(glassesResult.status === 'fulfilled' ? glassesResult.value : [])
+        setStations(stationsResult.status === 'fulfilled' ? stationsResult.value : [])
+      }).finally(() => setIsLoading(false))
+    }
+
+    load(false)
+
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') load(true)
+    }, 15000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') load(true)
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
 
   const stationCityMap = useMemo(() => {
@@ -2039,20 +2164,37 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
     const token = window.localStorage.getItem('token')
     if (!token) { setIsLoading(false); return }
 
-    setIsLoading(true)
-    fetch(`${API_URL}/inventory/glasses?status=EN_STOCK_GENERAL`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async response => {
-        if (!response.ok) throw new Error('general stock unavailable')
-        const payload = await response.json().catch(() => ({}))
-        return payload?.data?.glasses || []
+    const load = (silent: boolean) => {
+      if (!silent) setIsLoading(true)
+      fetch(`${API_URL}/inventory/glasses?status=EN_STOCK_GENERAL`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
-      // Le serveur pourrait élargir le filtre un jour : on revérifie le statut côté client
-      // pour que cet écran ne montre jamais autre chose que du stock général.
-      .then((rows: any[]) => setGlasses(rows.filter((g: any) => isGeneralStockStatus(g.status))))
-      .catch(() => setGlasses([]))
-      .finally(() => setIsLoading(false))
+        .then(async response => {
+          if (!response.ok) throw new Error('general stock unavailable')
+          const payload = await response.json().catch(() => ({}))
+          return payload?.data?.glasses || []
+        })
+        // Le serveur pourrait élargir le filtre un jour : on revérifie le statut côté client
+        // pour que cet écran ne montre jamais autre chose que du stock général.
+        .then((rows: any[]) => setGlasses(rows.filter((g: any) => isGeneralStockStatus(g.status))))
+        .catch(() => setGlasses([]))
+        .finally(() => setIsLoading(false))
+    }
+
+    load(false)
+
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') load(true)
+    }, 15000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') load(true)
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
 
   const optionsFor = (pick: (parsed: { rayon: string; etagere: string; bac: string }) => string) =>
@@ -2624,6 +2766,56 @@ function CityDetailScreen({ block, pays, city, onNavigate, cityStockCounts, fram
   const [calOpen, setCalOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [copied, setCopied] = useState(false)
+  const [selectedRevenuePreview, setSelectedRevenuePreview] = useState<RevenueRow | null>(null)
+  const [revenuePreviewDetail, setRevenuePreviewDetail] = useState<any | null>(null)
+  const [isLoadingRevenuePreview, setIsLoadingRevenuePreview] = useState(false)
+  const [revenuePreviewPhotos, setRevenuePreviewPhotos] = useState<Record<string, string>>({})
+
+  // La ligne ne porte que ref/client/montant : ni les montures, ni le téléphone du client.
+  // On les va chercher sur la fiche complète, comme fait déjà ProformaDetail côté Caisse.
+  function openRevenuePreview(row: RevenueRow) {
+    setSelectedRevenuePreview(row)
+    setRevenuePreviewDetail(null)
+    setRevenuePreviewPhotos({})
+    if (!row.id) return
+    setIsLoadingRevenuePreview(true)
+    const token = window.localStorage.getItem('token')
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+    fetch(`${API_URL}/inventory/proformas/${row.id}`, { headers })
+      .then(response => (response.ok ? response.json() : Promise.reject()))
+      .then(async payload => {
+        const proforma = payload?.data?.proforma || null
+        setRevenuePreviewDetail(proforma)
+
+        // ProformaItem ne porte pas de photo (recopié pour rester lisible même si la
+        // monture est supprimée) : on va la chercher sur la fiche monture, par code-barres.
+        // Sans station_id dans l'URL : avec, ce même endpoint pose la monture en présentoir
+        // (GetGlassByBarcode) — un simple aperçu ne doit rien déplacer.
+        const barcodes = Array.from(new Set(
+          (proforma?.items || []).map((item: any) => String(item.barcode || '').trim()).filter(Boolean),
+        )) as string[]
+        const entries = await Promise.all(barcodes.map(async barcode => {
+          try {
+            const response = await fetch(`${API_URL}/inventory/glasses/${encodeURIComponent(barcode)}`, { headers })
+            if (!response.ok) return null
+            const glassPayload = await response.json().catch(() => ({}))
+            const url = glassPayload?.data?.glass?.photo_monture_url
+            return url ? [barcode, url] as const : null
+          } catch {
+            return null
+          }
+        }))
+        setRevenuePreviewPhotos(Object.fromEntries(entries.filter(Boolean) as [string, string][]))
+      })
+      .catch(() => setRevenuePreviewDetail(null))
+      .finally(() => setIsLoadingRevenuePreview(false))
+  }
+
+  function closeRevenuePreview() {
+    setSelectedRevenuePreview(null)
+    setRevenuePreviewDetail(null)
+    setRevenuePreviewPhotos({})
+  }
 
   function prevMonth() { if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11) } else setCalMonth(m => m - 1) }
   function nextMonth() { if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0) } else setCalMonth(m => m + 1) }
@@ -2756,15 +2948,94 @@ function CityDetailScreen({ block, pays, city, onNavigate, cityStockCounts, fram
             {rows.length === 0 ? (
               <div className="py-10 text-center text-sm text-slate-400">Aucune vente{selectedDay ? ` le ${selectedDay}` : ''}</div>
             ) : rows.map(r => (
-              <div key={r.ref} className="grid grid-cols-4 items-center hover:bg-green-50/50 dark:hover:bg-green-900/10 transition-colors">
+              <button key={r.ref} onClick={() => openRevenuePreview(r)}
+                className="w-full grid grid-cols-4 items-center hover:bg-green-50/50 dark:hover:bg-green-900/10 transition-colors text-left">
                 <div className="px-3 py-3 text-xs font-bold text-slate-900 dark:text-white">{r.ref}</div>
                 <div className="px-3 py-3 text-xs text-slate-600 dark:text-slate-400 truncate">{r.client}</div>
                 <div className="px-3 py-3 text-xs font-black tabular-nums" style={{ color: accent }}>{fmtFCFA(r.montant)}</div>
                 <div className="px-3 py-3"><Badge status={r.status} /></div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
+
+        {selectedRevenuePreview && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4" onClick={closeRevenuePreview}>
+            <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 p-4 shadow-2xl border border-slate-200 dark:border-slate-700" onClick={e => e.stopPropagation()}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Aperçu proforma</p>
+                  <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{revenuePreviewDetail?.code || selectedRevenuePreview.ref}</p>
+                </div>
+                <button onClick={closeRevenuePreview} className="text-slate-400 hover:text-slate-600">{ic.x()}</button>
+              </div>
+
+              {isLoadingRevenuePreview ? (
+                <div className="mt-4 py-8 text-center text-sm text-slate-400">Chargement...</div>
+              ) : (
+                <>
+                  <div className="mt-4 grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
+                    <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60 sm:col-span-2">
+                      <span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Client</span>
+                      <span className="mt-1 block font-semibold">{revenuePreviewDetail?.client_name || selectedRevenuePreview.client}</span>
+                      {revenuePreviewDetail?.client_phone && <span className="block text-xs text-slate-500 dark:text-slate-400">{revenuePreviewDetail.client_phone}</span>}
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Montant</span><span className="mt-1 block font-semibold" style={{ color: accent }}>{fmtFCFA(Number(revenuePreviewDetail?.total_amount ?? selectedRevenuePreview.montant))}</span></div>
+                    <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Statut</span><span className="mt-1 block"><Badge status={selectedRevenuePreview.status} /></span></div>
+                    <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Émise le</span><span className="mt-1 block font-semibold">{String(revenuePreviewDetail?.created_at || '').slice(0, 10) || '—'}</span></div>
+                    <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Réglée le</span><span className="mt-1 block font-semibold">{String(revenuePreviewDetail?.settled_at || selectedRevenuePreview.date || '').slice(0, 10) || '—'}</span></div>
+                    {revenuePreviewDetail?.created_by_name && (
+                      <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60 sm:col-span-2"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Enregistrée par</span><span className="mt-1 block font-semibold">{revenuePreviewDetail.created_by_name}</span></div>
+                    )}
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                      Monture{(revenuePreviewDetail?.items?.length ?? 0) > 1 ? 's' : ''} ({revenuePreviewDetail?.items?.length ?? 0})
+                    </p>
+                    {!revenuePreviewDetail?.items || revenuePreviewDetail.items.length === 0 ? (
+                      <p className="mt-2 text-xs text-slate-400">Aucune ligne trouvée pour cette proforma.</p>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        {revenuePreviewDetail.items.map((item: any) => (
+                          <div key={item.id} className="flex gap-2.5 rounded-xl border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800/60">
+                            <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                              {revenuePreviewPhotos[String(item.barcode || '').trim()] ? (
+                                <img src={revenuePreviewPhotos[String(item.barcode || '').trim()]} alt={item.reference || item.barcode || 'Monture'} className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-[9px] text-slate-400">Pas de photo</div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold text-slate-900 dark:text-white">{item.reference || item.barcode || 'Monture'}</span>
+                                <span className="flex-shrink-0 font-bold tabular-nums" style={{ color: accent }}>{item.offerte ? 'Offerte' : fmtFCFA(Number(item.unit_price) || 0)}</span>
+                              </div>
+                              <div className="mt-1 text-slate-500 dark:text-slate-400">
+                                {[item.brand, item.shape, item.color].filter(Boolean).join(' · ') || '—'}
+                              </div>
+                              <div className="mt-1 text-slate-400">
+                                {item.barcode && <span className="font-mono">{item.barcode}</span>}
+                                {item.outcome && <span className="ml-2">{item.outcome === 'VENDUE' ? 'Vendue' : item.outcome === 'RETOUR_PRESENTOIR' ? 'Retournée au présentoir' : item.outcome}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {revenuePreviewDetail?.note && (
+                    <div className="mt-4 rounded-xl bg-slate-50 p-2.5 text-xs text-slate-600 dark:bg-slate-900/60 dark:text-slate-300">
+                      <span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Note</span>
+                      <p className="mt-1 whitespace-pre-line">{revenuePreviewDetail.note}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {calOpen && <CalendarModal year={calYear} month={calMonth} selectedDay={selectedDay} onSelectDay={setSelectedDay} onClose={() => setCalOpen(false)} onPrevMonth={prevMonth} onNextMonth={nextMonth} />}
       </div>
@@ -2812,7 +3083,23 @@ function HistoryView() {
   // La grille d'étapes reste affichée en permanence et sert de sélecteur : seul le détail
   // en dessous change. Une étape est donc toujours sélectionnée.
   const [selectedStage, setSelectedStage] = useState<MvtStage>('shipped')
+  // Second niveau, comme historique.html : période dans l'étape, et — pour « Réceptionné »
+  // seulement, l'équivalent du « Stock local » — la station avant la période.
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey | null>(null)
+  const [selectedLocalStation, setSelectedLocalStation] = useState<string | null>(null)
   const [liveItems, setLiveItems] = useState<Movement[]>(MOVEMENTS_DATA)
+  const [knownStations, setKnownStations] = useState<any[]>([])
+  const [quickSearch, setQuickSearch] = useState('')
+
+  // Panneau « Suivi en direct » d'une monture.
+  const [trackedBarcode, setTrackedBarcode] = useState<string | null>(null)
+  const [trackMovements, setTrackMovements] = useState<any[]>([])
+  const [isTrackLoading, setIsTrackLoading] = useState(false)
+  const [trackError, setTrackError] = useState(false)
+  const [, setNowTick] = useState(0)
+
+  // Visionneuse photo plein écran.
+  const [lightbox, setLightbox] = useState<{ url: string; caption: string } | null>(null)
 
   useEffect(() => {
     const token = window.localStorage.getItem('token')
@@ -2823,56 +3110,191 @@ function HistoryView() {
 
     const headers = { Authorization: `Bearer ${token}` }
 
-    fetch(`${API_URL}/inventory/movements?limit=300&offset=0`, { headers })
-      .then(async response => {
-        if (!response.ok) throw new Error('movements unavailable')
-        const payload = await response.json().catch(() => ({}))
-        const items = Array.isArray(payload?.data?.movements) ? payload.data.movements : []
+    const loadMovements = () => {
+      fetch(`${API_URL}/inventory/movements?limit=300&offset=0`, { headers })
+        .then(async response => {
+          if (!response.ok) throw new Error('movements unavailable')
+          const payload = await response.json().catch(() => ({}))
+          const items = Array.isArray(payload?.data?.movements) ? payload.data.movements : []
 
-        const mapped: Movement[] = items
-          // Hors pipeline, et écartées ici plutôt que dans normalizeMovementStage, dont le
-          // repli les ferait toutes retomber dans « Réceptionné » :
-          //   RECEPTION_FOURNISSEUR — sans station d'origine, marque l'entrée de la monture
-          //     dans le parc et non un déplacement ;
-          //   RANGEMENT — changement de casier à l'intérieur d'une même station, la monture
-          //     n'a franchi aucune frontière.
-          .filter((entry: any) => !OUT_OF_PIPELINE_ACTIONS.has(String(entry.action || '').trim().toUpperCase()))
-          .map((entry: any): Movement => {
-            const stage = normalizeMovementStage(entry.action, entry.to_station_name)
-            const from = stationDisplayLabel(entry.from_station_name) || 'Inconnu'
-            const to = stationDisplayLabel(entry.to_station_name) || 'Inconnu'
-            const operator = [entry.user_first_name, entry.user_last_name].filter(Boolean).join(' ') || 'Système'
-            const { date, time } = formatMovementDate(entry.created_at)
-            const ref = String(entry.reference || entry.barcode || `MVT-${entry.id ?? 'n/a'}`)
+          const mapped: Movement[] = items
+            // Hors pipeline, et écartées ici plutôt que dans normalizeMovementStage, dont le
+            // repli les ferait toutes retomber dans « Réceptionné » :
+            //   RECEPTION_FOURNISSEUR — sans station d'origine, marque l'entrée de la monture
+            //     dans le parc et non un déplacement ;
+            //   RANGEMENT — changement de casier à l'intérieur d'une même station, la monture
+            //     n'a franchi aucune frontière.
+            .filter((entry: any) => !OUT_OF_PIPELINE_ACTIONS.has(String(entry.action || '').trim().toUpperCase()))
+            .map((entry: any): Movement => {
+              const stage = normalizeMovementStage(entry.action, entry.to_station_name)
+              const from = stationDisplayLabel(entry.from_station_name) || 'Inconnu'
+              const to = stationDisplayLabel(entry.to_station_name) || 'Inconnu'
+              const operator = [entry.user_first_name, entry.user_last_name].filter(Boolean).join(' ') || 'Système'
+              const { date, time } = formatMovementDate(entry.created_at)
+              const ref = String(entry.reference || entry.barcode || `MVT-${entry.id ?? 'n/a'}`)
 
-            return {
-              id: String(entry.id ?? `${stage}-${ref}-${date}-${time}`),
-              stage,
-              frames: Number(entry.quantity || 1),
-              from,
-              to,
-              date,
-              time,
-              operator,
-              notes: entry.notes || undefined,
-            }
-          })
-          .filter((item: Movement) => item.from && item.to)
-          .sort((a: Movement, b: Movement) => {
-            const da = new Date(`${b.date} ${b.time}`.replace(/\//g, '-')).getTime()
-            const db = new Date(`${a.date} ${a.time}`.replace(/\//g, '-')).getTime()
-            return da - db
-          })
+              return {
+                id: String(entry.id ?? `${stage}-${ref}-${date}-${time}`),
+                numericId: Number(entry.id) || 0,
+                stage,
+                frames: Number(entry.quantity || 1),
+                from,
+                to,
+                toRaw: String(entry.to_station_name || ''),
+                date,
+                time,
+                createdAtIso: String(entry.created_at || ''),
+                operator,
+                notes: entry.notes || undefined,
+                barcode: String(entry.barcode || ''),
+                reference: entry.reference || undefined,
+                brand: entry.brand || undefined,
+                photoUrl: movementPhotoUrl(entry),
+              }
+            })
+            .filter((item: Movement) => item.from && item.to && item.barcode)
+            .sort((a: Movement, b: Movement) => b.createdAtIso.localeCompare(a.createdAtIso))
 
-        setLiveItems(mapped.slice(0, 60))
-      })
-      .catch(() => setLiveItems([]))
+          setLiveItems(mapped)
+        })
+        .catch(() => setLiveItems([]))
+    }
+
+    loadMovements()
+
+    // Pas de push serveur : on republie le journal toutes les 15s pour un rendu quasi
+    // temps réel, en sautant les cycles où l'onglet est en arrière-plan (et en resynchronisant
+    // dès qu'il redevient visible) pour ne pas taper l'API pour rien.
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') loadMovements()
+    }, 15000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') loadMovements()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
+
+  // Le journal récent ne couvre pas forcément toutes les villes : sans ce référentiel, une
+  // ville sans mouvement récent disparaîtrait du bloc « Réceptionné » (comme
+  // loadKnownStations dans historique.js).
+  useEffect(() => {
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+    fetch(`${API_URL}/auth/stations`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(response => (response.ok ? response.json() : Promise.reject()))
+      .then(payload => setKnownStations(Array.isArray(payload?.data?.stations) ? payload.data.stations : []))
+      .catch(() => setKnownStations([]))
+  }, [])
+
+  // Suivi en direct : chargement puis polling toutes les 12s tant que le panneau est ouvert.
+  useEffect(() => {
+    if (!trackedBarcode) return
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+    let cancelled = false
+    const headers = { Authorization: `Bearer ${token}` }
+
+    const fetchTrack = () => {
+      const params = new URLSearchParams({ barcode: trackedBarcode, limit: '50', offset: '0' })
+      fetch(`${API_URL}/inventory/movements?${params.toString()}`, { headers })
+        .then(response => (response.ok ? response.json() : Promise.reject()))
+        .then(payload => {
+          if (cancelled) return
+          setTrackMovements(Array.isArray(payload?.data?.movements) ? payload.data.movements : [])
+          setTrackError(false)
+        })
+        .catch(() => { if (!cancelled) setTrackError(true) })
+        .finally(() => { if (!cancelled) setIsTrackLoading(false) })
+    }
+
+    setIsTrackLoading(true)
+    setTrackMovements([])
+    setTrackError(false)
+    fetchTrack()
+    const poll = window.setInterval(fetchTrack, 12000)
+    return () => { cancelled = true; window.clearInterval(poll) }
+  }, [trackedBarcode])
+
+  // Horloge des temps relatifs (« il y a 3 min ») dans le panneau de suivi, comme
+  // tickRelativeTimes dans historique.js.
+  useEffect(() => {
+    if (!trackedBarcode) return
+    const tick = window.setInterval(() => setNowTick(n => n + 1), 1000)
+    return () => window.clearInterval(tick)
+  }, [trackedBarcode])
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      if (lightbox) { setLightbox(null); return }
+      if (trackedBarcode) setTrackedBarcode(null)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [lightbox, trackedBarcode])
+
+  function openTrack(barcode: string) {
+    setTrackedBarcode(barcode.trim())
+  }
+
+  function handleQuickSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter' && quickSearch.trim()) {
+      openTrack(quickSearch.trim())
+      setQuickSearch('')
+    }
+  }
+
+  function selectStage(stage: MvtStage) {
+    setSelectedStage(stage)
+    setSelectedPeriod(null)
+    setSelectedLocalStation(null)
+  }
 
   const pipeline: MvtStage[] = ['shipped', 'received', 'display', 'caisse', 'labo', 'sold']
 
-  const stageItems = liveItems.filter(m => m.stage === selectedStage)
+  // Une ligne par monture (sa position la plus récente), pas le journal brut : mêmes
+  // compteurs de cartes que historique.html (dedupeByMonture), pour que « 3 montures au
+  // présentoir » compte des montures et non des allers-retours.
+  const dedupedAll = useMemo(() => dedupeMovementsByBarcode(liveItems), [liveItems])
   const activeMeta = STAGE_META[selectedStage]
+  const stageMovements = useMemo(() => dedupedAll.filter(m => m.stage === selectedStage), [dedupedAll, selectedStage])
+
+  const isLocalDrilldown = selectedStage === 'received'
+  const scopedMovements = isLocalDrilldown && selectedLocalStation
+    ? stageMovements.filter(m => m.toRaw === selectedLocalStation)
+    : stageMovements
+
+  const periodCounts = useMemo(() => {
+    const counts: Record<PeriodKey, number> = { today: 0, week: 0, month: 0, older: 0 }
+    scopedMovements.forEach(m => { counts[periodOf(m.createdAtIso)] += 1 })
+    return counts
+  }, [scopedMovements])
+
+  const filteredMovements = selectedPeriod
+    ? scopedMovements.filter(m => periodOf(m.createdAtIso) === selectedPeriod)
+    : scopedMovements
+
+  // Villes du « Stock local » : celles vues dans les mouvements récents, complétées par les
+  // stations magasin connues (même si rien n'y est arrivé récemment) — comme
+  // renderLocalStationBlocks dans historique.js.
+  const localStationNames = useMemo(() => {
+    if (!isLocalDrilldown) return [] as [string, number][]
+    const counts = new Map<string, number>()
+    stageMovements.forEach(m => counts.set(m.toRaw, (counts.get(m.toRaw) || 0) + 1))
+    knownStations.forEach((station: any) => {
+      if (isStoreStation(station) && station.name && !counts.has(station.name)) counts.set(station.name, 0)
+    })
+    return Array.from(counts.entries()).sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0], 'fr'))
+  }, [isLocalDrilldown, stageMovements, knownStations])
+
+  const trackSorted = [...trackMovements].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+  const trackPhotoUrl = trackSorted.map(movementPhotoUrl).find(Boolean) || null
+  const trackLabel = trackSorted.length ? [trackSorted[0].brand, trackSorted[0].reference].filter(Boolean).join(' ') : ''
 
   return (
     <div className="space-y-5">
@@ -2887,7 +3309,17 @@ function HistoryView() {
             Traçabilité complète des montures : transits, réceptions, présentoir, caisse, laboratoire, ventes.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{ic.search('w-4 h-4')}</span>
+            <input
+              value={quickSearch}
+              onChange={e => setQuickSearch(e.target.value)}
+              onKeyDown={handleQuickSearchKeyDown}
+              placeholder="Suivre un code-barres..."
+              className="w-48 rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            />
+          </div>
           <button
             type="button"
             onClick={() => setActiveTab('lunettes')}
@@ -2915,15 +3347,14 @@ function HistoryView() {
             sm+ : sm:grid reprend la main sur le flex et on revient à une vraie grille. */}
         <div className={`${CARD_ROW_CLASS} sm:grid-cols-3 xl:grid-cols-6`}>
           {pipeline.map(stage => {
-            const items = liveItems.filter(m => m.stage === stage)
-            const frames = items.reduce((sum, m) => sum + m.frames, 0)
+            const items = dedupedAll.filter(m => m.stage === stage)
             const meta = STAGE_META[stage]
             const isActive = stage === selectedStage
             return (
               <button
                 key={stage}
                 type="button"
-                onClick={() => setSelectedStage(stage)}
+                onClick={() => selectStage(stage)}
                 aria-pressed={isActive}
                 className={`${CARD_CLASS} sm:aspect-square ${isActive
                   ? 'bg-white dark:bg-slate-900'
@@ -2940,66 +3371,236 @@ function HistoryView() {
                 </span>
                 <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{meta.label}</span>
                 <span className="mt-auto text-[28px] font-extrabold leading-none tracking-tight tabular-nums text-slate-900 dark:text-white">{items.length}</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">{frames} monture(s)</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">{items.length > 1 ? 'montures' : 'monture'}</span>
               </button>
             )
           })}
         </div>
 
-        {/* .stage-activity — le détail de l'étape sélectionnée, directement sous les cartes */}
-        <div className={`overflow-hidden ${BLOCK_CLASS}`}>
+        {isLocalDrilldown && !selectedLocalStation ? (
+          /* Sous-niveau « Stock local » : choix de la ville avant la période, comme
+             renderLocalStationBlocks dans historique.js. */
+          <div className={`overflow-hidden ${BLOCK_CLASS}`}>
             <h3 className="flex items-center gap-2 border-b border-slate-200 px-5 py-4 text-[15px] font-bold text-slate-900 dark:border-slate-700 dark:text-white">
               <span style={{ color: activeMeta.color }}>{ic.hist('w-[17px] h-[17px]')}</span>
               {activeMeta.label}
-              <span className="ml-1 text-sm font-medium text-slate-500 dark:text-slate-400">· {stageItems.length} mouvement(s)</span>
             </h3>
-
-            {stageItems.length === 0 ? (
+            {localStationNames.length === 0 ? (
               <div className="px-5 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
-                Aucun mouvement pour cette étape.
+                Aucune monture en stock local pour le moment.
               </div>
             ) : (
-              <div className="flex flex-col">
-                {stageItems.map((mvt, idx) => {
-                  const meta = STAGE_META[mvt.stage]
-                  return (
-                    <div key={mvt.id} className="flex items-center gap-3.5 border-b border-slate-100 px-5 py-3.5 transition-colors last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60">
-                      {/* .glass-photo — pas de photo sur un mouvement, l'icône tient la place */}
-                      <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800">
-                        {ic.glasses('w-[18px] h-[18px]')}
-                      </span>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-baseline gap-2">
-                          {/* .badge, teinté à la couleur de l'étape */}
-                          <span className="inline-block rounded-full px-[11px] py-1 text-xs font-bold" style={{ backgroundColor: `${meta.color}1f`, color: meta.color }}>
-                            {meta.label}
-                          </span>
-                          <span className="font-mono text-xs text-slate-400 dark:text-slate-500">{mvt.id}</span>
-                          {idx === 0 && (
-                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Nouveau</span>
-                          )}
-                        </div>
-                        {mvt.notes && <p className="mt-0.5 text-xs italic text-slate-500 dark:text-slate-400">{mvt.notes}</p>}
-                        <div className="mt-1.5 flex flex-wrap items-center gap-2.5 text-xs">
-                          <span className="text-slate-600 dark:text-slate-300">
-                            {mvt.from} <span className="text-slate-400">→</span> {mvt.to}
-                          </span>
-                          <span className="text-slate-400">{mvt.date} à {mvt.time} · Par {mvt.operator}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex-shrink-0 text-right">
-                        <p className="text-xl font-black leading-none tabular-nums" style={{ color: meta.color }}>{mvt.frames}</p>
-                        <p className="text-[11px] text-slate-400">montures</p>
-                      </div>
-                    </div>
-                  )
-                })}
+              <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3">
+                {localStationNames.map(([name, count]) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setSelectedLocalStation(name)}
+                    className="flex flex-col items-start gap-1.5 rounded-2xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-blue-200 dark:border-slate-700 dark:bg-slate-900"
+                  >
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{stationDisplayLabel(name)}</span>
+                    <span className="text-xl font-extrabold tabular-nums text-slate-900 dark:text-white">{count}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{count > 1 ? 'montures' : 'monture'}</span>
+                  </button>
+                ))}
               </div>
             )}
-        </div>
+          </div>
+        ) : (
+          <>
+            {/* Sous-niveau « période », comme PERIODS dans historique.js — un clic de plus
+                désélectionne, pour revenir à toute l'étape. */}
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+              {PERIODS.map(p => {
+                const isActive = selectedPeriod === p.key
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => setSelectedPeriod(prev => (prev === p.key ? null : p.key))}
+                    aria-pressed={isActive}
+                    className={`flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm transition-colors ${isActive
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-900/20 dark:text-blue-300'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'}`}
+                  >
+                    <span className="font-semibold">{p.label}</span>
+                    <span className="tabular-nums">{periodCounts[p.key]}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* .stage-activity — le détail de l'étape (et éventuellement de la ville/période)
+                sélectionnée, directement sous les cartes. */}
+            <div className={`overflow-hidden ${BLOCK_CLASS}`}>
+              <h3 className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-5 py-4 text-[15px] font-bold text-slate-900 dark:border-slate-700 dark:text-white">
+                {isLocalDrilldown && selectedLocalStation && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLocalStation(null)}
+                    className="flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    {ic.back('w-4 h-4')} Villes
+                  </button>
+                )}
+                <span style={{ color: activeMeta.color }}>{ic.hist('w-[17px] h-[17px]')}</span>
+                {activeMeta.label}
+                {selectedLocalStation && <span className="text-slate-400 dark:text-slate-500"> · {stationDisplayLabel(selectedLocalStation)}</span>}
+                <span className="ml-1 text-sm font-medium text-slate-500 dark:text-slate-400">· {filteredMovements.length} monture{filteredMovements.length > 1 ? 's' : ''}</span>
+              </h3>
+
+              {filteredMovements.length === 0 ? (
+                <div className="px-5 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
+                  Aucune monture pour cette sélection.
+                </div>
+              ) : (
+                <div className="flex flex-col">
+                  {filteredMovements.map((mvt, idx) => {
+                    const meta = STAGE_META[mvt.stage]
+                    const label = [mvt.brand, mvt.reference].filter(Boolean).join(' ')
+                    return (
+                      <div key={mvt.id} className="flex items-center gap-3.5 border-b border-slate-100 px-5 py-3.5 transition-colors last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60">
+                        {/* .glass-photo — vignette réelle si connue, icône sinon. */}
+                        <button
+                          type="button"
+                          onClick={() => mvt.photoUrl && setLightbox({ url: mvt.photoUrl, caption: `${mvt.barcode}${label ? ' — ' + label : ''}` })}
+                          disabled={!mvt.photoUrl}
+                          title={mvt.photoUrl ? 'Voir la photo' : 'Aucune photo disponible'}
+                          className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-slate-400 disabled:cursor-default dark:border-slate-700 dark:bg-slate-800"
+                        >
+                          {mvt.photoUrl ? (
+                            <img src={mvt.photoUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                          ) : (
+                            ic.glasses('w-[18px] h-[18px]')
+                          )}
+                        </button>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">{mvt.barcode}</span>
+                            {label && <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>}
+                            {idx === 0 && (
+                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Nouveau</span>
+                            )}
+                          </div>
+                          {mvt.notes && <p className="mt-0.5 text-xs italic text-slate-500 dark:text-slate-400">{mvt.notes}</p>}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2.5 text-xs">
+                            <span className="inline-block rounded-full px-[9px] py-0.5 text-xs font-bold" style={{ backgroundColor: `${meta.color}1f`, color: meta.color }}>
+                              {meta.label}
+                            </span>
+                            <span className="text-slate-600 dark:text-slate-300">
+                              {mvt.from} <span className="text-slate-400">→</span> {mvt.to}
+                            </span>
+                            <span className="text-slate-400">{mvt.date} à {mvt.time} · Par {mvt.operator}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => openTrack(mvt.barcode)}
+                          className="flex flex-shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+                        >
+                          <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-white" aria-hidden="true" />
+                          Suivi en direct
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </>
+      )}
+
+      {/* Panneau « Suivi en direct » d'une monture, comme #trackPanel dans historique.js. */}
+      {trackedBarcode && (
+        <div className="fixed inset-0 z-[70] flex items-stretch justify-end bg-black/50 sm:items-center sm:justify-center sm:p-4" onClick={() => setTrackedBarcode(null)}>
+          <aside
+            role="dialog"
+            aria-modal="true"
+            onClick={e => e.stopPropagation()}
+            className="flex h-full w-full max-w-md flex-col overflow-hidden bg-white shadow-2xl dark:bg-slate-900 sm:h-auto sm:max-h-[85vh] sm:rounded-2xl sm:border sm:border-slate-200 sm:dark:border-slate-700"
+          >
+            <header className="flex items-start gap-3 border-b border-slate-200 p-4 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => trackPhotoUrl && setLightbox({ url: trackPhotoUrl, caption: `${trackedBarcode}${trackLabel ? ' — ' + trackLabel : ''}` })}
+                disabled={!trackPhotoUrl}
+                title={trackPhotoUrl ? 'Voir la photo en grand' : 'Aucune photo disponible'}
+                className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100 text-slate-400 disabled:cursor-default dark:border-slate-700 dark:bg-slate-800"
+              >
+                {trackPhotoUrl ? <img src={trackPhotoUrl} alt="" className="h-full w-full object-cover" /> : ic.glasses('w-6 h-6')}
+              </button>
+              <div className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-blue-600">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-600" aria-hidden="true" /> Suivi en direct
+                </span>
+                <h2 className="truncate text-lg font-bold text-slate-900 dark:text-white">{trackedBarcode}</h2>
+                <p className="truncate text-xs text-slate-500 dark:text-slate-400">{trackLabel || 'Trajectoire de la monture'}</p>
+              </div>
+              <button type="button" onClick={() => setTrackedBarcode(null)} className="flex-shrink-0 text-slate-400 hover:text-slate-600" aria-label="Fermer le suivi">{ic.x('w-5 h-5')}</button>
+            </header>
+
+            <div className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold ${trackError ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300'}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${trackError ? 'bg-red-500' : 'animate-pulse bg-blue-500'}`} aria-hidden="true" />
+              {trackError ? 'Suivi interrompu — nouvel essai sous peu…' : isTrackLoading ? 'Connexion au suivi…' : 'Suivi en direct · actualisé automatiquement'}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {isTrackLoading ? (
+                <div className="py-10 text-center text-sm text-slate-400">Chargement de la trajectoire…</div>
+              ) : trackSorted.length === 0 ? (
+                <div className="py-10 text-center text-sm text-slate-400">Aucun mouvement enregistré pour cette monture.</div>
+              ) : (
+                <div className="space-y-4">
+                  {trackSorted.map((m, index) => {
+                    const color = movementActionColor(m.action)
+                    const icon = movementActionIcon(m.action)
+                    const fromCell = [stationDisplayLabel(m.from_station_name), m.from_location_code].filter(Boolean).join(' · ')
+                    const toCell = [stationDisplayLabel(m.to_station_name), m.to_location_code].filter(Boolean).join(' · ')
+                    const userName = [m.user_first_name, m.user_last_name].filter(Boolean).join(' ')
+                    return (
+                      <div key={m.id ?? index} className="flex gap-3">
+                        <div className="flex flex-shrink-0 flex-col items-center">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: `${color}1f`, color }}>
+                            {icon('w-4 h-4')}
+                          </span>
+                          {index < trackSorted.length - 1 && <span className="mt-1 w-px flex-1 bg-slate-200 dark:bg-slate-700" />}
+                        </div>
+                        <div className="min-w-0 flex-1 pb-2">
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                              {movementActionLabel(m.action)}
+                              {index === 0 && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Position actuelle</span>}
+                            </span>
+                            <span className="text-xs text-slate-400">{relativeTimeFr(m.created_at)}</span>
+                          </div>
+                          {(fromCell || toCell) && (
+                            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                              {fromCell || '—'} {toCell && <><span className="text-slate-400">→</span> {toCell}</>}
+                            </p>
+                          )}
+                          {userName && <p className="mt-0.5 text-xs text-slate-400">Par {userName}</p>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* Visionneuse photo plein écran, comme #lightboxBackdrop dans historique.js. */}
+      {lightbox && (
+        <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-3 bg-black/90 p-4" onClick={() => setLightbox(null)}>
+          <button type="button" onClick={() => setLightbox(null)} className="absolute right-4 top-4 text-white/80 hover:text-white" aria-label="Fermer la photo">{ic.x('w-6 h-6')}</button>
+          <img src={lightbox.url} alt="" className="max-h-[80vh] max-w-full rounded-lg object-contain" onClick={e => e.stopPropagation()} />
+          {lightbox.caption && <p className="text-sm text-white/80">{lightbox.caption}</p>}
+        </div>
       )}
     </div>
   )
@@ -3095,7 +3696,7 @@ function ReceptionView() {
   // Villes déjà desservies par session : une session peut être envoyée en plusieurs fois
   // vers des magasins différents (la liste se compose par forme/genre/gamme/nombre), d'où
   // un tableau de villes et non une seule.
-  const [sentListSessions, setSentListSessions] = useState<Record<string, string[]>>({})
+  const [sentListSessions, setSentListSessions] = useState<Record<string, Array<{ city: string; dispatched: boolean }>>>({})
   const [magasinOptions, setMagasinOptions] = useState<Array<{ city: string; country: string }>>([])
   const [countryOptions, setCountryOptions] = useState<Array<{ id: number; name: string; code?: string }>>([])
   const [cityOptions, setCityOptions] = useState<Array<{ id: number; name: string; country_id: number }>>([])
@@ -3116,17 +3717,25 @@ function ReceptionView() {
     void loadStockGlasses()
     void loadStockSummary()
 
+    // silent : les rafraîchissements automatiques (minuteur, retour de focus) ne doivent
+    // pas réafficher les squelettes de chargement — seul le montage initial le fait. Sans
+    // ça, la liste des sessions et le tableau de stock clignotaient sur « Chargement... »
+    // toutes les 5 secondes pendant que la Direction regardait l'écran.
     const handleWindowFocus = () => {
+      void loadSessions(true)
       void loadReceptionCommands()
       void loadSentLists()
-      void loadStockGlasses()
+      void loadStockGlasses(true)
+      void loadStockSummary(true)
+    }
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') handleWindowFocus()
     }
     const refreshInterval = window.setInterval(() => {
-      void loadReceptionCommands()
-      void loadSentLists()
-      void loadStockGlasses()
+      if (document.visibilityState === 'visible') handleWindowFocus()
     }, 5000)
     window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibility)
 
     setIsLoadingCountries(true)
     fetch(`${API_URL}/inventory/countries`, {
@@ -3143,6 +3752,7 @@ function ReceptionView() {
     return () => {
       window.clearInterval(refreshInterval)
       window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [])
 
@@ -3266,13 +3876,22 @@ function ReceptionView() {
       })
       if (!response.ok) throw new Error('send lists unavailable')
       const payload = await response.json().catch(() => ({}))
-      const bySession: Record<string, string[]> = {}
+      const bySession: Record<string, Array<{ city: string; dispatched: boolean }>> = {}
       for (const list of payload?.data?.lists || []) {
         const code = String(list.session_code || '').trim()
         const city = String(list.city || '').trim()
         if (!code || !city) continue
+        // « Envoyée » (créée par la Direction) et « en transit » (réellement expédiée par
+        // le magasinier, cf. listDispatched dans scan.tsx) sont deux états distincts : le
+        // statut du serveur — pas une déduction côté client — tranche entre les deux.
+        const dispatched = String(list.status || '').toUpperCase() === 'TRAITEE' || Number(list.sent_count || 0) > 0
         if (!bySession[code]) bySession[code] = []
-        if (!bySession[code].includes(city)) bySession[code].push(city)
+        const existing = bySession[code].find(entry => entry.city === city)
+        if (existing) {
+          existing.dispatched = existing.dispatched || dispatched
+        } else {
+          bySession[code].push({ city, dispatched })
+        }
       }
       setSentListSessions(bySession)
     } catch {
@@ -3337,8 +3956,8 @@ function ReceptionView() {
       setSendListSent(true)
       setSentListSessions(prev => {
         const cities = prev[sendListSession.id] || []
-        if (cities.includes(sendListMagasin)) return prev
-        return { ...prev, [sendListSession.id]: [...cities, sendListMagasin] }
+        if (cities.some(entry => entry.city === sendListMagasin)) return prev
+        return { ...prev, [sendListSession.id]: [...cities, { city: sendListMagasin, dispatched: false }] }
       })
     } catch {
       window.alert("Impossible d'envoyer la liste pour le moment.")
@@ -3347,14 +3966,14 @@ function ReceptionView() {
     }
   }
 
-  async function loadSessions() {
+  async function loadSessions(silent = false) {
     const token = window.localStorage.getItem('token')
     if (!token) {
       setSessions([])
       return
     }
 
-    setIsLoadingSessions(true)
+    if (!silent) setIsLoadingSessions(true)
     try {
       const response = await fetch(`${API_URL}/inventory/expeditions`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -3644,14 +4263,14 @@ function ReceptionView() {
     }
   }
 
-  async function loadStockSummary() {
+  async function loadStockSummary(silent = false) {
     const token = window.localStorage.getItem('token')
     if (!token) {
       setStockSummary([])
       return
     }
 
-    setIsLoadingStockSummary(true)
+    if (!silent) setIsLoadingStockSummary(true)
     try {
       const response = await fetch(`${API_URL}/inventory/stock-summary`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -3666,14 +4285,14 @@ function ReceptionView() {
     }
   }
 
-  async function loadStockGlasses() {
+  async function loadStockGlasses(silent = false) {
     const token = window.localStorage.getItem('token')
     if (!token) {
       setStockGlasses([])
       return
     }
 
-    setIsLoadingStock(true)
+    if (!silent) setIsLoadingStock(true)
     try {
       const response = await fetch(`${API_URL}/inventory/glasses`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -3742,22 +4361,29 @@ function ReceptionView() {
 
   // L'aperçu du stock général vient de /inventory/stock-summary, agrégé par référence —
   // sans emplacement. On le retrouve en croisant avec stockGlasses (montures individuelles,
-  // déjà chargées pour la page « Voir le stock »), limité au stock général : une même
-  // référence en stock local aurait un emplacement propre à sa station, sans rapport.
-  function getGeneralStockLocationLabel(item: any) {
+  // déjà chargées). Une référence dont le seul exemplaire est ailleurs (présentoir, labo,
+  // réserve, transit...) n'a ni stock général ni stock local : elle a quand même une
+  // position réelle, qu'on affiche plutôt qu'un tiret qui la ferait passer pour introuvable.
+  function getStockLocationLabel(item: any) {
     const refKey = String(item?.reference || item?.barcode || item?.code || '').trim()
     if (!refKey) return '—'
 
     const matches = (stockGlasses || []).filter((glass: any) =>
-      isGeneralStockStatus(glass.status) && normalizeReference(String(glass.reference || '')) === normalizeReference(refKey)
+      normalizeReference(String(glass.reference || '')) === normalizeReference(refKey)
     )
-    const locations = Array.from(new Set(
-      matches.map((glass: any) => String(glass.location_code || '').trim()).filter(Boolean)
+
+    const labels = Array.from(new Set(
+      matches
+        // Un code d'emplacement quand il y en a un (stock général/local, présentoir) ;
+        // sinon le statut lisible (Laboratoire, Réservé, Vendu, ...), pour ne jamais
+        // laisser une monture qui existe bel et bien passer pour absente.
+        .map((glass: any) => String(glass.location_code || '').trim() || mapGlassStatusToUI(glass.status))
+        .filter(Boolean),
     ))
 
-    if (locations.length === 0) return '—'
-    if (locations.length === 1) return locations[0]
-    return `${locations[0]} +${locations.length - 1}`
+    if (labels.length === 0) return '—'
+    if (labels.length === 1) return labels[0]
+    return `${labels[0]} +${labels.length - 1}`
   }
 
   function renderStockPage() {
@@ -4978,7 +5604,7 @@ function ReceptionView() {
                             <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_total || 0).toLocaleString('fr-FR')}</td>
                             <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_general || 0).toLocaleString('fr-FR')}</td>
                             <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{Number(item.qty_local || 0).toLocaleString('fr-FR')}</td>
-                            <td className="px-3 py-2.5 font-mono text-xs text-slate-700 dark:text-slate-300">{getGeneralStockLocationLabel(item)}</td>
+                            <td className="px-3 py-2.5 font-mono text-xs text-slate-700 dark:text-slate-300">{getStockLocationLabel(item)}</td>
                           </tr>
                         ))
                       )}
@@ -5102,15 +5728,18 @@ function ReceptionView() {
         const isSessionActivated = isSessionReceived(linkedCommand, receivedCount)
         const totalCount = Number(s.frames || 0)
         const alreadySent = (sentListSessions[s.id] || []).length > 0
+        // Villes dont la liste a été réellement expédiée par le magasinier (statut TRAITEE
+        // côté serveur, cf. loadSentLists) — distinct d'une liste juste préparée par la
+        // Direction et pas encore traitée côté « Listes reçues » (scan.tsx).
+        const dispatchedCities = (sentListSessions[s.id] || []).filter(entry => entry.dispatched).map(entry => entry.city)
         const receptionState = getReceptionCardState(linkedCommand, receivedCount, totalCount)
         const cardBgClass = getReceptionCardClass(receptionState)
-        // Une monture partie EN_TRANSIT disparaît de /inventory/glasses (statuts par défaut
-        // EN_STOCK_GENERAL + EN_STOCK_SOUS_STATION) : si la session est complète mais qu'aucune
-        // de ses montures n'y figure plus, c'est qu'elles ont quitté le stock général depuis
-        // (liste créée depuis la page Stock général, puis réellement expédiée par le
-        // magasinier une fois vérifiée dans « Listes reçues », scan.tsx).
-        const hasLeftGeneralStock = receptionState === 'complete' && totalCount > 0 &&
-          !stockGlasses.some((g: any) => Number(g.reception_command_id) === linkedCommand?.id)
+        // Abandonné : un signal « monture absente du stock général » basé sur
+        // reception_command_id existait ici, mais un échec silencieux côté serveur (lien
+        // jamais posé sur le glass, cf. resolveReceptionCommandID dans reception_workflow.go)
+        // le déclenchait à tort sur des montures pourtant toujours en stock général. Plutôt
+        // que d'afficher une supposition non fiable, on se contente du fait vérifié : la
+        // session a atteint son quota d'enregistrement.
         return (
           <div key={s.id} className={`${cardBgClass} rounded-2xl border p-4 transition-all ${receptionState === 'idle' ? 'hover:border-slate-500 dark:hover:border-slate-600 hover:shadow-sm' : ''}`}>
             <div className="flex items-start justify-between gap-3">
@@ -5121,21 +5750,26 @@ function ReceptionView() {
                   <span className="truncate">{formatReceptionNote(s.note, s.operator)}</span>
                 </div>
                 {(receptionState === 'complete' || (isSessionActivated && !alreadySent)) && (
-                  <div className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${receptionState === 'complete' && !hasLeftGeneralStock
+                  <div className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${receptionState === 'complete'
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-300'
                     : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-300'}`}>
-                    {receptionState === 'complete' && !hasLeftGeneralStock ? ic.check('w-3.5 h-3.5') : ic.truck('w-3.5 h-3.5')}
-                    <span>{receptionState === 'complete' ? (hasLeftGeneralStock ? 'En transit vers le stock magasin' : 'Enregistrement terminé') : (receptionState === 'recording' ? 'En cours d\'enregistrement' : 'En transit vers le stock Général')}</span>
+                    {receptionState === 'complete' ? ic.check('w-3.5 h-3.5') : ic.truck('w-3.5 h-3.5')}
+                    <span>{receptionState === 'complete'
+                      ? (dispatchedCities.length > 0 ? `En transit vers le stock magasin (${dispatchedCities.join(', ')})` : 'Enregistrement terminé')
+                      : (receptionState === 'recording' ? 'En cours d\'enregistrement' : 'En transit vers le stock Général')}</span>
                   </div>
                 )}
                 {/* Destination(s) de la session, une fois sa liste envoyée. Plusieurs villes
-                    possibles : la liste se compose par lots et peut partir en plusieurs fois. */}
+                    possibles : la liste se compose par lots et peut partir en plusieurs fois.
+                    Le camion marque celles réellement expédiées par le magasinier (statut
+                    TRAITEE côté serveur, cf. loadSentLists) ; la boutique, celles juste
+                    préparées et pas encore traitées côté « Listes reçues » (scan.tsx). */}
                 {(sentListSessions[s.id] || []).length > 0 && (
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Destination</span>
-                    {sentListSessions[s.id].map(city => (
-                      <span key={city} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-300">
-                        {ic.store('w-3.5 h-3.5')} {city}
+                    {sentListSessions[s.id].map(entry => (
+                      <span key={entry.city} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-300">
+                        {entry.dispatched ? ic.truck('w-3.5 h-3.5') : ic.store('w-3.5 h-3.5')} {entry.city}
                       </span>
                     ))}
                   </div>
@@ -5147,22 +5781,21 @@ function ReceptionView() {
                     </button>
                   )}
                   {/* La session est complète (carte verte) : elle peut partir en magasin.
-                      Une fois la liste envoyée — ou les montures expédiées depuis la page
-                      Stock général — le bouton est grisé et inerte. */}
+                      Seule une liste réellement déjà envoyée (alreadySent) grise le bouton. */}
                   {receptionState === 'complete' && (() => {
-                    const isLocked = alreadySent || hasLeftGeneralStock
+                    const isLocked = alreadySent
                     return (
                       <button
                         type="button"
                         onClick={() => void openSendList(s)}
                         disabled={isLocked}
-                        title={hasLeftGeneralStock ? 'Ces montures ont déjà été expédiées depuis le stock général' : (alreadySent ? 'La liste de cette session a déjà été envoyée au stock général' : undefined)}
+                        title={alreadySent ? 'La liste de cette session a déjà été envoyée au stock général' : undefined}
                         className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${isLocked
                           ? 'cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
                           : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'}`}
                       >
                         {isLocked ? ic.check('w-3.5 h-3.5') : ic.send('w-3.5 h-3.5')}
-                        {hasLeftGeneralStock ? 'Déjà expédiée' : (alreadySent ? 'Liste envoyée' : 'Envoyer la liste')}
+                        {alreadySent ? 'Liste envoyée' : 'Envoyer la liste'}
                       </button>
                     )
                   })()}
@@ -5460,24 +6093,41 @@ function SupplierView() {
     const token = window.localStorage.getItem('token')
     if (!token) return
 
-    fetch(`${API_URL}/inventory/supplier-orders`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async response => {
-        if (!response.ok) throw new Error('supplier orders unavailable')
-        const payload = await response.json().catch(() => ({}))
-        const list = payload?.data?.orders || []
-        setOrders(list.map((order: any) => ({
-          id: `CMD-${order.id}`,
-          supplier: order.supplier,
-          quantity: order.quantity,
-          sent: 0,
-          date: order.order_date ? new Date(order.order_date).toISOString().slice(0, 10) : '',
-          note: order.note || '',
-          status: 'pending' as const,
-        })))
+    const load = () => {
+      fetch(`${API_URL}/inventory/supplier-orders`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
-      .catch(() => setOrders([]))
+        .then(async response => {
+          if (!response.ok) throw new Error('supplier orders unavailable')
+          const payload = await response.json().catch(() => ({}))
+          const list = payload?.data?.orders || []
+          setOrders(list.map((order: any) => ({
+            id: `CMD-${order.id}`,
+            supplier: order.supplier,
+            quantity: order.quantity,
+            sent: 0,
+            date: order.order_date ? new Date(order.order_date).toISOString().slice(0, 10) : '',
+            note: order.note || '',
+            status: 'pending' as const,
+          })))
+        })
+        .catch(() => setOrders([]))
+    }
+
+    load()
+
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') load()
+    }, 15000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') load()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
 
   async function addOrder(e: React.FormEvent) {
@@ -5702,55 +6352,74 @@ function EmployeesView() {
     const token = window.localStorage.getItem('token')
     if (!token) return
 
-    setIsLoading(true)
-    setHasError(false)
+    // silent : les rafraîchissements périodiques ne doivent pas réafficher le squelette de
+    // chargement, seul le premier montage le fait.
+    const load = (silent: boolean) => {
+      if (!silent) setIsLoading(true)
+      setHasError(false)
 
-    Promise.all([
-      fetch(`${API_URL}/auth/users`, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`${API_URL}/auth/stations`, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`${API_URL}/inventory/cities?country_id=1`, { headers: { Authorization: `Bearer ${token}` } }),
-    ])
-      .then(async ([usersResponse, stationsResponse, citiesResponse]) => {
-        if (!usersResponse.ok) throw new Error('users unavailable')
-        if (!stationsResponse.ok) throw new Error('stations unavailable')
-        if (!citiesResponse.ok) throw new Error('cities unavailable')
+      Promise.all([
+        fetch(`${API_URL}/auth/users`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/auth/stations`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/inventory/cities?country_id=1`, { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+        .then(async ([usersResponse, stationsResponse, citiesResponse]) => {
+          if (!usersResponse.ok) throw new Error('users unavailable')
+          if (!stationsResponse.ok) throw new Error('stations unavailable')
+          if (!citiesResponse.ok) throw new Error('cities unavailable')
 
-        const usersPayload = await usersResponse.json().catch(() => ({}))
-        const stationsPayload = await stationsResponse.json().catch(() => ({}))
-        const citiesPayload = await citiesResponse.json().catch(() => ({}))
-        const users = Array.isArray(usersPayload?.data?.users) ? usersPayload.data.users : []
-        const stations = Array.isArray(stationsPayload?.data?.stations) ? stationsPayload.data.stations : []
-        const citiesData = Array.isArray(citiesPayload?.data?.cities)
-          ? citiesPayload.data.cities
-          : Array.isArray(citiesPayload?.cities)
-            ? citiesPayload.cities
-            : []
+          const usersPayload = await usersResponse.json().catch(() => ({}))
+          const stationsPayload = await stationsResponse.json().catch(() => ({}))
+          const citiesPayload = await citiesResponse.json().catch(() => ({}))
+          const users = Array.isArray(usersPayload?.data?.users) ? usersPayload.data.users : []
+          const stations = Array.isArray(stationsPayload?.data?.stations) ? stationsPayload.data.stations : []
+          const citiesData = Array.isArray(citiesPayload?.data?.cities)
+            ? citiesPayload.data.cities
+            : Array.isArray(citiesPayload?.cities)
+              ? citiesPayload.cities
+              : []
 
-        setStations(stations.map((station: any) => ({
-          id: Number(station.id) || 0,
-          name: String(station.name || 'Non assigné'),
-          type: String(station.type || ''),
-          city: String(station.city || ''),
-        })))
-        setCities(citiesData.map((city: any) => ({ id: Number(city.id) || 0, name: String(city.nom || city.name || 'Sans nom') })))
-        return users
-      })
-      .then((users: any[]) => {
-        setEmployees(users.map((user: any) => ({
-          id: Number(user.id) || 0,
-          name: `${String(user.first_name || '').trim()} ${String(user.last_name || '').trim()}`.trim() || 'Utilisateur',
-          role: String(user.role_name || user.role || 'INCONNU').toUpperCase(),
-          station: String(user.station_name || 'Non assigné').trim() || 'Non assigné',
-          group: getEmployeeGroup(user.station_name),
-          status: user.is_active ? 'Actif' : 'Inactif',
-          avatar: getEmployeeAvatar(`${user.first_name || ''} ${user.last_name || ''}`),
-        })))
-      })
-      .catch(() => {
-        setHasError(true)
-        setEmployees([])
-      })
-      .finally(() => setIsLoading(false))
+          setStations(stations.map((station: any) => ({
+            id: Number(station.id) || 0,
+            name: String(station.name || 'Non assigné'),
+            type: String(station.type || ''),
+            city: String(station.city || ''),
+          })))
+          setCities(citiesData.map((city: any) => ({ id: Number(city.id) || 0, name: String(city.nom || city.name || 'Sans nom') })))
+          return users
+        })
+        .then((users: any[]) => {
+          setEmployees(users.map((user: any) => ({
+            id: Number(user.id) || 0,
+            name: `${String(user.first_name || '').trim()} ${String(user.last_name || '').trim()}`.trim() || 'Utilisateur',
+            role: String(user.role_name || user.role || 'INCONNU').toUpperCase(),
+            station: String(user.station_name || 'Non assigné').trim() || 'Non assigné',
+            group: getEmployeeGroup(user.station_name),
+            status: user.is_active ? 'Actif' : 'Inactif',
+            avatar: getEmployeeAvatar(`${user.first_name || ''} ${user.last_name || ''}`),
+          })))
+        })
+        .catch(() => {
+          setHasError(true)
+          setEmployees([])
+        })
+        .finally(() => setIsLoading(false))
+    }
+
+    load(false)
+
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') load(true)
+    }, 15000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') load(true)
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
 
   const filtered = employees.filter(e =>
@@ -6360,8 +7029,10 @@ function SocietesView() {
     'Content-Type': 'application/json',
   })
 
-  async function load() {
-    setLoading(true)
+  // silent : les rafraîchissements périodiques ne doivent pas réafficher le squelette de
+  // chargement, seul le premier montage (et les actions de l'utilisateur) le font.
+  async function load(silent = false) {
+    if (!silent) setLoading(true)
     try {
       // include_inactive : l'écran de gestion doit voir les conventions terminées, sans quoi
       // il serait impossible d'en réactiver une.
@@ -6378,7 +7049,22 @@ function SocietesView() {
     }
   }
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    void load()
+
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load(true)
+    }, 15000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void load(true)
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [])
 
   async function create(e: React.FormEvent) {
     e.preventDefault()
@@ -6613,6 +7299,7 @@ export default function App() {
     const token = window.localStorage.getItem('token')
     if (!token) return
 
+    const loadDashboardData = () => {
     const headers = { Authorization: `Bearer ${token}` }
 
     const stockSummaryPromise = fetch(`${API_URL}/inventory/stock-summary`, { headers })
@@ -6727,6 +7414,25 @@ export default function App() {
         setStationCities([])
         setRevenueByCity({})
       })
+    }
+
+    loadDashboardData()
+
+    // Pas de push serveur : on republie les données du tableau de bord toutes les 15s pour
+    // un rendu quasi temps réel (voir HistoryView plus haut pour le même principe), en
+    // sautant les cycles où l'onglet est en arrière-plan.
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') loadDashboardData()
+    }, 15000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') loadDashboardData()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
 
   function navigate(screen: NavScreen) {
