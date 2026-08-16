@@ -3648,9 +3648,13 @@ function ReceptionView() {
   // 'GENERAL' = liste du stock général ; sinon le nom du magasin dont on regarde les manquants.
   const [stockScope, setStockScope] = useState<string>('GENERAL')
   const [stockAction, setStockAction] = useState<StockAction>('')
-  const [stockRayonFilter, setStockRayonFilter] = useState<string>('all')
-  const [stockEtagereFilter, setStockEtagereFilter] = useState<string>('all')
-  const [stockBacFilter, setStockBacFilter] = useState<string>('all')
+  const [stockFormeFilter, setStockFormeFilter] = useState<string>('all')
+  const [stockGenreFilter, setStockGenreFilter] = useState<string>('all')
+  const [stockGammeFilter, setStockGammeFilter] = useState<string>('all')
+  // Bascule d'affichage seulement : une monture RESERVEE_ENVOI reste toujours protégée côté
+  // serveur (SplitAvailableBarcodes refuse une deuxième liste sur la même monture) — ce
+  // réglage ne change que ce que l'admin voit ici, pas ce qui est permis.
+  const [greyReserved, setGreyReserved] = useState(true)
   const [stockPage, setStockPage] = useState(1)
   // Sélection pour composer une liste depuis le stock existant. On garde les codes-barres et
   // non les indices de ligne : la sélection doit survivre au changement de page et de filtre.
@@ -4334,7 +4338,10 @@ function ReceptionView() {
   }
 
   function matchesStockFilters(glass: any) {
-    return matchesLocationFilters(glass, stockRayonFilter, stockEtagereFilter, stockBacFilter)
+    if (stockFormeFilter !== 'all' && normalizeShapeName(glass.shape) !== normalizeShapeName(stockFormeFilter)) return false
+    if (stockGenreFilter !== 'all' && normalizeGenderName(glass.gender) !== normalizeGenderName(stockGenreFilter)) return false
+    if (stockGammeFilter !== 'all' && resolveFrameGamme(glass.material, glass.price) !== normalizeGammeName(stockGammeFilter)) return false
+    return true
   }
 
   function openStockSummaryPreview(item: any) {
@@ -4388,7 +4395,7 @@ function ReceptionView() {
         // statut lisible (Laboratoire, Réservé, Vendu, ...), pour ne jamais laisser une
         // monture qui existe bel et bien passer pour absente.
         .map((glass: any) => String(glass.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI'
-          ? `En transit vers Stock magasin${glass.reserved_for_city ? ` (${magasinLabel(glass.reserved_for_city)})` : ''}`
+          ? `En transit vers Stock magasin${glass.reserved_for_city ? ` (${glass.reserved_for_city})` : ''}`
           : String(glass.location_code || '').trim() || mapGlassStatusToUI(glass.status))
         .filter(Boolean),
     ))
@@ -4429,26 +4436,19 @@ function ReceptionView() {
     const selectedMagasin = stockScope === 'GENERAL' ? '' : stockScope
     const filteredGeneralGlasses = generalGlasses.filter(matchesStockFilters)
 
-    const stockRayonOptions = Array.from(new Set(
-      generalGlasses
-        .map((g: any) => parseStockLocationCode(g.location_code || ''))
-        .filter(Boolean)
-        .map((parsed: any) => parsed.rayon)
-    )).sort((a, b) => a.localeCompare(b))
+    // Options tirées des montures réellement en base, pas d'une liste figée : une forme ou
+    // une gamme absente du stock général aujourd'hui n'encombre pas les menus.
+    const stockFormeOptions = Array.from(new Set(
+      generalGlasses.map((g: any) => normalizeShapeName(g.shape)).filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, 'fr'))
 
-    const stockEtagereOptions = Array.from(new Set(
-      generalGlasses
-        .map((g: any) => parseStockLocationCode(g.location_code || ''))
-        .filter(Boolean)
-        .map((parsed: any) => parsed.etagere)
-    )).sort((a, b) => a.localeCompare(b))
+    const stockGenreOptions = Array.from(new Set(
+      generalGlasses.map((g: any) => normalizeGenderName(g.gender)).filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, 'fr'))
 
-    const stockBacOptions = Array.from(new Set(
-      generalGlasses
-        .map((g: any) => parseStockLocationCode(g.location_code || ''))
-        .filter(Boolean)
-        .map((parsed: any) => parsed.bac)
-    )).sort((a, b) => a.localeCompare(b))
+    const stockGammeOptions = Array.from(new Set(
+      generalGlasses.map((g: any) => resolveFrameGamme(g.material, g.price)).filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, 'fr'))
 
     const header = selectedMagasin
       ? {
@@ -4503,22 +4503,34 @@ function ReceptionView() {
               <option value="ENVOI">Envoyer le stock</option>
             </select>
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-800/60">
-              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Rayon</label>
-              <select value={stockRayonFilter} onChange={e => setStockRayonFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                <option value="all">Tous</option>
-                {stockRayonOptions.map(option => <option key={option} value={option}>{option}</option>)}
-              </select>
-              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Étagère</label>
-              <select value={stockEtagereFilter} onChange={e => setStockEtagereFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Forme</label>
+              <select value={stockFormeFilter} onChange={e => setStockFormeFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                 <option value="all">Toutes</option>
-                {stockEtagereOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                {stockFormeOptions.map(option => <option key={option} value={option}>{option}</option>)}
               </select>
-              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Bac</label>
-              <select value={stockBacFilter} onChange={e => setStockBacFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Genre</label>
+              <select value={stockGenreFilter} onChange={e => setStockGenreFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                 <option value="all">Tous</option>
-                {stockBacOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                {stockGenreOptions.map(option => <option key={option} value={option}>{option}</option>)}
               </select>
-              <button onClick={() => { setStockRayonFilter('all'); setStockEtagereFilter('all'); setStockBacFilter('all') }} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700">Reset</button>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Gamme</label>
+              <select value={stockGammeFilter} onChange={e => setStockGammeFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                <option value="all">Toutes</option>
+                {stockGammeOptions.map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
+              <button onClick={() => { setStockFormeFilter('all'); setStockGenreFilter('all'); setStockGammeFilter('all') }} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700">Reset</button>
+            </div>
+            {/* Purement visuel (voir la définition de greyReserved) : le backend refuse quand
+                même une monture RESERVEE_ENVOI dans une deuxième liste, que ce soit coché ou non. */}
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800/60">
+              <label className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200">
+                <input type="radio" name="grey-reserved" checked={greyReserved} onChange={() => setGreyReserved(true)} className="h-3.5 w-3.5 accent-blue-600" />
+                Griser
+              </label>
+              <label className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200">
+                <input type="radio" name="grey-reserved" checked={!greyReserved} onChange={() => setGreyReserved(false)} className="h-3.5 w-3.5 accent-blue-600" />
+                Ne pas griser
+              </label>
             </div>
           </div>
         </div>
@@ -4657,10 +4669,12 @@ function ReceptionView() {
     const start = (currentPage - 1) * STOCK_PAGE_SIZE
     const pageRows = generalGlasses.slice(start, start + STOCK_PAGE_SIZE)
 
-    // RESERVEE_ENVOI : déjà prise par une autre liste pas encore dispatchée, on ne la propose
-    // plus à la sélection — la re-sélectionner créerait deux listes concurrentes sur la même
-    // monture. « Tout sélectionner » ne porte donc que sur les montures encore libres.
-    const isReservedForShipment = (g: any) => String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI'
+    // RESERVEE_ENVOI : déjà prise par une autre liste pas encore dispatchée. Par défaut on ne
+    // la propose plus à la sélection — la re-sélectionner créerait deux listes concurrentes
+    // sur la même monture — mais greyReserved (radio « Griser / Ne pas griser ») permet à
+    // l'admin de les traiter comme des montures normales à l'écran ; le serveur reste le vrai
+    // garde-fou (SplitAvailableBarcodes) quel que soit ce réglage.
+    const isReservedForShipment = (g: any) => greyReserved && String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI'
     const selectableGlasses = generalGlasses.filter((g: any) => !isReservedForShipment(g))
     const allSelected = selectableGlasses.length > 0 && selectableGlasses.every((g: any) => stockListSelection.includes(String(g.barcode || '')))
 
@@ -4800,7 +4814,7 @@ function ReceptionView() {
                     <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.created_at ? String(g.created_at).slice(0, 10) : '—'}</td>
                     <td className="px-2 py-2 text-slate-700 dark:text-slate-200">
                       {reserved
-                        ? `En transit vers Stock magasin${g.reserved_for_city ? ` (${magasinLabel(g.reserved_for_city)})` : ''}`
+                        ? `En transit vers Stock magasin${g.reserved_for_city ? ` (${g.reserved_for_city})` : ''}`
                         : (g.location_code || g.station_name || '—')}
                     </td>
                   </tr>
@@ -5272,7 +5286,7 @@ function ReceptionView() {
   // qui vient d'être réduite donnerait un tableau vide sans explication.
   useEffect(() => {
     setStockPage(1)
-  }, [stockRayonFilter, stockEtagereFilter, stockBacFilter, stockScope])
+  }, [stockFormeFilter, stockGenreFilter, stockGammeFilter, stockScope])
 
   function renderDetailSession() {
     if (!detailSession) return null
