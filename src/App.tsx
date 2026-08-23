@@ -7668,11 +7668,6 @@ function SupplierView() {
 // ids 9 et 10 : fixés par les migrations 025_caisse et 028_sav (7 = DIRECTION,
 // 8 = SUPER_DIRECTEUR).
 const ROLE_OPTIONS = [
-  { id: 9, label: 'Caissier', value: 'CAISSIER' },
-  { id: 4, label: 'Vendeur(se)', value: 'VENDEUR' },
-  { id: 5, label: 'Laboratoire', value: 'LABORATOIRE' },
-  { id: 10, label: 'SAV', value: 'SAV' },
-  { id: 6, label: 'Responsable Magasin', value: 'RESPONSABLE_STATION' },
   { id: 3, label: 'Magasinier', value: 'MAGASINIER' },
 ]
 
