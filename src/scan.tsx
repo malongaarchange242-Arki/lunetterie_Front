@@ -167,7 +167,7 @@ const MATIERES = ['Acétate', 'Métal', 'Plastique', 'Titane', 'Bois', 'Composit
 
 const FORMES = [
   'Aviateur', 'Rond', 'Ovale', 'Carré', 'Rectangulaire',
-  'Papillon', 'Oeil de chat', 'Sport', 'Wayfarer',
+  'Papillon', 'Oeil de chat', 'Sport', 'Wayfarer', 'Percée',
 ] as const
 
 const COULEURS: { value: string; swatch: string }[] = [
