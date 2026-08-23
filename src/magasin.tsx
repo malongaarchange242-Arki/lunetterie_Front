@@ -4,6 +4,7 @@ import './index.css'
 // Importé plutôt que référencé par URL : sans dossier public/, un chemin littéral ne
 // serait pas copié dans dist/ au build.
 import logoUrl from '../logo.jpeg'
+import { isPosteEnabled } from './featureFlags'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 
@@ -288,9 +289,13 @@ function MagasinPage() {
   // devenue la porte d'entrée du magasin, il n'y a rien d'ouvert quand elle s'affiche.
   // On rouvre sur le dernier poste utilisé, celui de la personne devant l'écran neuf
   // fois sur dix.
+  // Désactivé depuis la page Fonctionnalités : ni le dernier poste utilisé, ni « vendeuse »
+  // par défaut ne doivent rouvrir sur une carte qui n'a plus le droit d'être choisie.
   const [posteId, setPosteId] = useState<PosteId>(() => {
     const last = window.localStorage.getItem('poste')
-    return POSTES.some(p => p.id === last) ? (last as PosteId) : 'vendeuse'
+    const preferred = POSTES.some(p => p.id === last) ? (last as PosteId) : 'vendeuse'
+    if (isPosteEnabled(preferred)) return preferred
+    return POSTES.find(p => isPosteEnabled(p.id))?.id || preferred
   })
   const [name, setName] = useState(() => (window.localStorage.getItem('loginName') || '').trim())
   const [pin, setPin] = useState('')
@@ -300,7 +305,8 @@ function MagasinPage() {
   const [message, setMessage] = useState('')
   const [confirmed, setConfirmed] = useState(false)
 
-  const poste = POSTES.find(p => p.id === posteId) || POSTES[0]
+  const ENABLED_POSTES = POSTES.filter(p => isPosteEnabled(p.id))
+  const poste = ENABLED_POSTES.find(p => p.id === posteId) || ENABLED_POSTES[0] || POSTES[0]
 
   // Le nom peut changer pendant que la requête voyage : la réponse d'une saisie
   // abandonnée ne doit pas écraser l'état de la saisie en cours.
@@ -473,7 +479,7 @@ function MagasinPage() {
               {/* Trois colonnes plutôt que six : la carte active porte un formulaire, une
                   colonne sur six la rendrait illisible. */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
-                {POSTES.map(item => (
+                {ENABLED_POSTES.map(item => (
                   item.id === poste.id ? (
                     <ActiveCard
                       key={item.id}

@@ -6,6 +6,7 @@ import './index.css'
 import logoUrl from '../logo.jpeg'
 import type { ReactElement, ReactNode } from 'react'
 import { GlassTable, fmtPrix } from './GlassTable'
+import { isFeatureEnabled, isPosteEnabled, FEATURE_FLAGS_EVENT } from './featureFlags'
 
 // Écran du poste Responsable magasin (rôle RESPONSABLE_STATION).
 // Tout ce qui s'affiche vient de l'API, dans le périmètre de la station du compte.
@@ -747,6 +748,25 @@ function ResponsableMagasinPage() {
   const [user, setUser] = useState<any>(null)
   const [ready, setReady] = useState(false)
 
+  // Un onglet désactivé depuis la page Fonctionnalités (Direction) ne doit pas rester
+  // ouvert juste parce qu'on l'avait déjà sous les yeux — on retombe sur le premier
+  // onglet encore actif du menu.
+  const [, forceFlagsRerender] = useState(0)
+  useEffect(() => {
+    const handler = () => forceFlagsRerender(n => n + 1)
+    window.addEventListener('storage', handler)
+    window.addEventListener(FEATURE_FLAGS_EVENT, handler)
+    return () => {
+      window.removeEventListener('storage', handler)
+      window.removeEventListener(FEATURE_FLAGS_EVENT, handler)
+    }
+  }, [])
+  useEffect(() => {
+    if (isFeatureEnabled('responsable', activeTab)) return
+    const fallback = TABS.find(tab => isFeatureEnabled('responsable', tab.id))
+    if (fallback) setActiveTab(fallback.id)
+  })
+
   // Onglet actif dans « Présentoir par bloc » et monture dont l'aperçu est ouvert — un seul
   // bloc affiché à la fois, comme le reste de l'écran (pile d'états + switch, pas de router).
   const [activeBlocKey, setActiveBlocKey] = useState('')
@@ -815,6 +835,12 @@ function ResponsableMagasinPage() {
       return
     }
     if (window.localStorage.getItem('poste') !== 'responsable') {
+      window.location.replace('/magasin.html')
+      return
+    }
+    // Poste désactivé depuis la page Fonctionnalités : refuse même avec un jeton et un
+    // `poste` valides, sinon un onglet déjà ouvert resterait utilisable.
+    if (!isPosteEnabled('responsable')) {
       window.location.replace('/magasin.html')
       return
     }
@@ -1566,7 +1592,7 @@ function ResponsableMagasinPage() {
           </div>
 
           <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-            {TABS.map(tab => (
+            {TABS.filter(tab => isFeatureEnabled('responsable', tab.id)).map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -2764,7 +2790,7 @@ function ResponsableMagasinPage() {
         {/* ── Navigation mobile ─────────────────────────────────────────────── */}
         <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-40">
           <div className="flex">
-            {TABS.map(tab => (
+            {TABS.filter(tab => isFeatureEnabled('responsable', tab.id)).map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}

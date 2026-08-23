@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import logoUrl from '../logo.jpeg'
+import { isFeatureEnabled, isPosteEnabled, FEATURE_FLAGS_EVENT } from './featureFlags'
 import {
   ArrowLeft,
   BadgeCheck,
@@ -1205,7 +1206,7 @@ function Sidebar({ current, onNavigate, dark, onToggleDark, user, counts }: {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-        {NAV.map(item => (
+        {NAV.filter(item => isFeatureEnabled('caisse', item.id)).map(item => (
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
@@ -1249,7 +1250,7 @@ function MobileNav({ current, onNavigate, counts }: {
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-40">
       <div className="flex">
-        {NAV.map(item => (
+        {NAV.filter(item => isFeatureEnabled('caisse', item.id)).map(item => (
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
@@ -1327,6 +1328,12 @@ function CaissePage() {
       window.location.replace('/magasin.html')
       return
     }
+    // Poste désactivé depuis la page Fonctionnalités : refuse même avec un jeton et un
+    // `poste` valides, sinon un onglet déjà ouvert resterait utilisable.
+    if (!isPosteEnabled('caisse')) {
+      window.location.replace('/magasin.html')
+      return
+    }
 
     void (async () => {
       try {
@@ -1395,6 +1402,25 @@ function CaissePage() {
     setOpenId(null)
     setScreen(next)
   }
+
+  // Un écran désactivé depuis la page Fonctionnalités (Direction) ne doit pas rester
+  // ouvert juste parce qu'on l'avait déjà sous les yeux — on retombe sur le premier
+  // écran encore actif du menu.
+  const [, forceFlagsRerender] = useState(0)
+  useEffect(() => {
+    const handler = () => forceFlagsRerender(n => n + 1)
+    window.addEventListener('storage', handler)
+    window.addEventListener(FEATURE_FLAGS_EVENT, handler)
+    return () => {
+      window.removeEventListener('storage', handler)
+      window.removeEventListener(FEATURE_FLAGS_EVENT, handler)
+    }
+  }, [])
+  useEffect(() => {
+    if (isFeatureEnabled('caisse', screen)) return
+    const fallback = NAV.find(item => isFeatureEnabled('caisse', item.id))
+    if (fallback) navigate(fallback.id)
+  })
 
   if (!ready) return null
 

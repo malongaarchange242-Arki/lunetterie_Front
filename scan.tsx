@@ -243,19 +243,6 @@ function normalizePriceValue(value: unknown) {
   return GAMME_PRICES[normalized] ?? 0
 }
 
-function normalizeSessionGenre(value: unknown) {
-  const normalized = String(value || '').trim().toUpperCase()
-  const labels: Record<string, string> = {
-    HOMME: 'Homme', FEMME: 'Femme', ENFANT: 'Enfant', UNISEXE: 'Unisexe',
-  }
-  return labels[normalized] || ''
-}
-
-function normalizeSessionGamme(value: unknown) {
-  const normalized = String(value || '').trim().toLowerCase()
-  return normalized === 'moyenne' ? 'moyenne gamme' : normalized === 'classique' || normalized === 'luxe' ? normalized : ''
-}
-
 // ── Icônes ─────────────────────────────────────────────────────────────────────
 const s = { fill: 'none' as const, stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
 
@@ -775,8 +762,6 @@ interface ReceptionSession {
   registered: number
   target: number
   status: string
-  genre: string
-  gamme: string
 }
 
 /** Une ligne de « Commandes à réceptionner ».
@@ -805,8 +790,6 @@ interface ReceptionEntry {
   /** Cette session a été scannée par ce compte. Connaître son code ne suffit pas : c'est
    *  le scan de l'étiquette qui ouvre une réception, et lui seul débloque la reprise. */
   scanned?: boolean
-  genre?: string
-  gamme?: string
 }
 
 /** Les codes de session scannés sur ce poste.
@@ -1264,7 +1247,6 @@ function ActivationGate({ status, isError, onActivate, onReturn }: {
 /** Une ligne de monture enregistrée — réutilisée par la liste plate (repli sans
  *  regroupement fiable) et par le détail d'une session ouverte depuis ses blocs. */
 function MovementRow({ row }: { row: Movement }) {
-  const location = recordLocationCode(row)
   return (
     <div className="flex items-center gap-3 p-3">
       <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#2563eb]/10 text-[#2563eb]">
@@ -1274,7 +1256,7 @@ function MovementRow({ row }: { row: Movement }) {
         <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
           {row.brand || row.marque || 'Monture'} {row.reference ? `· ${row.reference}` : ''}
         </p>
-        <p className="truncate text-xs text-slate-400">{row.barcode || '—'} · {location || '—'}</p>
+        <p className="truncate text-xs text-slate-400">{row.barcode || '—'} · {row.to_location_code || row.from_location_code || '—'}</p>
       </div>
       <span className="flex-shrink-0 text-xs tabular-nums text-slate-400">{formatRecordTime(row.created_at)}</span>
     </div>
@@ -1589,16 +1571,6 @@ function recordField(record: any, key: string): string {
   return ''
 }
 
-function recordLocationCode(record: any): string {
-  return (
-    recordField(record, 'location_code')
-    || recordField(record, 'emplacement')
-    || recordField(record, 'to_location_code')
-    || recordField(record, 'from_location_code')
-    || ''
-  )
-}
-
 /** Le nom du champ photo change selon l'écran qui a créé la monture : il faut essayer
  *  toute la cascade. C'est celle de scan.js, reprise dans l'AGENTS.md. */
 function recordPhoto(record: any): string {
@@ -1722,7 +1694,7 @@ function RecordsTable({ records, onPrint }: { records: Movement[]; onPrint: (rec
                       {dayLabel(recordField(record, 'created_at'))} · {formatRecordTime(recordField(record, 'created_at'))}
                     </td>
                     <td className="px-2 py-2 font-mono text-[11px] text-slate-700 dark:text-slate-200">
-                      {recordLocationCode(record) || '—'}
+                      {recordField(record, 'to_location_code') || recordField(record, 'from_location_code') || '—'}
                     </td>
                   </tr>
                 )
@@ -1774,7 +1746,7 @@ function RecordsTable({ records, onPrint }: { records: Movement[]; onPrint: (rec
                 <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Forme</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'shape') || '—'}</span></div>
                 <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Genre</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'gender') || '—'}</span></div>
                 <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Couleur</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'color') || '—'}</span></div>
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Emplacement</span><span className="mt-1 block font-semibold">{recordLocationCode(selectedRecord) || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Emplacement</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'to_location_code') || recordField(selectedRecord, 'from_location_code') || '—'}</span></div>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -1860,10 +1832,6 @@ function listDispatched(list: SendList) {
   return String(list.status || '').toUpperCase() === 'TRAITEE' || Number(list.sent_count || 0) > 0
 }
 
-function listCancelled(list: SendList) {
-  return String(list.status || '').toUpperCase() === 'ANNULEE'
-}
-
 /** La vérification survit au rechargement : le magasinier scanne un carton de trente
  *  montures, il ne doit pas tout reprendre parce que la page a bougé. */
 function verifiedStorageKey(listId: number | string) {
@@ -1926,7 +1894,6 @@ function ListesScreen({
   const [tone, setTone] = useState<'ok' | 'warn' | 'error' | ''>('')
   const [sending, setSending] = useState(false)
   const [dispatch, setDispatch] = useState<Dispatch | null>(null)
-  const [cancelledWarning, setCancelledWarning] = useState(false)
   const [page, setPage] = useState(1)
   const codeRef = useRef<HTMLInputElement>(null)
   /** Verrou de la recherche directe : la vérification passe par le réseau, et sans lui un
@@ -1939,7 +1906,6 @@ function ListesScreen({
     setPage(1)
     setMessage('')
     setTone('')
-    setCancelledWarning(false)
     setVerified(loadVerifiedIds(list.id))
     setLoadingItems(true)
 
@@ -1989,11 +1955,6 @@ function ListesScreen({
   async function verify(raw?: string) {
     const value = String(raw ?? code).trim()
     if (!value || !open || verifyingRef.current) return
-    if (listCancelled(open)) {
-      setCancelledWarning(true)
-      setCode('')
-      return
-    }
     const needle = value.toLowerCase()
 
     const match = items.find(item =>
@@ -2087,10 +2048,6 @@ function ListesScreen({
    *  liste — aucun choix manuel ici — déplace les montures et clôt la liste. */
   async function send() {
     if (!open || sending) return
-    if (listCancelled(open)) {
-      setCancelledWarning(true)
-      return
-    }
     setSending(true)
     setMessage('Envoi en cours…')
     setTone('')
@@ -2127,7 +2084,6 @@ function ListesScreen({
   // ── Une liste ouverte ────────────────────────────────────────────────────────
   if (open) {
     const dispatched = listDispatched(open)
-    const cancelled = listCancelled(open)
     const done = items.filter(item => verified.has(item.id)).length
     const complete = items.length > 0 && done === items.length
     const totalPages = Math.max(1, Math.ceil(items.length / LISTE_PAGE_SIZE))
@@ -2312,7 +2268,7 @@ function ListesScreen({
         <div className="flex justify-end">
           {/* Une liste déjà partie ne se renvoie pas : le serveur la refuserait, autant
               ne pas réarmer le bouton en la rouvrant. */}
-          <Btn variant="primary" onClick={() => void send()} disabled={dispatched || cancelled || !complete || sending}>
+          <Btn variant="primary" onClick={() => void send()} disabled={dispatched || !complete || sending}>
             {ic.send()}
             {dispatched
               ? `En transit vers le stock magasin${(open.destination_station_name || open.city) ? ` (${open.destination_station_name || open.city})` : ''}`
@@ -2321,21 +2277,6 @@ function ListesScreen({
               : `Envoyer — ${items.length - done} à vérifier`}
           </Btn>
         </div>
-
-        {cancelledWarning && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-labelledby="cancelled-list-title">
-            <div className={`${CARD} w-full max-w-md p-6 text-center`}>
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                {ic.alert('w-6 h-6')}
-              </div>
-              <h3 id="cancelled-list-title" className="mt-4 text-base font-bold text-slate-900 dark:text-white">Liste annulée</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                Cette liste a été annulée par la Direction et attend une nouvelle destination. La vérification et l'envoi sont temporairement bloqués.
-              </p>
-              <Btn className="mt-5 w-full justify-center" onClick={() => setCancelledWarning(false)}>Compris</Btn>
-            </div>
-          </div>
-        )}
 
         {dispatch && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
@@ -3070,24 +3011,12 @@ function ScanPage() {
         registered: Number(command.registered_count || 0),
         target: Number(command.target_count || 0),
         status: String(command.status),
-        genre: normalizeSessionGenre(command.gender),
-        gamme: normalizeSessionGamme(command.gamme),
       }
       // Ce scan est la seule trace qu'on gardera de la session : l'état React ne survit pas
       // au rechargement, et le serveur refuse de lister ses commandes au magasinier. Sans
       // cette ligne, revenir sur la page obligerait à rescanner l'étiquette.
       rememberScannedCode(active.code)
       setSession(active)
-      setForm(previous => ({
-        ...previous,
-        genre: active.genre || previous.genre,
-        gamme: active.gamme || previous.gamme,
-      }))
-      setSources(previous => ({
-        ...previous,
-        ...(active.genre ? { genre: 'manual' as FieldSource } : {}),
-        ...(active.gamme ? { gamme: 'manual' as FieldSource } : {}),
-      }))
       setActivationError(false)
       setActivationStatus('')
 
@@ -3249,8 +3178,6 @@ function ScanPage() {
           status: command ? String(command.status || '') : undefined,
           activatedAt: command?.activated_at || null,
           scanned: Boolean(command?.code) && scannedSet.has(String(command.code)),
-          genre: normalizeSessionGenre(order.gender || command?.gender),
-          gamme: normalizeSessionGamme(order.gamme || command?.gamme),
         }
       })
 
@@ -3273,8 +3200,6 @@ function ScanPage() {
           status: String(command.status || ''),
           activatedAt: command.activated_at || null,
           scanned: scannedSet.has(code),
-          genre: normalizeSessionGenre(command.gender),
-          gamme: normalizeSessionGamme(command.gamme),
         })
       }
 
@@ -3358,11 +3283,7 @@ function ScanPage() {
     setPhotoMonture(null)
     setPhotoBranche(null)
     setCaptureTarget('monture')
-    setForm({
-      ...EMPTY_FORM,
-      genre: session?.genre || '',
-      gamme: session?.gamme || '',
-    })
+    setForm(EMPTY_FORM)
     setSources(EMPTY_SOURCES)
     setCollapsed({})
     setInvalid({})

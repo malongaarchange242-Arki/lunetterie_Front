@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 import logoUrl from '../logo.jpeg'
+import { isPosteEnabled } from './featureFlags'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 const RP_ID = 'api-lunetterie.universearch.com'
@@ -83,6 +84,9 @@ function DirectionLogin({ notice, onSuccess }: { notice: string; onSuccess: (use
     if (!isDirection(user)) {
       const role = getRoleName(user)
       throw new Error(`Poste « ${role || 'inconnu'} » : connectez-vous sur la page Magasin.`)
+    }
+    if (!isPosteEnabled('direction')) {
+      throw new Error('La Direction a été désactivée depuis la page Fonctionnalités.')
     }
     window.localStorage.setItem('token', token)
     window.localStorage.setItem('user', JSON.stringify(user))
@@ -284,6 +288,11 @@ function Entry() {
         if (!isDirection(user)) {
           // On ne déconnecte pas : sa session reste valable pour son propre poste.
           setNotice(`Ce compte est un poste « ${getRoleName(user) || 'inconnu'} », qui n'a pas accès à la Direction.`)
+          setState('login')
+          return
+        }
+        if (!isPosteEnabled('direction')) {
+          setNotice('La Direction a été désactivée depuis la page Fonctionnalités.')
           setState('login')
           return
         }

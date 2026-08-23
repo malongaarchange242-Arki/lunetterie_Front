@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import logoUrl from '../logo.jpeg'
+import { isFeatureEnabled, isPosteEnabled, FEATURE_FLAGS_EVENT } from './featureFlags'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 
@@ -957,7 +958,7 @@ function Sidebar({ current, onNavigate, dark, onToggleDark, user, todo }: {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-        {NAV.map(item => (
+        {NAV.filter(item => isFeatureEnabled('sav', item.id)).map(item => (
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
@@ -1001,7 +1002,7 @@ function MobileNav({ current, onNavigate }: { current: Screen; onNavigate: (s: S
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-40">
       <div className="flex">
-        {NAV.map(item => (
+        {NAV.filter(item => isFeatureEnabled('sav', item.id)).map(item => (
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
@@ -1060,6 +1061,25 @@ function SavPage() {
   // requête par frappe.
   const observationTimers = useRef<Record<number, number>>({})
 
+  // Un écran désactivé depuis la page Fonctionnalités (Direction) ne doit pas rester
+  // ouvert juste parce qu'on l'avait déjà sous les yeux — on retombe sur le premier
+  // écran encore actif du menu.
+  const [, forceFlagsRerender] = useState(0)
+  useEffect(() => {
+    const handler = () => forceFlagsRerender(n => n + 1)
+    window.addEventListener('storage', handler)
+    window.addEventListener(FEATURE_FLAGS_EVENT, handler)
+    return () => {
+      window.removeEventListener('storage', handler)
+      window.removeEventListener(FEATURE_FLAGS_EVENT, handler)
+    }
+  }, [])
+  useEffect(() => {
+    if (isFeatureEnabled('sav', screen)) return
+    const fallback = NAV.find(item => isFeatureEnabled('sav', item.id))
+    if (fallback) setScreen(fallback.id)
+  })
+
   useEffect(() => {
     if (!getToken()) {
       window.location.replace('/magasin.html')
@@ -1084,6 +1104,12 @@ function SavPage() {
         // SUPER_ADMIN en est dispensé — il entre par la Direction, où rien ne pose `poste`,
         // et n'aurait sinon aucun moyen d'ouvrir cet écran.
         if (role !== 'SUPER_ADMIN' && window.localStorage.getItem('poste') !== 'sav') {
+          window.location.replace('/magasin.html')
+          return
+        }
+        // Poste désactivé depuis la page Fonctionnalités : mêmes bornes que le verrou
+        // `poste` ci-dessus, SUPER_ADMIN excepté (accès Direction, pas un poste SAV).
+        if (role !== 'SUPER_ADMIN' && !isPosteEnabled('sav')) {
           window.location.replace('/magasin.html')
           return
         }

@@ -17,8 +17,11 @@ export default defineConfig(({ mode }) => {
       minify: !emitSourcemaps,
       // Site multi-pages : sans ces entrées explicites, Vite ne construit que index.html
       // et les autres pages renvoient un 404 en production.
-      // Deux portes d'entrée seulement : index.html pour la Direction, magasin.html pour
-      // les postes. login.html a été retiré, sa connexion vit désormais dans les deux.
+      // index.html pour la Direction, magasin.html pour les postes magasin — login.html a
+      // été retiré, sa connexion vit désormais dans les deux. fonctionnalites.html est une
+      // troisième porte à part, avec sa propre connexion (SSAdmin) : la page qui active ou
+      // désactive un poste entier ou un de ses écrans n'a pas sa place dans la Direction,
+      // qui est elle-même un poste qu'on peut y désactiver.
       rollupOptions: {
         input: {
           index: path.resolve(__dirname, 'index.html'),
@@ -29,6 +32,7 @@ export default defineConfig(({ mode }) => {
           responsable: path.resolve(__dirname, 'responsable.html'),
           sav: path.resolve(__dirname, 'sav.html'),
           labo: path.resolve(__dirname, 'labo.html'),
+          fonctionnalites: path.resolve(__dirname, 'fonctionnalites.html'),
         },
       },
     },

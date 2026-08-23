@@ -7,6 +7,7 @@ import logoUrl from '../logo.jpeg'
 import { GlassTable, downloadCSV } from './GlassTable'
 import { calculateGlassSimilarity, getGamme, normalizeAttr, rankSimilarGlasses } from './glassSimilarity'
 import { buildAssistantPayload, buildStockDigest } from './chatContext'
+import { isFeatureEnabled, isPosteEnabled, FEATURE_FLAGS_EVENT } from './featureFlags'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
 
@@ -4651,7 +4652,7 @@ function Sidebar({ current, onNavigate, dark, onToggleDark, user }: {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-        {NAV.map(item => (
+        {NAV.filter(item => isFeatureEnabled('vendeuse', item.id)).map(item => (
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
@@ -4690,7 +4691,7 @@ function MobileNav({ current, onNavigate }: { current: Screen; onNavigate: (s: S
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-40">
       <div className="flex">
-        {NAV.map(item => (
+        {NAV.filter(item => isFeatureEnabled('vendeuse', item.id)).map(item => (
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
@@ -4962,6 +4963,27 @@ function VendeusePage() {
     setScreen(next)
   }
 
+  // Un écran désactivé depuis la page Fonctionnalités (Direction) ne doit pas rester
+  // ouvert juste parce qu'on l'avait déjà sous les yeux — on retombe sur le premier
+  // écran encore actif du menu.
+  const [, forceFlagsRerender] = useState(0)
+  useEffect(() => {
+    // 'storage' ne se déclenche pas dans l'onglet qui vient d'écrire, seulement dans
+    // les autres : c'est le cas normal ici (la Direction change le réglage ailleurs).
+    const handler = () => forceFlagsRerender(n => n + 1)
+    window.addEventListener('storage', handler)
+    window.addEventListener(FEATURE_FLAGS_EVENT, handler)
+    return () => {
+      window.removeEventListener('storage', handler)
+      window.removeEventListener(FEATURE_FLAGS_EVENT, handler)
+    }
+  }, [])
+  useEffect(() => {
+    if (isFeatureEnabled('vendeuse', screen)) return
+    const fallback = NAV.find(item => isFeatureEnabled('vendeuse', item.id))
+    if (fallback) navigate(fallback.id)
+  })
+
   // Les deux étapes doivent avoir été franchies : un jeton valide de rôle VENDEUR, et
   // le passage par /magasin.html (qui pose `poste`). Sans le second, on y renvoie —
   // sinon la double vérification se contournerait en tapant l'URL.
@@ -4972,6 +4994,12 @@ function VendeusePage() {
       return
     }
     if (window.localStorage.getItem('poste') !== 'vendeuse') {
+      window.location.replace('/magasin.html')
+      return
+    }
+    // Poste désactivé depuis la page Fonctionnalités : refuse même avec un jeton et un
+    // `poste` valides, sinon un onglet déjà ouvert resterait utilisable.
+    if (!isPosteEnabled('vendeuse')) {
       window.location.replace('/magasin.html')
       return
     }

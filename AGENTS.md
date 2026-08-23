@@ -274,7 +274,8 @@ node node_modules/vitest/vitest.mjs run          # tests
 - 🔴 **Jamais `npm install` dans ce dossier.** `vite@8` épingle `rolldown` à
   `1.0.0-rc.12`, `vitest@4` veut `~1.2.1`. Un install npm par-dessus pnpm hisse la
   mauvaise version et **casse le build entier** (`viteWasmFallbackPlugin` introuvable).
-  `package-lock.json` traîne encore à côté de `pnpm-lock.yaml` : à supprimer.
+  `package-lock.json` a été supprimé (il traînait à côté de `pnpm-lock.yaml`) : ne pas le
+  régénérer avec `npm install`.
 - Les shims de `node_modules/.bin` peuvent perdre leur bit d'exécution
   (`Permission denied`). Contourne avec `node node_modules/<pkg>/...`.
 - `hmr: true` dans `vite.config.ts` (le scaffold Figma Make l'avait coupé). Les fichiers

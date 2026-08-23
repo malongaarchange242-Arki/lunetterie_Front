@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
+﻿import React, { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
 import { buildAssistantPayload, buildStockDigest, mapChatActionToScreen } from './chatContext'
-import { summarizeStockSummary } from './dashboardMetrics'
+import { summarizeStockSummary, computeReferenceLocationBreakdown, criticalReferenceRows } from './dashboardMetrics'
 import { businessBlocKeyOf, businessBlocLabel } from './businessBloc'
+import { isFeatureEnabled, FEATURE_FLAGS_EVENT, isCountryEnabled, isCityEnabled, isSousStationEnabled } from './featureFlags'
 // Importé plutôt que référencé par URL : il n'y a pas de dossier public/ ici, donc un
 // chemin littéral ne serait pas copié dans dist/ au build.
 import logoUrl from '../logo.jpeg'
@@ -58,9 +59,22 @@ interface Employee {
   name: string
   role: string
   station: string
+  city: string
+  phone: string
+  email: string
   group: 'Station Générale' | 'Sous-stations' | 'Laboratoire'
   status: string
   avatar: string
+}
+
+interface EmployeeStats {
+  totalActions: number
+  proformas: number
+  paiements: number
+  receptions: number
+  traitement: number
+  ventes: number
+  lastActivity: string
 }
 
 // Le pipeline suit une monture qui existe déjà et qui franchit des frontières : ni son entrée
@@ -292,6 +306,19 @@ function resolveFrameGamme(value?: string, price?: number | string) {
 
 const SHAPE_FILTER_OPTIONS = ['all', 'Rectangle', 'Rond', 'Ovale', 'Carré', 'Papillon', 'Aviateur', 'Wayfarer', 'Cat-eye', 'Clubmaster', 'Browline', 'Hexagonal', 'Pantos', 'Masque', 'Papillon oversize'] as const
 const GAMME_FILTER_OPTIONS = ['all', 'classique', 'moyenne', 'luxe'] as const
+// Gamme d'une commande fournisseur : les trois gammes du stock, plus « panaché »
+// pour une expédition qui mélange plusieurs gammes — ce cas n'existe pas au niveau
+// d'une monture individuelle (resolveFrameGamme ne renvoie jamais 'panache'), donc
+// GAMME_FILTER_OPTIONS n'en a pas besoin.
+type SupplierOrderGamme = 'classique' | 'moyenne' | 'luxe' | 'panache'
+// Libellés lisibles pour la note d'expédition (`Gamme: …`) — le reste de l'app
+// affiche les valeurs brutes du filtre, mais la note est lue par des humains.
+const GAMME_LABELS: Record<SupplierOrderGamme, string> = {
+  classique: 'Classique',
+  moyenne: 'Moyenne gamme',
+  luxe: 'Luxe',
+  panache: 'Panaché (mélangé)',
+}
 // Genres de monture — à ne pas confondre avec le genre d'un employé (Homme/Femme/Autre),
 // qui décrit une personne et n'a rien à voir avec ces valeurs.
 const GENRE_FILTER_OPTIONS = ['all', 'Homme', 'Femme', 'Enfant', 'Unisexe'] as const
@@ -299,6 +326,68 @@ type GenreFilterValue = typeof GENRE_FILTER_OPTIONS[number]
 
 type ShapeFilterValue = typeof SHAPE_FILTER_OPTIONS[number]
 type GammeFilterValue = typeof GAMME_FILTER_OPTIONS[number]
+
+// Référentiel Pays -> Villes géré côté frontend pour « Ajouter un magasin » : le backend
+// (/inventory/countries, /inventory/cities) ne connaît que les pays/villes où un magasin
+// existe déjà, ce qui empêche de préparer l'ouverture d'un magasin dans une ville encore
+// inconnue de la base. Limité à l'Afrique pour l'instant — capitale + ville(s) principale(s)
+// par pays, pas une liste exhaustive de communes.
+const AFRICAN_COUNTRIES: Array<{ name: string; cities: string[] }> = [
+  { name: 'Afrique du Sud', cities: ['Pretoria', 'Johannesburg', 'Le Cap', 'Durban', 'Port Elizabeth', 'Bloemfontein', 'East London', 'Polokwane', 'Nelspruit', 'Kimberley'] },
+  { name: 'Algérie', cities: ['Alger', 'Oran', 'Constantine', 'Annaba', 'Blida', 'Batna', 'Sétif', 'Sidi Bel Abbès', 'Biskra', 'Tlemcen'] },
+  { name: 'Angola', cities: ['Luanda', 'Huambo', 'Lobito', 'Benguela', 'Lubango', 'Malanje', 'Namibe', 'Cabinda'] },
+  { name: 'Bénin', cities: ['Cotonou', 'Porto-Novo', 'Parakou', 'Djougou', 'Bohicon', 'Abomey'] },
+  { name: 'Botswana', cities: ['Gaborone', 'Francistown', 'Molepolole', 'Maun', 'Serowe'] },
+  { name: 'Burkina Faso', cities: ['Ouagadougou', 'Bobo-Dioulasso', 'Koudougou', 'Banfora', 'Ouahigouya'] },
+  { name: 'Burundi', cities: ['Bujumbura', 'Gitega', 'Ngozi', 'Ruyigi'] },
+  { name: 'Cabo Verde', cities: ['Praia', 'Mindelo', 'Santa Maria', 'Assomada'] },
+  { name: 'Cameroun', cities: ['Douala', 'Yaoundé', 'Garoua', 'Bamenda', 'Maroua', 'Bafoussam', 'Ngaoundéré', 'Kribi', 'Buea'] },
+  { name: 'Comores', cities: ['Moroni', 'Mutsamudu', 'Fomboni'] },
+  { name: 'Congo', cities: ['Brazzaville', 'Pointe-Noire', 'Dolisie', 'Nkayi', 'Ouesso', 'Owando'] },
+  { name: 'Côte d’Ivoire', cities: ['Abidjan', 'Yamoussoukro', 'Bouaké', 'Daloa', 'San-Pédro', 'Korhogo', 'Man', 'Gagnoa'] },
+  { name: 'Djibouti', cities: ['Djibouti', 'Ali Sabieh', 'Tadjourah', 'Obock'] },
+  { name: 'Égypte', cities: ['Le Caire', 'Alexandrie', 'Gizeh', 'Louxor', 'Assouan', 'Port-Saïd', 'Suez', 'Mansourah', 'Tanta'] },
+  { name: 'Érythrée', cities: ['Asmara', 'Massaoua', 'Keren', 'Assab'] },
+  { name: 'Eswatini', cities: ['Mbabane', 'Manzini', 'Lobamba', 'Siteki'] },
+  { name: 'Éthiopie', cities: ['Addis-Abeba', 'Dire Dawa', 'Mekele', 'Gondar', 'Bahir Dar', 'Hawassa', 'Adama'] },
+  { name: 'Gabon', cities: ['Libreville', 'Port-Gentil', 'Franceville', 'Oyem', 'Lambaréné'] },
+  { name: 'Gambie', cities: ['Banjul', 'Serekunda', 'Brikama'] },
+  { name: 'Ghana', cities: ['Accra', 'Kumasi', 'Tamale', 'Sekondi-Takoradi', 'Cape Coast', 'Sunyani'] },
+  { name: 'Guinée', cities: ['Conakry', 'Kankan', 'Nzérékoré', 'Kindia', 'Labé'] },
+  { name: 'Guinée équatoriale', cities: ['Malabo', 'Bata', 'Ebebiyín'] },
+  { name: 'Guinée-Bissau', cities: ['Bissau', 'Bafatá', 'Gabú'] },
+  { name: 'Kenya', cities: ['Nairobi', 'Mombasa', 'Kisumu', 'Nakuru', 'Eldoret'] },
+  { name: 'Lesotho', cities: ['Maseru', 'Teyateyaneng', 'Mafeteng'] },
+  { name: 'Liberia', cities: ['Monrovia', 'Gbarnga', 'Buchanan', 'Kakata'] },
+  { name: 'Libye', cities: ['Tripoli', 'Benghazi', 'Misrata', 'Zaouïa', 'Tobrouk'] },
+  { name: 'Madagascar', cities: ['Antananarivo', 'Toamasina', 'Antsirabe', 'Mahajanga', 'Fianarantsoa', 'Toliara'] },
+  { name: 'Malawi', cities: ['Lilongwe', 'Blantyre', 'Mzuzu', 'Zomba'] },
+  { name: 'Mali', cities: ['Bamako', 'Sikasso', 'Mopti', 'Ségou', 'Kayes', 'Gao'] },
+  { name: 'Maroc', cities: ['Casablanca', 'Rabat', 'Marrakech', 'Fès', 'Tanger', 'Agadir', 'Meknès', 'Oujda'] },
+  { name: 'Maurice', cities: ['Port-Louis', 'Beau Bassin-Rose Hill', 'Vacoas-Phoenix', 'Curepipe'] },
+  { name: 'Mauritanie', cities: ['Nouakchott', 'Nouadhibou', 'Kaédi', 'Rosso'] },
+  { name: 'Mozambique', cities: ['Maputo', 'Beira', 'Nampula', 'Matola', 'Quelimane'] },
+  { name: 'Namibie', cities: ['Windhoek', 'Walvis Bay', 'Swakopmund', 'Oshakati'] },
+  { name: 'Niger', cities: ['Niamey', 'Zinder', 'Maradi', 'Agadez', 'Tahoua'] },
+  { name: 'Nigéria', cities: ['Lagos', 'Abuja', 'Kano', 'Ibadan', 'Port Harcourt', 'Benin City', 'Kaduna', 'Enugu'] },
+  { name: 'Ouganda', cities: ['Kampala', 'Gulu', 'Mbarara', 'Jinja'] },
+  { name: 'République centrafricaine', cities: ['Bangui', 'Bimbo', 'Berbérati', 'Carnot'] },
+  { name: 'République démocratique du Congo', cities: ['Kinshasa', 'Lubumbashi', 'Goma', 'Bukavu', 'Kisangani', 'Mbuji-Mayi', 'Kananga'] },
+  { name: 'Rwanda', cities: ['Kigali', 'Butare', 'Gisenyi', 'Musanze'] },
+  { name: 'Sao Tomé-et-Principe', cities: ['São Tomé', 'Santo António'] },
+  { name: 'Sénégal', cities: ['Dakar', 'Thiès', 'Kaolack', 'Ziguinchor', 'Saint-Louis', 'Touba'] },
+  { name: 'Seychelles', cities: ['Victoria', 'Anse Boileau'] },
+  { name: 'Sierra Leone', cities: ['Freetown', 'Bo', 'Kenema', 'Makeni'] },
+  { name: 'Somalie', cities: ['Mogadiscio', 'Hargeisa', 'Kismayo', 'Bosaso'] },
+  { name: 'Soudan', cities: ['Khartoum', 'Omdurman', 'Port-Soudan', 'Kassala'] },
+  { name: 'Soudan du Sud', cities: ['Djouba', 'Wau', 'Malakal'] },
+  { name: 'Tanzanie', cities: ['Dar es Salaam', 'Dodoma', 'Mwanza', 'Arusha', 'Zanzibar'] },
+  { name: 'Tchad', cities: ['N’Djaména', 'Moundou', 'Sarh', 'Abéché'] },
+  { name: 'Togo', cities: ['Lomé', 'Sokodé', 'Kara', 'Kpalimé'] },
+  { name: 'Tunisie', cities: ['Tunis', 'Sfax', 'Sousse', 'Kairouan', 'Bizerte'] },
+  { name: 'Zambie', cities: ['Lusaka', 'Kitwe', 'Ndola', 'Livingstone'] },
+  { name: 'Zimbabwe', cities: ['Harare', 'Bulawayo', 'Chitungwiza', 'Mutare', 'Gweru'] },
+]
 
 function mapGlassStatusToUI(status?: string) {
   const normalized = String(status || '').trim().toUpperCase()
@@ -540,77 +629,205 @@ function isTransitStatus(status: string) {
   return normalized === 'EN_TRANSIT' || normalized === 'RESERVEE_ENVOI'
 }
 
+// A quitté le stock général = tout statut postérieur dans le cycle de vie (AGENTS.md) :
+// ni RECU_FOURNISSEUR (pas encore rangée), ni EN_STOCK_GENERAL, ni RESERVEE_ENVOI — cette
+// dernière est réservée par une liste d'envoi mais physiquement toujours en rayon général,
+// comme le traite déjà StockGeneralScreen (montures grisées, pas retirées de la liste).
+function hasLeftGeneralStock(status: string) {
+  const normalized = String(status || '').trim().toUpperCase()
+  if (!normalized || normalized === 'RECU_FOURNISSEUR') return false
+  if (isGeneralStockStatus(normalized) || normalized === 'RESERVEE_ENVOI') return false
+  return true
+}
+
+// Palette cyclique pour le diagramme « Par ville » de l'écran Statistique — Stock général
+// garde toujours #2563eb (sa couleur partout ailleurs dans l'app), les magasins piochent
+// dans cette liste dans l'ordre où ils apparaissent (le plus gros stock d'abord).
+const STATS_CITY_PALETTE = ['#0891b2', '#9333ea', '#16a34a', '#d97706', '#dc2626', '#0d9488', '#4f46e5', '#db2777']
+
+// Agrège TOUTES les montures (stock général + tous les magasins, cf. GET /inventory/glasses
+// sans filtre) par ville d'appartenance — station_city/station_name viennent directement de
+// la fiche monture, pas d'un second appel à /auth/stations (cf. discoveredMagasins plus bas).
+function computeCityTotals(glasses: any[]): Array<{ label: string; value: number; color: string }> {
+  const counts: Record<string, number> = {}
+  let generalCount = 0
+  glasses.forEach((glass: any) => {
+    if (isGeneralStockStatus(glass.status)) { generalCount += 1; return }
+    const city = normalizeStationCityName({ name: String(glass.station_name || ''), city: String(glass.station_city || '') })
+    if (!city) return
+    counts[city] = (counts[city] || 0) + 1
+  })
+  const cities = Object.entries(counts).sort((a, b) => b[1] - a[1])
+  const rows: Array<{ label: string; value: number; color: string }> = []
+  if (generalCount > 0 || cities.length === 0) rows.push({ label: 'Stock général', value: generalCount, color: '#2563eb' })
+  cities.forEach(([label, value], idx) => rows.push({ label, value, color: STATS_CITY_PALETTE[idx % STATS_CITY_PALETTE.length] }))
+  return rows
+}
+
+// Mêmes statuts que buildCityStockCounts (ligne ~1050), à plat sur tout le parc plutôt que
+// ville par ville : c'est la même répartition qu'affiche Suivi Global, vue globalement.
+function computeStatusTotals(glasses: any[]) {
+  let general = 0, local = 0, presentoir = 0, labo = 0, reserve = 0, vendue = 0, transit = 0
+  glasses.forEach((glass: any) => {
+    const status = String(glass.status || '').trim().toUpperCase()
+    if (isTransitStatus(status)) transit += 1
+    else if (isGeneralStockStatus(status)) general += 1
+    else if (isLocalStockStatus(status)) local += 1
+    else if (status === 'EN_PRESENTOIR') presentoir += 1
+    else if (status === 'EN_LABORATOIRE' || status === 'PRETE_A_LIVRER') labo += 1
+    else if (status === 'RESERVE' || status === 'RESERVEE') reserve += 1
+    else if (status === 'VENDUE' || status === 'VENDU') vendue += 1
+  })
+  return { general, local, presentoir, labo, reserve, vendue, transit }
+}
+
+function computeGammeTotals(glasses: any[]): Array<{ label: string; value: number; color: string }> {
+  const gammeColors: Record<string, string> = { classique: '#94a3b8', moyenne: '#0891b2', luxe: '#9333ea' }
+  const counts: Record<string, number> = {}
+  glasses.forEach((glass: any) => {
+    const gamme = resolveFrameGamme(glass.material, glass.price)
+    if (!gamme) return
+    counts[gamme] = (counts[gamme] || 0) + 1
+  })
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([gamme, value]) => ({ label: GAMME_LABELS[gamme as SupplierOrderGamme] || gamme, value, color: gammeColors[gamme] || '#64748b' }))
+}
+
+// Même principe que computeGammeTotals, généralisé à un attribut quelconque (forme, genre,
+// couleur…) — pas de mapping de couleurs fixe pour ces valeurs libres, donc une palette
+// cyclique (même que « Par ville »).
+function computeAttrTotals(glasses: any[], pick: (glass: any) => string | undefined, palette: string[] = STATS_CITY_PALETTE): Array<{ label: string; value: number; color: string }> {
+  const counts: Record<string, number> = {}
+  glasses.forEach((glass: any) => {
+    const raw = String(pick(glass) || '').trim()
+    if (!raw) return
+    const label = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+    counts[label] = (counts[label] || 0) + 1
+  })
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, value], idx) => ({ label, value, color: palette[idx % palette.length] }))
+}
+
+// Barre horizontale simple — pas de bibliothèque de graphiques dans ce projet (cf. AGENTS.md,
+// icônes en SVG maison) : une div dont la largeur est proportionnelle suffit à un diagramme.
+function StatBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+        <span className="font-semibold text-slate-600 dark:text-slate-300">{label}</span>
+        <span className="font-bold tabular-nums" style={{ color }}>{value.toLocaleString('fr-FR')}</span>
+      </div>
+      <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
+    </div>
+  )
+}
+
+// Anneau en conic-gradient CSS pur — même raison que StatBar, pas de dépendance de graphique.
+function StatDonut({ segments, size = 128 }: { segments: Array<{ label: string; value: number; color: string }>; size?: number }) {
+  const total = segments.reduce((sum, s) => sum + s.value, 0)
+  if (total === 0) {
+    return (
+      <div className="flex shrink-0 items-center justify-center rounded-full border-2 border-dashed border-slate-200 text-[11px] text-slate-400 dark:border-slate-700" style={{ width: size, height: size }}>
+        Aucune donnée
+      </div>
+    )
+  }
+  let cumulative = 0
+  const stops = segments.map(s => {
+    const start = (cumulative / total) * 360
+    cumulative += s.value
+    const end = (cumulative / total) * 360
+    return `${s.color} ${start}deg ${end}deg`
+  }).join(', ')
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <div className="h-full w-full rounded-full" style={{ background: `conic-gradient(${stops})` }} />
+      <div className="absolute rounded-full bg-white dark:bg-slate-800" style={{ inset: size * 0.18 }}>
+        <div className="flex h-full w-full flex-col items-center justify-center">
+          <span className="text-lg font-black tabular-nums text-slate-900 dark:text-white">{total.toLocaleString('fr-FR')}</span>
+          <span className="text-[10px] text-slate-400">monture{total > 1 ? 's' : ''}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Magasins suivis dans le détail d'une session de réception, une colonne « Stock magasin »
+// par ville plutôt qu'un total agrégé — liste fixe comme le reste des colonnes de ce
+// tableau (Stock général, En transit…) : à étendre ici quand un nouveau magasin ouvre.
+const SESSION_TRACK_CITIES = ['Pointe-Noire', 'Brazzaville', 'Kinshasa']
+
 type SessionReferenceRow = {
   reference: string
   total: number
   general: number
   transit: number
-  local: number
-  presentoir: number
-  caisse: number
-  labo: number
-  vendu: number
+  localByCity: Record<string, number>
   // Code-barres des montures derrière cette référence : suivi individuel oblige, un clic
   // sur la ligne ouvre le trajet du premier — utile surtout quand total = 1, le cas courant
   // d'une session de réception (une référence = une monture reçue).
   barcodes: string[]
 }
 
-// Répartit les montures d'une session par référence sur tout le pipeline documenté dans
-// AGENTS.md, transit compris entre chaque paire de postes — sans lui, une monture partie
-// sans arrivée confirmée disparaîtrait de toutes les colonnes.
-// RESERVEE (réserve posée depuis le présentoir, pas son envoi) reste comptée avec
-// Présentoir : la monture est toujours physiquement à ce poste, seul son statut change.
+// Répartit les montures d'une session par référence sur le début du pipeline documenté
+// dans AGENTS.md (stock général, transit, puis arrivée par magasin) — la suite du parcours
+// (présentoir, caisse, labo, vente) se consulte au cas par cas via « Suivi en direct »
+// (openTrack), pas dans ce résumé.
 function buildSessionReferenceRows(glasses: any[]): SessionReferenceRow[] {
   const rows = new Map<string, SessionReferenceRow>()
   glasses.forEach((glass: any) => {
     const reference = String(glass.reference || glass.barcode || 'REF-SANS-NOM')
-    const row = rows.get(reference) || { reference, total: 0, general: 0, transit: 0, local: 0, presentoir: 0, caisse: 0, labo: 0, vendu: 0, barcodes: [] }
+    const row = rows.get(reference) || { reference, total: 0, general: 0, transit: 0, localByCity: {}, barcodes: [] }
     row.total += 1
     if (glass.barcode) row.barcodes.push(String(glass.barcode))
     const status = String(glass.status || '').trim().toUpperCase()
     if (isTransitStatus(status)) row.transit += 1
-    else if (isLocalStockStatus(status)) row.local += 1
-    else if (status === 'EN_PRESENTOIR' || status === 'RESERVEE' || status === 'RESERVE') row.presentoir += 1
-    else if (status === 'EN_CAISSE') row.caisse += 1
-    else if (status === 'EN_LABORATOIRE' || status === 'PRETE_A_LIVRER') row.labo += 1
-    else if (status === 'VENDUE' || status === 'VENDU') row.vendu += 1
-    else row.general += 1
+    else if (isLocalStockStatus(status)) {
+      const city = normalizeStationCityName({ name: String(glass.station_name || ''), city: String(glass.station_city || '') })
+      row.localByCity[city] = (row.localByCity[city] || 0) + 1
+    } else row.general += 1
     rows.set(reference, row)
   })
   return Array.from(rows.values()).sort((a, b) => a.reference.localeCompare(b.reference, 'fr'))
 }
 
 // Découpe un code d'emplacement « RAYON-A-ETA-01-BAC-B-POS-12 ». Hissé au niveau module :
-// la page Expédition et l'écran Stock général filtrent sur les mêmes trois axes, deux copies
-// finiraient par diverger.
-function parseStockLocationCode(locationCode: string): { rayon: string; etagere: string; bac: string } | null {
+// la page Expédition et l'écran Stock général filtrent sur les mêmes axes, y compris la
+// position exacte dans le bac (POS) pour ne pas regrouper des emplacements distincts.
+function parseStockLocationCode(locationCode: string): { rayon: string; etagere: string; bac: string; pos: string } | null {
   const normalized = String(locationCode || '').trim().toUpperCase()
   if (!normalized) return null
-  const match = normalized.match(/^RAYON-([A-Z])-ETA-([0-9]+)-BAC-([A-Z]+)/i)
+  const match = normalized.match(/^RAYON-([A-Z])-ETA-([0-9]+)-BAC-([A-Z]+)(?:-POS-([0-9]+))?/i)
   if (!match) return null
   return {
     rayon: String(match[1]).toUpperCase(),
     etagere: String(match[2]).toUpperCase(),
     bac: String(match[3]).toUpperCase(),
+    pos: String(match[4] || 'ALL').toUpperCase(),
   }
 }
 
 // Une monture sans emplacement lisible disparaît dès qu'un filtre est posé : on ne peut pas
-// affirmer qu'elle est dans le bac demandé.
-function matchesLocationFilters(glass: any, rayon: string, etagere: string, bac: string) {
+// affirmer qu'elle est dans le bac ou la position demandée.
+function matchesLocationFilters(glass: any, rayon: string, etagere: string, bac: string, pos: string) {
   const parsed = parseStockLocationCode(String(glass?.location_code || glass?.station_name || ''))
-  if (!parsed) return rayon === 'all' && etagere === 'all' && bac === 'all'
+  if (!parsed) return rayon === 'all' && etagere === 'all' && bac === 'all' && pos === 'all'
   if (rayon !== 'all' && parsed.rayon !== rayon) return false
   if (etagere !== 'all' && parsed.etagere !== etagere) return false
   if (bac !== 'all' && parsed.bac !== bac) return false
+  if (pos !== 'all' && parsed.pos !== pos) return false
   return true
 }
 
 // ── Stock magasin : manquants ─────────────────────────────────────────────────
 // Les manquants d'un magasin viennent uniquement de son panier de demande, c'est-à-dire
 // des recherches client réellement enregistrées par le chatbot.
-type StockAction = '' | 'PANIER' | 'ENVOI'
+type StockAction = '' | 'PANIER' | 'ENVOI' | 'LOCAL' | 'LISTE_ENVOYER' | 'STATISTIQUE'
 
 function normalizeGenderName(value?: string) {
   const raw = String(value || '').trim()
@@ -1172,6 +1389,7 @@ const ic = {
   box: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M3 7.5L12 3l9 4.5v9L12 21l-9-4.5v-9z"/><path d="M12 3v18"/><path d="M3 7.5l9 4.5 9-4.5"/></svg>,
   transfer: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h16"/><path d="M14 6l6 6-6 6"/><path d="M10 6l-6 6 6 6"/></svg>,
   display: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/><path d="M8 15l2-2 2 3 3-4"/></svg>,
+  sliders: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2" fill="currentColor" stroke="none"/></svg>,
   check: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M5 13l4 4L19 7"/></svg>,
   chart: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 4-8"/></svg>,
   users: (c = 'w-5 h-5') => <svg className={c} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
@@ -1209,7 +1427,7 @@ const BLOCK_CLASS = 'rounded-[20px] border border-slate-200 bg-white shadow-sm d
 
 // Carte-sélecteur : carrousel à accroche sur mobile, grille à partir de sm.
 const CARD_ROW_CLASS = '-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:overflow-x-visible sm:px-0 sm:pb-0'
-const CARD_CLASS = 'flex w-[62%] flex-shrink-0 snap-start flex-col items-start gap-2.5 rounded-[20px] border p-5 text-left shadow-sm transition-all hover:-translate-y-[3px] hover:shadow-lg sm:w-auto sm:flex-shrink'
+const CARD_CLASS = 'flex w-[62%] shrink-0 snap-start flex-col items-start gap-2.5 rounded-[20px] border p-5 text-left shadow-sm transition-all hover:-translate-y-[3px] hover:shadow-lg sm:w-auto sm:flex-shrink'
 
 /** L'ordre des teintes suit l'ordre des cartes et a été vérifié au validateur de palette
  *  sur les deux fonds. La pire paire adjacente est vendu/labo à ΔE 7,9 en protanopie :
@@ -1453,7 +1671,7 @@ function CalendarModal({ year, month, selectedDay, onSelectDay, onClose, onPrevM
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
-function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCities }: { onNavigate: (s: NavScreen) => void; stockSummary: any[]; cityStockCounts: Record<string, CityStats>; stationCities: string[] }) {
+function DashboardScreen({ onNavigate, stockSummary, initialStock, cityStockCounts, stationCities }: { onNavigate: (s: NavScreen) => void; stockSummary: any[]; initialStock: number; cityStockCounts: Record<string, CityStats>; stationCities: string[] }) {
   const [selectedCity, setSelectedCity] = useState('')
   const cityNames = mergeCityNames(stationCities, Object.keys(cityStockCounts))
   const stats = cityStockCounts[selectedCity]
@@ -1484,10 +1702,10 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-3">
         {[
-          { block: 'total' as Block, label: 'Total lunette', color: '#2563eb', bg: 'border-blue-200 dark:border-blue-800', icon: ic.glasses },
+          { block: 'total' as Block, label: 'Total lunettes', color: '#2563eb', bg: 'border-blue-200 dark:border-blue-800', icon: ic.glasses },
           { block: 'ca' as Block, label: "Chiffre d'affaire", color: '#16a34a', bg: 'border-green-200 dark:border-green-800', icon: ic.chart },
           { block: 'suivi' as Block, label: 'Suivi des lunettes', color: '#9333ea', bg: 'border-purple-200 dark:border-purple-800', icon: ic.map },
-        ].map(item => {
+        ].filter(item => isFeatureEnabled('direction', item.block)).map(item => {
           // Le CA a sa propre somme : il vient des proformas réglées, quand `summary` ne
           // compte que des montures. Les deux autres tuiles ne pouvaient donc pas le servir.
           const value = item.block === 'ca' ? fmtFCFA(totalRevenue) : summary.totalUnits.toLocaleString('fr-FR')
@@ -1545,35 +1763,41 @@ function DashboardScreen({ onNavigate, stockSummary, cityStockCounts, stationCit
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {[
-          { label: 'Stock général', value: summary.generalUnits, total: summary.totalUnits, of: montureDenominator, color: '#2563eb', screen: { type: 'stock-general' } as NavScreen },
-          { label: 'Stock magasin', value: selectedCity ? (selectedCityStats?.local ?? 0) : summary.localUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#0891b2', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'stock' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
-          { label: 'Labo', value: selectedCity ? (selectedCityStats?.labo ?? 0) : summary.laboUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#7c3aed', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'labo' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
-          { label: 'Réserve', value: selectedCity ? (selectedCityStats?.reserve ?? 0) : summary.reserveUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#059669', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'placement' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
-          { label: 'Présentoir', value: selectedCity ? (selectedCityStats?.presentoir ?? 0) : summary.presentoirUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#f59e0b', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'presentoire' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
-        ].map(item => {
-          const ratio = item.total > 0 ? item.value / item.total : 0
-          return (
-            <button
-              type="button"
-              key={item.label}
-              onClick={() => onNavigate(item.screen)}
-              className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4 text-left transition-all hover:border-slate-300 hover:shadow-sm dark:hover:border-slate-600"
-            >
-              <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">{item.label}</p>
-              <div className="flex items-baseline gap-1.5 mt-1">
-                <p className="text-3xl font-black tabular-nums" style={{ color: item.color }}>{item.value}</p>
-              </div>
-              <div className="mt-2.5 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, ratio * 100)}%`, backgroundColor: item.color }} />
-              </div>
-              <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">{item.of}</p>
-            </button>
-          )
-        })}
-      </div>
-
+      {(() => {
+        const detailTiles = [
+          { key: 'stock-initial', label: 'Stock initial', value: initialStock, total: initialStock, of: 'total commandé', color: '#0f766e', screen: { type: 'module', id: 'reception' } as NavScreen },
+          { key: 'stock-general', label: 'Stock général', value: summary.generalUnits, total: summary.totalUnits, of: 'sur stock initial', color: '#2563eb', screen: { type: 'stock-general' } as NavScreen },
+          { key: 'stock-magasin', label: 'Stock magasin', value: selectedCity ? (selectedCityStats?.local ?? 0) : summary.localUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#0891b2', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'stock' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
+          { key: 'labo-tuile', label: 'Labo', value: selectedCity ? (selectedCityStats?.labo ?? 0) : summary.laboUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#7c3aed', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'labo' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
+          { key: 'reserve', label: 'Réserve', value: selectedCity ? (selectedCityStats?.reserve ?? 0) : summary.reserveUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#059669', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'placement' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
+          { key: 'presentoir-tuile', label: 'Présentoir', value: selectedCity ? (selectedCityStats?.presentoir ?? 0) : summary.presentoirUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#f59e0b', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'presentoire' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
+        ].filter(item => isFeatureEnabled('direction', item.key))
+        if (detailTiles.length === 0) return null
+        return (
+        <div className="grid grid-cols-2 gap-3">
+          {detailTiles.map(item => {
+            const ratio = item.total > 0 ? item.value / item.total : 0
+            return (
+              <button
+                type="button"
+                key={item.label}
+                onClick={() => onNavigate(item.screen)}
+                className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4 text-left transition-all hover:border-slate-300 hover:shadow-sm dark:hover:border-slate-600"
+              >
+                <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">{item.label}</p>
+                <div className="flex items-baseline gap-1.5 mt-1">
+                  <p className="text-3xl font-black tabular-nums" style={{ color: item.color }}>{item.value}</p>
+                </div>
+                <div className="mt-2.5 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                  <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, ratio * 100)}%`, backgroundColor: item.color }} />
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">{item.of}</p>
+              </button>
+            )
+          })}
+        </div>
+        )
+      })()}
 
     </div>
   )
@@ -1698,7 +1922,7 @@ function CriticalReferencesScreen({ onNavigate: _onNavigate }: { onNavigate: (s:
                       </p>
                     </div>
                     <span
-                      className="inline-flex flex-shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                      className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-semibold"
                       style={{ backgroundColor: `${levelColor}18`, color: levelColor }}
                     >
                       {row.level === 'rupture' ? 'RUPTURE' : 'CRITIQUE'}
@@ -1708,7 +1932,7 @@ function CriticalReferencesScreen({ onNavigate: _onNavigate }: { onNavigate: (s:
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
                       <div className="h-2 rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: levelColor }} />
                     </div>
-                    <span className="w-12 flex-shrink-0 text-right text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">
+                    <span className="w-12 shrink-0 text-right text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">
                       {row.stock} / {row.threshold}
                     </span>
                   </div>
@@ -1775,58 +1999,103 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
   const [isLoadingCountries, setIsLoadingCountries] = useState(false)
   const [expandedCities, setExpandedCities] = useState<string[]>([])
 
-  useEffect(() => {
+  async function loadCountries() {
     const token = window.localStorage.getItem('token')
     if (!token) return
 
     setIsLoadingCountries(true)
-    fetch(`${API_URL}/inventory/countries`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async response => {
-        if (!response.ok) throw new Error('countries unavailable')
-        const payload = await response.json().catch(() => ({}))
-        const baseCountries: CountryItem[] = (payload?.data?.countries || []).map((country: any) => ({
-          id: country.id,
-          name: country.name,
-          code: country.code,
-          flag: getFlagEmoji(country.code),
-          cities: [],
-        }))
+    try {
+      const headers = { Authorization: `Bearer ${token}` }
+      const [response, stationsResponse] = await Promise.all([
+        fetch(`${API_URL}/inventory/countries`, { headers }),
+        fetch(`${API_URL}/auth/stations`, { headers }),
+      ])
+      if (!response.ok) throw new Error('countries unavailable')
+      const payload = await response.json().catch(() => ({}))
+      const stationsPayload = await stationsResponse.json().catch(() => ({}))
+      const baseCountries: CountryItem[] = (payload?.data?.countries || []).map((country: any) => ({
+        id: country.id,
+        name: country.name,
+        code: country.code,
+        flag: getFlagEmoji(country.code),
+        cities: [],
+      }))
 
-        if (baseCountries.length === 0) {
-          const fallbackCountries = buildFallbackCountriesFromCityCounts(cityStockCounts)
-          const realCitiesFallback = stationCities.length > 0 ? [{ id: 1, name: 'Congo', code: 'CG', flag: '🇨🇬', cities: stationCities }] : fallbackCountries
-          setCountries(realCitiesFallback.length > 0 ? realCitiesFallback : COUNTRIES.map(c => ({ ...c })))
-          return
+      const countryById = new Map(baseCountries.map(country => [Number(country.id), country]))
+      const storesByCountry = new Map<string, { name: string; code?: string; cities: string[] }>()
+      if (stationsResponse.ok) {
+        ;(stationsPayload?.data?.stations || []).forEach((station: any) => {
+          if (!isStoreStation(station)) return
+          const city = String(station.city || '').trim()
+          if (!city) return
+
+          const referencedCountry = countryById.get(Number(station.pays_id))
+          const knownCountry = AFRICAN_COUNTRIES.find(country => country.cities.some(item => foldAccents(item) === foldAccents(city)))
+          const countryName = String(station.country || referencedCountry?.name || knownCountry?.name || '').trim()
+          if (!countryName) return
+
+          const country = storesByCountry.get(countryName) || { name: countryName, code: referencedCountry?.code, cities: [] }
+          if (!country.cities.includes(city)) country.cities.push(city)
+          storesByCountry.set(countryName, country)
+        })
+      }
+
+      const mergedCountries = [...baseCountries]
+      storesByCountry.forEach(storeCountry => {
+        const existing = mergedCountries.find(country => foldAccents(country.name) === foldAccents(storeCountry.name))
+        if (existing) {
+          existing.cities = Array.from(new Set([...existing.cities, ...storeCountry.cities]))
+        } else {
+          mergedCountries.push({
+            id: undefined,
+            name: storeCountry.name,
+            code: storeCountry.code,
+            flag: getFlagEmoji(storeCountry.code),
+            cities: storeCountry.cities,
+          })
         }
-
-        const nextCountries = await Promise.all(baseCountries.map(async country => {
-          if (!country.id) return country
-          try {
-            const citiesResponse = await fetch(`${API_URL}/inventory/cities?country_id=${country.id}`, {
-              headers: { Authorization: `Bearer ${token}` },
-            })
-            if (!citiesResponse.ok) return country
-            const citiesPayload = await citiesResponse.json().catch(() => ({}))
-            const cities = (citiesPayload?.data?.cities || []).map((city: any) => city.name).filter(Boolean)
-            return { ...country, cities }
-          } catch {
-            return country
-          }
-        }))
-
-        const finalCountries = nextCountries.some(country => (country.cities || []).length > 0)
-          ? nextCountries
-          : (stationCities.length > 0 ? [{ id: 1, name: 'Congo', code: 'CG', flag: '🇨🇬', cities: stationCities }] : buildFallbackCountriesFromCityCounts(cityStockCounts))
-
-        setCountries(finalCountries.length > 0 ? finalCountries : COUNTRIES.map(c => ({ ...c })))
       })
-      .catch(() => {
-        const fallbackCountries = stationCities.length > 0 ? [{ id: 1, name: 'Congo', code: 'CG', flag: '🇨🇬', cities: stationCities }] : buildFallbackCountriesFromCityCounts(cityStockCounts)
-        setCountries(fallbackCountries.length > 0 ? fallbackCountries : COUNTRIES.map(c => ({ ...c })))
-      })
-      .finally(() => setIsLoadingCountries(false))
+
+      if (mergedCountries.length === 0) {
+        const fallbackCountries = buildFallbackCountriesFromCityCounts(cityStockCounts)
+        const realCitiesFallback = stationCities.length > 0 ? [{ id: 1, name: 'Congo', code: 'CG', flag: '🇨🇬', cities: stationCities }] : fallbackCountries
+        setCountries(realCitiesFallback.length > 0 ? realCitiesFallback : COUNTRIES.map(c => ({ ...c })))
+        return
+      }
+
+      const nextCountries = await Promise.all(mergedCountries.map(async country => {
+        if (!country.id) return country
+        try {
+          const citiesResponse = await fetch(`${API_URL}/inventory/cities?country_id=${country.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (!citiesResponse.ok) return country
+          const citiesPayload = await citiesResponse.json().catch(() => ({}))
+          const cities = (citiesPayload?.data?.cities || []).map((city: any) => city.name).filter(Boolean)
+          return { ...country, cities: Array.from(new Set([...country.cities, ...cities])) }
+        } catch {
+          return country
+        }
+      }))
+
+      const finalCountries = nextCountries.some(country => (country.cities || []).length > 0)
+        ? nextCountries
+        : (stationCities.length > 0 ? [{ id: 1, name: 'Congo', code: 'CG', flag: '🇨🇬', cities: stationCities }] : buildFallbackCountriesFromCityCounts(cityStockCounts))
+
+      setCountries(finalCountries.length > 0 ? finalCountries : COUNTRIES.map(c => ({ ...c })))
+    } catch {
+      const fallbackCountries = stationCities.length > 0 ? [{ id: 1, name: 'Congo', code: 'CG', flag: '🇨🇬', cities: stationCities }] : buildFallbackCountriesFromCityCounts(cityStockCounts)
+      setCountries(fallbackCountries.length > 0 ? fallbackCountries : COUNTRIES.map(c => ({ ...c })))
+    } finally {
+      setIsLoadingCountries(false)
+    }
+  }
+
+  useEffect(() => {
+    loadCountries()
+    const handleStoreCreated = () => { loadCountries() }
+    window.addEventListener('store-created', handleStoreCreated)
+    return () => window.removeEventListener('store-created', handleStoreCreated)
   }, [cityStockCounts, stationCities])
 
   const BLOCK_COLOR = { total: '#2563eb', ca: '#16a34a', suivi: '#9333ea' }
@@ -1890,7 +2159,7 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
         <div className={`rounded-2xl border px-4 py-4 ${block === 'ca' ? 'bg-green-50 border-green-100 dark:bg-green-900/20 dark:border-green-900/40' : 'bg-slate-50 border-slate-200 dark:bg-slate-900/20 dark:border-slate-700'}`}>
           <div>
             <p className="text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500">
-              {block === 'ca' ? "Chiffre d'affaire" : 'Total lunette'}
+              {block === 'ca' ? "Chiffre d'affaire" : 'Total lunettes'}
             </p>
             <p className={`text-3xl font-black ${block === 'ca' ? 'text-green-700 dark:text-green-300' : 'text-slate-900 dark:text-white'} tabular-nums`}>
               {block === 'ca' ? fmtFCFA(totalRevenue) : totalFrames.toLocaleString('fr-FR')}
@@ -1914,9 +2183,11 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
         </div>
       ) : (
       <div className="space-y-3">
-        {countries.map(country => {
+        {countries.filter(country => isCountryEnabled(country.name)).map(country => {
           const countryExpanded = expandedCountries.includes(country.name)
-          const displayCities = country.cities.length > 0 ? country.cities : stationCities
+          // Une ville désactivée depuis Fonctionnalités (fonctionnalites.html) disparaît
+          // d'ici comme un poste désactivé disparaît de son écran de connexion.
+          const displayCities = (country.cities.length > 0 ? country.cities : stationCities).filter(isCityEnabled)
           return (
             <div key={country.name} className="relative">
               {/* Vertical rail */}
@@ -1924,7 +2195,7 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
 
               {/* Country node */}
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-shrink-0 z-10" />
+                <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 shrink-0 z-10" />
                 <button
                   onClick={() => toggleCountry(country.name)}
                   className="flex-1 flex items-center justify-between px-5 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl hover:shadow-sm transition-all"
@@ -1970,7 +2241,7 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
 
                         {block === 'ca' ? (
                           <div className="flex items-center gap-2">
-                            <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-shrink-0 z-10" />
+                            <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 shrink-0 z-10" />
                             <button
                               onClick={() => onNavigate({ type: 'city', block: 'ca', pays: country.name, city })}
                               className="flex-1 flex items-center justify-between px-4 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-all group"
@@ -1986,7 +2257,7 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
                           </div>
                         ) : (block === 'total' || block === 'suivi') ? (
                           <div className="flex items-center gap-2">
-                            <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-shrink-0 z-10" />
+                            <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 shrink-0 z-10" />
                             <div className="flex-1">
                               <button
                                 onClick={() => toggleCity(city)}
@@ -2017,7 +2288,9 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
                                       { label: 'Présentoir', value: stats.presentoir, color: '#0891b2', section: 'presentoire' as SuiviSection },
                                       { label: 'Laboratoire', value: stats.labo, color: '#7c3aed', section: 'labo' as SuiviSection },
                                       { label: 'Réserve', value: stats.reserve, color: '#059669', section: 'placement' as SuiviSection },
-                                    ].map(item => (
+                                      // Sous-station désactivée depuis Fonctionnalités : même principe qu'un
+                                      // pays/une ville, elle disparaît plutôt que de rester affichée à zéro.
+                                    ].filter(item => isSousStationEnabled(city, item.section)).map(item => (
                                       <button
                                         key={item.label}
                                         type="button"
@@ -2040,7 +2313,7 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
                           /* Suivi: city is expandable → Reception + Placement sub-tree */
                           <div>
                             <div className="flex items-center gap-2">
-                              <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-shrink-0 z-10" />
+                              <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 shrink-0 z-10" />
                               <button
                                 onClick={() => toggleCity(city)}
                                 className="flex-1 flex items-center justify-between px-4 py-2.5 rounded-xl text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-all"
@@ -2057,9 +2330,9 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
 
                                 {/* Réception group */}
                                 <div className="relative">
-                                  <div className="absolute -left-0 top-4 w-3 h-px bg-slate-200 dark:bg-slate-700" />
+                                  <div className="absolute left-0 top-4 w-3 h-px bg-slate-200 dark:bg-slate-700" />
                                   <div className="flex items-center gap-2 pl-4">
-                                    <div className="w-3 h-3 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-shrink-0" />
+                                    <div className="w-3 h-3 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 shrink-0" />
                                     <div className="flex-1 px-3 py-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                       Réception
                                     </div>
@@ -2072,14 +2345,14 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
                                       const sVal = section === 'stock' ? stats?.local : section === 'labo' ? stats?.labo : stats?.presentoir
                                       return (
                                         <div key={section} className="relative">
-                                          <div className="absolute -left-0 top-3 w-3 h-px bg-slate-200 dark:bg-slate-700" />
+                                          <div className="absolute left-0 top-3 w-3 h-px bg-slate-200 dark:bg-slate-700" />
                                           <div className="pl-4">
                                             <button
                                               onClick={() => onNavigate({ type: 'suivi-detail', pays: country.name, city, section })}
                                               className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-700 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-all group"
                                             >
                                               <div className="flex items-center gap-1.5">
-                                                <div className="w-2.5 h-2.5 rounded-full border-2 flex-shrink-0" style={{ borderColor: color, backgroundColor: 'white' }} />
+                                                <div className="w-2.5 h-2.5 rounded-full border-2 shrink-0" style={{ borderColor: color, backgroundColor: 'white' }} />
                                                 <span className="font-semibold text-slate-700 dark:text-slate-300">{sLabel}</span>
                                               </div>
                                               <div className="flex items-center gap-1.5">
@@ -2096,14 +2369,14 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
 
                                 {/* Placement leaf */}
                                 <div className="relative">
-                                  <div className="absolute -left-0 top-3.5 w-3 h-px bg-slate-200 dark:bg-slate-700" />
+                                  <div className="absolute left-0 top-3.5 w-3 h-px bg-slate-200 dark:bg-slate-700" />
                                   <div className="pl-4">
                                     <button
                                       onClick={() => onNavigate({ type: 'suivi-detail', pays: country.name, city, section: 'placement' })}
                                       className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-700 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-all group"
                                     >
                                       <div className="flex items-center gap-1.5">
-                                        <div className="w-2.5 h-2.5 rounded-full border-2 flex-shrink-0" style={{ borderColor: color, backgroundColor: 'white' }} />
+                                        <div className="w-2.5 h-2.5 rounded-full border-2 shrink-0" style={{ borderColor: color, backgroundColor: 'white' }} />
                                         <span className="font-semibold text-slate-700 dark:text-slate-300">Placement</span>
                                       </div>
                                       <div className="flex items-center gap-1.5">
@@ -2133,17 +2406,17 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
         {/* Stock Général — le reliquat qui n'a pas encore quitté l'entrepôt central. Même
             gabarit que les pays pour que la lecture soit immédiate, avec une bordure
             pointillée : ce n'est pas un pays, c'est ce qui n'est encore parti nulle part.
-            En « Total lunette » le clic ouvre l'inventaire ; en « Suivi » c'est un simple
+            En « Total lunettes » le clic ouvre l'inventaire ; en « Suivi » c'est un simple
             bandeau d'info, sans interaction — le suivi de ce bloc se lit dans les pays
             au-dessus, pas ici. */}
         {block !== 'ca' && (
           <div className="relative">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-4 h-4 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex-shrink-0 z-10" />
+              <div className="w-4 h-4 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 shrink-0 z-10" />
               {block === 'suivi' ? (
                 <div className="flex-1 flex items-center justify-between px-5 py-3.5 bg-slate-50 dark:bg-slate-900/40 border border-dashed border-slate-300 dark:border-slate-600 rounded-2xl">
                   <span className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2.5">
-                    {ic.warehouse('w-6 h-6 text-slate-400 dark:text-slate-500 flex-shrink-0')}
+                    {ic.warehouse('w-6 h-6 text-slate-400 dark:text-slate-500 shrink-0')}
                     <span>Stock Général</span>
                   </span>
                   <span className="text-sm font-black text-slate-900 dark:text-white tabular-nums">
@@ -2158,7 +2431,7 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
                   <span className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2.5">
                     {/* Icône de trait plutôt qu'un emoji : les drapeaux des pays au-dessus sont
                         des emojis parce qu'ils identifient un pays, l'entrepôt central non. */}
-                    {ic.warehouse('w-6 h-6 text-slate-400 dark:text-slate-500 flex-shrink-0')}
+                    {ic.warehouse('w-6 h-6 text-slate-400 dark:text-slate-500 shrink-0')}
                     <span>Stock Général</span>
                   </span>
                   <div className="flex items-center gap-3">
@@ -2174,6 +2447,7 @@ function PaysScreen({ block, onNavigate, cityStockCounts, stationCities, stockSu
         )}
       </div>
       )}
+
     </div>
   )
 }
@@ -2192,11 +2466,16 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
   const [rayonFilter, setRayonFilter] = useState('all')
   const [etagereFilter, setEtagereFilter] = useState('all')
   const [bacFilter, setBacFilter] = useState('all')
+  const [posFilter, setPosFilter] = useState('all')
   const [page, setPage] = useState(1)
+  // Comme dans Expédition : une monture RESERVEE_ENVOI n'a pas quitté le stock général tant
+  // qu'elle n'a pas été dispatchée, elle reste donc dans la liste, grisée. Ce badge isole les
+  // grisées d'un clic, sans passer par les filtres Rayon/Étagère/Bac/Pos ci-dessous.
+  const [greyReserved, setGreyReserved] = useState(false)
 
   // Changer de filtre remet en première page : rester en page 4 d'une liste qui vient d'être
   // réduite à deux pages donnerait un tableau vide sans explication.
-  useEffect(() => { setPage(1) }, [rayonFilter, etagereFilter, bacFilter])
+  useEffect(() => { setPage(1) }, [rayonFilter, etagereFilter, bacFilter, posFilter, greyReserved])
 
   useEffect(() => {
     const token = window.localStorage.getItem('token')
@@ -2204,7 +2483,7 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
 
     const load = (silent: boolean) => {
       if (!silent) setIsLoading(true)
-      fetch(`${API_URL}/inventory/glasses?status=EN_STOCK_GENERAL`, {
+      fetch(`${API_URL}/inventory/glasses?status=EN_STOCK_GENERAL,RESERVEE_ENVOI`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(async response => {
@@ -2213,8 +2492,10 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
           return payload?.data?.glasses || []
         })
         // Le serveur pourrait élargir le filtre un jour : on revérifie le statut côté client
-        // pour que cet écran ne montre jamais autre chose que du stock général.
-        .then((rows: any[]) => setGlasses(rows.filter((g: any) => isGeneralStockStatus(g.status))))
+        // pour que cet écran ne montre jamais autre chose que du stock général (+ les grisées,
+        // qui n'ont physiquement pas encore quitté ce stock).
+        .then((rows: any[]) => setGlasses(rows.filter((g: any) =>
+          isGeneralStockStatus(g.status) || String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI')))
         .catch(() => setGlasses([]))
         .finally(() => setIsLoading(false))
     }
@@ -2235,7 +2516,7 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
     }
   }, [])
 
-  const optionsFor = (pick: (parsed: { rayon: string; etagere: string; bac: string }) => string) =>
+  const optionsFor = (pick: (parsed: { rayon: string; etagere: string; bac: string; pos: string }) => string) =>
     Array.from(new Set(
       glasses
         .map((g: any) => parseStockLocationCode(g.location_code || ''))
@@ -2246,15 +2527,20 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
   const rayonOptions = optionsFor(p => p.rayon)
   const etagereOptions = optionsFor(p => p.etagere)
   const bacOptions = optionsFor(p => p.bac)
+  const posOptions = optionsFor(p => p.pos)
 
-  const filtered = glasses.filter(g => matchesLocationFilters(g, rayonFilter, etagereFilter, bacFilter))
+  const isReservedForShipment = (g: any) => String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI'
+  const reservedCount = glasses.filter(isReservedForShipment).length
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / STOCK_GENERAL_PAGE_SIZE))
+  const filtered = glasses.filter(g => matchesLocationFilters(g, rayonFilter, etagereFilter, bacFilter, posFilter))
+  const displayed = greyReserved ? filtered.filter(isReservedForShipment) : filtered
+
+  const totalPages = Math.max(1, Math.ceil(displayed.length / STOCK_GENERAL_PAGE_SIZE))
   // Page bornée à l'affichage : si la liste rétrécit entre deux rendus, on retombe sur la
   // dernière page existante au lieu d'afficher une tranche vide.
   const currentPage = Math.min(page, totalPages)
   const start = (currentPage - 1) * STOCK_GENERAL_PAGE_SIZE
-  const pageRows = filtered.slice(start, start + STOCK_GENERAL_PAGE_SIZE)
+  const pageRows = displayed.slice(start, start + STOCK_GENERAL_PAGE_SIZE)
 
   return (
     <div className="space-y-4">
@@ -2266,6 +2552,21 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-800/60">
+          {reservedCount > 0 && (
+            <>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Grisées</label>
+              <button
+                type="button"
+                onClick={() => setGreyReserved(prev => !prev)}
+                title="Montures déjà prises par une liste d'envoi pas encore expédiée"
+                className={`rounded-lg border px-2 py-1 text-xs font-semibold transition-colors ${greyReserved
+                  ? 'border-slate-800 bg-slate-800 text-white dark:border-slate-200 dark:bg-slate-200 dark:text-slate-900'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-700'}`}
+              >
+                {greyReserved ? 'Grisées uniquement' : `${reservedCount} grisée${reservedCount > 1 ? 's' : ''}`}
+              </button>
+            </>
+          )}
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Rayon</label>
           <select value={rayonFilter} onChange={e => setRayonFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
             <option value="all">Tous</option>
@@ -2281,8 +2582,13 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
             <option value="all">Tous</option>
             {bacOptions.map(option => <option key={option} value={option}>{option}</option>)}
           </select>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Pos</label>
+          <select value={posFilter} onChange={e => setPosFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            <option value="all">Toutes</option>
+            {posOptions.map(option => <option key={option} value={option}>{option}</option>)}
+          </select>
           <button
-            onClick={() => { setRayonFilter('all'); setEtagereFilter('all'); setBacFilter('all') }}
+            onClick={() => { setRayonFilter('all'); setEtagereFilter('all'); setBacFilter('all'); setPosFilter('all') }}
             className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Reset
@@ -2291,12 +2597,12 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
       </div>
 
       <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
-        {filtered.length.toLocaleString('fr-FR')} monture{filtered.length > 1 ? 's' : ''}
-        {filtered.length !== glasses.length && ` sur ${glasses.length.toLocaleString('fr-FR')}`}
+        {displayed.length.toLocaleString('fr-FR')} monture{displayed.length > 1 ? 's' : ''}
+        {displayed.length !== glasses.length && ` sur ${glasses.length.toLocaleString('fr-FR')}`}
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
-        <div className="min-w-[720px]">
+        <div className="min-w-180">
           <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
             <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
               <tr>
@@ -2318,11 +2624,13 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
               ) : (
                 pageRows.map((g: any, idx: number) => {
                   const frameRef = String(g.reference || g.barcode || g.ref || '').trim()
+                  const reserved = isReservedForShipment(g)
                   return (
                     <tr
                       key={`stock-general-${g.id || idx}`}
                       role="button"
                       tabIndex={0}
+                      title={reserved ? 'Déjà réservée par une liste d\'envoi pas encore expédiée' : undefined}
                       onClick={() => {
                         if (!frameRef) return
                         onNavigate({ type: 'frame', ref: frameRef, city: '' })
@@ -2334,7 +2642,7 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
                           onNavigate({ type: 'frame', ref: frameRef, city: '' })
                         }
                       }}
-                      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus:outline-none focus:bg-slate-100 dark:focus:bg-slate-800"
+                      className={`cursor-pointer transition-colors focus:outline-none focus:bg-slate-100 dark:focus:bg-slate-800 ${reserved ? 'opacity-50' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
                     >
                       <td className="px-2 py-2">
                         {g.photo_monture_url ? (
@@ -2349,7 +2657,11 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
                       <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.gender || '—'}</td>
                       <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.status || '—'}</td>
                       <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.created_at ? String(g.created_at).slice(0, 10) : '—'}</td>
-                      <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.location_code || g.station_name || '—'}</td>
+                      <td className="px-2 py-2 text-slate-700 dark:text-slate-200">
+                        {reserved
+                          ? `En transit vers Stock magasin${g.reserved_for_city ? ` (${g.reserved_for_city})` : ''}`
+                          : (g.location_code || g.station_name || '—')}
+                      </td>
                     </tr>
                   )
                 })
@@ -2363,7 +2675,7 @@ function StockGeneralScreen({ onNavigate }: { onNavigate: (screen: NavScreen) =>
       {totalPages > 1 && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
-            {(start + 1).toLocaleString('fr-FR')}–{Math.min(start + STOCK_GENERAL_PAGE_SIZE, filtered.length).toLocaleString('fr-FR')} sur {filtered.length.toLocaleString('fr-FR')}
+            {(start + 1).toLocaleString('fr-FR')}–{Math.min(start + STOCK_GENERAL_PAGE_SIZE, displayed.length).toLocaleString('fr-FR')} sur {displayed.length.toLocaleString('fr-FR')}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -2398,7 +2710,7 @@ function SuiviDetailScreen({ pays, city, section, cityStockCounts, framesByCity,
   const [calOpen, setCalOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [formeFilter, setFormeFilter] = useState<ShapeFilterValue>('all')
-  const [genreFilter, setGenreFilter] = useState<'all' | 'Homme' | 'Femme' | 'Enfant'>('all')
+  const [genreFilter, setGenreFilter] = useState<'all' | 'Homme' | 'Femme' | 'Enfant' | 'Unisexe'>('all')
   const [gammeFilter, setGammeFilter] = useState<GammeFilterValue>('all')
 
   function prevMonth() { if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11) } else setCalMonth(m => m - 1) }
@@ -2496,7 +2808,7 @@ function SuiviDetailScreen({ pays, city, section, cityStockCounts, framesByCity,
       <div className="grid gap-2 md:grid-cols-3">
         {[
           { label: 'Forme', value: formeFilter, options: SHAPE_FILTER_OPTIONS, onChange: setFormeFilter },
-          { label: 'Genre', value: genreFilter, options: ['all', 'Homme', 'Femme', 'Enfant'] as const, onChange: setGenreFilter },
+          { label: 'Genre', value: genreFilter, options: ['all', 'Homme', 'Femme', 'Enfant', 'Unisexe'] as const, onChange: setGenreFilter },
           { label: 'Gamme', value: gammeFilter, options: GAMME_FILTER_OPTIONS, onChange: setGammeFilter },
         ].map(filter => (
           <div key={filter.label} className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-2.5">
@@ -2528,7 +2840,7 @@ function SuiviDetailScreen({ pays, city, section, cityStockCounts, framesByCity,
       {/* Table */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
-          <div className="min-w-[940px]">
+          <div className="min-w-235">
             <div
               className="border-b border-slate-200 dark:border-slate-700 text-xs font-bold text-white"
               style={{ backgroundColor: SECTION_COLOR, display: 'grid', gridTemplateColumns: SUIVI_GRID_COLUMNS }}
@@ -2626,7 +2938,7 @@ function PresentoirParBloc({ frames, city, onNavigate }: { frames: FrameRecord[]
             key={bloc.cle}
             type="button"
             onClick={() => setActiveBlocKey(bloc.cle)}
-            className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
               bloc.cle === blocCourant.cle
                 ? 'bg-green-600 text-white shadow-sm'
                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-green-200 dark:border-green-700'
@@ -2643,7 +2955,7 @@ function PresentoirParBloc({ frames, city, onNavigate }: { frames: FrameRecord[]
             <p className="text-sm font-bold text-slate-900 dark:text-white">{blocCourant.cle === 'Non affecté' ? 'Bloc non affecté' : `Bloc ${blocCourant.cle}`}</p>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">{businessBlocLabel(blocCourant.cle)}</p>
           </div>
-          <span className="flex-shrink-0 rounded-full bg-green-50 dark:bg-green-500/15 px-3 py-1 text-xs font-semibold text-green-700 dark:text-green-300">
+          <span className="shrink-0 rounded-full bg-green-50 dark:bg-green-500/15 px-3 py-1 text-xs font-semibold text-green-700 dark:text-green-300">
             {blocCourant.montures.length} monture{blocCourant.montures.length > 1 ? 's' : ''}
           </span>
         </div>
@@ -2699,7 +3011,7 @@ function PresentoirParBloc({ frames, city, onNavigate }: { frames: FrameRecord[]
         <div className="mt-4">
           <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Montures du bloc</p>
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden overflow-x-auto">
-            <table className="w-full text-sm min-w-[560px]">
+            <table className="w-full text-sm min-w-140">
               <thead className="bg-slate-50 dark:bg-slate-900/50">
                 <tr className="border-b border-slate-200 dark:border-slate-700">
                   <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Référence</th>
@@ -2749,7 +3061,7 @@ function PresentoirParBloc({ frames, city, onNavigate }: { frames: FrameRecord[]
               <button
                 type="button"
                 onClick={() => setPreview(null)}
-                className="flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                className="shrink-0 p-1.5 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
                 aria-label="Fermer"
               >
                 {ic.x('w-5 h-5')}
@@ -3037,7 +3349,7 @@ function CityDetailScreen({ block, pays, city, onNavigate, cityStockCounts, fram
                       <div className="mt-2 space-y-2">
                         {revenuePreviewDetail.items.map((item: any) => (
                           <div key={item.id} className="flex gap-2.5 rounded-xl border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-800/60">
-                            <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
                               {revenuePreviewPhotos[String(item.barcode || '').trim()] ? (
                                 <img src={revenuePreviewPhotos[String(item.barcode || '').trim()]} alt={item.reference || item.barcode || 'Monture'} className="h-full w-full object-cover" />
                               ) : (
@@ -3047,7 +3359,7 @@ function CityDetailScreen({ block, pays, city, onNavigate, cityStockCounts, fram
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center justify-between gap-2">
                                 <span className="font-semibold text-slate-900 dark:text-white">{item.reference || item.barcode || 'Monture'}</span>
-                                <span className="flex-shrink-0 font-bold tabular-nums" style={{ color: accent }}>{item.offerte ? 'Offerte' : fmtFCFA(Number(item.unit_price) || 0)}</span>
+                                <span className="shrink-0 font-bold tabular-nums" style={{ color: accent }}>{item.offerte ? 'Offerte' : fmtFCFA(Number(item.unit_price) || 0)}</span>
                               </div>
                               <div className="mt-1 text-slate-500 dark:text-slate-400">
                                 {[item.brand, item.shape, item.color].filter(Boolean).join(' · ') || '—'}
@@ -3090,7 +3402,7 @@ function FrameDetailScreen({ frameRef, city, framesByCity }: { frameRef: string;
 
   return (
     <div className="space-y-4 max-w-sm mx-auto">
-      <div className="bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 rounded-3xl overflow-hidden aspect-video flex items-center justify-center">
+      <div className="bg-linear-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 rounded-3xl overflow-hidden aspect-video flex items-center justify-center">
         <FramePhoto src={frame?.photo} alt={frame?.ref || 'monture'} className="w-full h-full object-cover" />
       </div>
       {frame && (
@@ -3505,14 +3817,14 @@ function HistoryView() {
                         onClick={() => selectSearchSuggestion(m.barcode)}
                         className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
                       >
-                        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800">
                           {m.photoUrl ? <img src={m.photoUrl} alt="" className="h-full w-full object-cover" /> : ic.glasses('w-4 h-4')}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-mono text-xs font-bold text-slate-900 dark:text-white">{m.barcode}</span>
                           {label && <span className="block truncate text-xs text-slate-500 dark:text-slate-400">{label}</span>}
                         </span>
-                        <span className="flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ backgroundColor: `${meta.color}1f`, color: meta.color }}>
+                        <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ backgroundColor: `${meta.color}1f`, color: meta.color }}>
                           {meta.label}
                         </span>
                       </button>
@@ -3534,7 +3846,7 @@ function HistoryView() {
             onClick={() => setActiveTab('employes')}
             className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all ${activeTab === 'employes' ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900'}`}
           >
-            Employés
+            Magasin
           </button>
         </div>
       </div>
@@ -3616,7 +3928,7 @@ function HistoryView() {
                       <p className="py-3 text-center text-xs text-slate-500 dark:text-slate-400">Aucune monture enregistrée pour cette session.</p>
                     ) : (
                       <div className="overflow-x-auto rounded-2xl border border-emerald-200 dark:border-emerald-700">
-                        <div className="min-w-[920px]">
+                        <div className="min-w-205">
                           <table className="w-full min-w-full divide-y divide-emerald-200 text-xs dark:divide-emerald-700 sm:text-sm">
                             <thead className="bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200">
                               <tr>
@@ -3624,11 +3936,9 @@ function HistoryView() {
                                 <th className="px-3 py-2.5 text-left font-semibold">Total</th>
                                 <th className="px-3 py-2.5 text-left font-semibold">Stock général</th>
                                 <th className="px-3 py-2.5 text-left font-semibold">En transit</th>
-                                <th className="px-3 py-2.5 text-left font-semibold">Stock local</th>
-                                <th className="px-3 py-2.5 text-left font-semibold">Présentoir</th>
-                                <th className="px-3 py-2.5 text-left font-semibold">Caisse</th>
-                                <th className="px-3 py-2.5 text-left font-semibold">Labo</th>
-                                <th className="px-3 py-2.5 text-left font-semibold">Vendu</th>
+                                {SESSION_TRACK_CITIES.map(city => (
+                                  <th key={city} className="px-3 py-2.5 text-left font-semibold">Stock magasin ({city})</th>
+                                ))}
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-emerald-100 bg-white dark:divide-emerald-800 dark:bg-slate-900">
@@ -3643,11 +3953,9 @@ function HistoryView() {
                                   <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.total}</td>
                                   <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.general}</td>
                                   <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.transit}</td>
-                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.local}</td>
-                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.presentoir}</td>
-                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.caisse}</td>
-                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.labo}</td>
-                                  <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.vendu}</td>
+                                  {SESSION_TRACK_CITIES.map(city => (
+                                    <td key={city} className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{row.localByCity[city] || 0}</td>
+                                  ))}
                                 </tr>
                               ))}
                             </tbody>
@@ -3665,7 +3973,7 @@ function HistoryView() {
 
       {/* Panneau « Suivi en direct » d'une monture, comme #trackPanel dans historique.js. */}
       {trackedBarcode && (
-        <div className="fixed inset-0 z-[70] flex items-stretch justify-end bg-black/50 sm:items-center sm:justify-center sm:p-4" onClick={() => setTrackedBarcode(null)}>
+        <div className="fixed inset-0 z-70 flex items-stretch justify-end bg-black/50 sm:items-center sm:justify-center sm:p-4" onClick={() => setTrackedBarcode(null)}>
           <aside
             role="dialog"
             aria-modal="true"
@@ -3678,7 +3986,7 @@ function HistoryView() {
                 onClick={() => trackPhotoUrl && setLightbox({ url: trackPhotoUrl, caption: `${trackedBarcode}${trackLabel ? ' — ' + trackLabel : ''}` })}
                 disabled={!trackPhotoUrl}
                 title={trackPhotoUrl ? 'Voir la photo en grand' : 'Aucune photo disponible'}
-                className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100 text-slate-400 disabled:cursor-default dark:border-slate-700 dark:bg-slate-800"
+                className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100 text-slate-400 disabled:cursor-default dark:border-slate-700 dark:bg-slate-800"
               >
                 {trackPhotoUrl ? <img src={trackPhotoUrl} alt="" className="h-full w-full object-cover" /> : ic.glasses('w-6 h-6')}
               </button>
@@ -3689,7 +3997,7 @@ function HistoryView() {
                 <h2 className="truncate text-lg font-bold text-slate-900 dark:text-white">{trackedBarcode}</h2>
                 <p className="truncate text-xs text-slate-500 dark:text-slate-400">{trackLabel || 'Trajectoire de la monture'}</p>
               </div>
-              <button type="button" onClick={() => setTrackedBarcode(null)} className="flex-shrink-0 text-slate-400 hover:text-slate-600" aria-label="Fermer le suivi">{ic.x('w-5 h-5')}</button>
+              <button type="button" onClick={() => setTrackedBarcode(null)} className="shrink-0 text-slate-400 hover:text-slate-600" aria-label="Fermer le suivi">{ic.x('w-5 h-5')}</button>
             </header>
 
             <div className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold ${trackError ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300'}`}>
@@ -3725,7 +4033,7 @@ function HistoryView() {
                     const icon = isCurrentlyInTransit ? ic.plane : movementActionIcon(m.action)
                     return (
                       <div key={m.id ?? index} className="flex gap-3">
-                        <div className="flex flex-shrink-0 flex-col items-center">
+                        <div className="flex shrink-0 flex-col items-center">
                           <span className="relative flex h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: `${color}1f`, color }}>
                             {icon('w-4 h-4')}
                             {isCurrentlyInTransit ? (
@@ -3765,7 +4073,7 @@ function HistoryView() {
 
       {/* Visionneuse photo plein écran, comme #lightboxBackdrop dans historique.js. */}
       {lightbox && (
-        <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-3 bg-black/90 p-4" onClick={() => setLightbox(null)}>
+        <div className="fixed inset-0 z-80 flex flex-col items-center justify-center gap-3 bg-black/90 p-4" onClick={() => setLightbox(null)}>
           <button type="button" onClick={() => setLightbox(null)} className="absolute right-4 top-4 text-white/80 hover:text-white" aria-label="Fermer la photo">{ic.x('w-6 h-6')}</button>
           <img src={lightbox.url} alt="" className="max-h-[80vh] max-w-full rounded-lg object-contain" onClick={e => e.stopPropagation()} />
           {lightbox.caption && <p className="text-sm text-white/80">{lightbox.caption}</p>}
@@ -3797,6 +4105,27 @@ function ReceptionView() {
   const [showReceptionSessionCard, setShowReceptionSessionCard] = useState(true)
   const [isCreatingReceptionSession, setIsCreatingReceptionSession] = useState(false)
   const [isDeletingSessionId, setIsDeletingSessionId] = useState<number | null>(null)
+  const [isCancelingListId, setIsCancelingListId] = useState<number | null>(null)
+  // Une liste annulée est vraiment supprimée côté serveur (DELETE /send-lists/:id) et
+  // disparaîtrait donc du prochain chargement — gardée ici pour rester visible (bordure
+  // orange) : l'admin doit pouvoir la retrouver pour réexpédier ces montures ailleurs.
+  // En localStorage, pas juste en mémoire : sinon un simple rechargement de page les
+  // ferait disparaître pour de bon, vu que le serveur ne les connaît déjà plus.
+  const [cancelledSendLists, setCancelledSendLists] = useState<Record<number, any>>(() => {
+    try {
+      const raw = window.localStorage.getItem('cancelledSendLists')
+      return raw ? JSON.parse(raw) : {}
+    } catch {
+      return {}
+    }
+  })
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('cancelledSendLists', JSON.stringify(cancelledSendLists))
+    } catch {
+      // Quota dépassé ou stockage désactivé : tant pis, ça reste au moins pour la session.
+    }
+  }, [cancelledSendLists])
   const [showStockPage, setShowStockPage] = useState(false)
   // Les sessions passées occupent leur propre page, comme le stock : l'écran Expédition
   // servait à la fois à créer et à consulter, et la liste s'allongeant, la création
@@ -3812,6 +4141,14 @@ function ReceptionView() {
   const [stockFormeFilter, setStockFormeFilter] = useState<string>('all')
   const [stockGenreFilter, setStockGenreFilter] = useState<string>('all')
   const [stockGammeFilter, setStockGammeFilter] = useState<string>('all')
+  // Forme/Genre/Gamme portent sur les montures, pas sur les listes elles-mêmes : pour
+  // filtrer « Liste envoyer » avec les mêmes réglages, il faut le contenu de chaque
+  // liste/transfert, que sentListsRaw et localOutgoingTransfers n'ont pas de base (juste
+  // un compte). Mis en cache par id une fois récupéré, pour ne le refaire ni en changeant
+  // de filtre ni en revenant sur l'écran.
+  const [sendListItemsCache, setSendListItemsCache] = useState<Record<number, any[]>>({})
+  const [transferItemsCache, setTransferItemsCache] = useState<Record<number, any[]>>({})
+  const [isCachingFilterItems, setIsCachingFilterItems] = useState(false)
   // Filtre de LISTE, pas de style : une monture RESERVEE_ENVOI est de toute façon toujours
   // grisée et non sélectionnable dès qu'elle est affichée (voir isReservedForShipment).
   // « Griser » n'isole ici que celles-là — pour voir d'un coup ce qui est déjà engagé
@@ -3825,6 +4162,25 @@ function ReceptionView() {
   const [stockListCity, setStockListCity] = useState('')
   const [selectedStockPreview, setSelectedStockPreview] = useState<any | null>(null)
   const [isSendingStockList, setIsSendingStockList] = useState(false)
+  // Transfert magasin → magasin depuis le stock local d'un magasin (pas depuis le stock
+  // général) : même code-barres, même sélection, mais une destination différente à chaque
+  // fois qu'on change de magasin d'origine.
+  const [localTransferSelection, setLocalTransferSelection] = useState<string[]>([])
+  const [localTransferDestination, setLocalTransferDestination] = useState('')
+  const [isSendingLocalTransfer, setIsSendingLocalTransfer] = useState(false)
+  // « Liste envoyer » vue depuis un magasin : ce que CE magasin a lui-même expédié
+  // (/inventory/transfers, from_station_id = sa station) — pas les listes composées par
+  // le Stock général à son intention (sentListsRaw), qui restent la vue à l'échelle
+  // Stock général. Couvre aussi bien les transferts magasin → magasin/Stock général posés
+  // ici que les mises en présentoir posées depuis responsable.tsx : même table serveur.
+  const [localOutgoingTransfers, setLocalOutgoingTransfers] = useState<any[]>([])
+  const [isLoadingLocalOutgoing, setIsLoadingLocalOutgoing] = useState(false)
+  const [openLocalTransfer, setOpenLocalTransfer] = useState<any | null>(null)
+  // items[] d'un transfert ne porte que barcode/status (voir loadLocalOutgoingTransfers) :
+  // complété fiche par fiche à l'ouverture, comme openSendListDetail le fait pour une
+  // liste — même tableau (renderGlassListTable) des deux côtés, donc mêmes colonnes attendues.
+  const [openLocalTransferItems, setOpenLocalTransferItems] = useState<any[]>([])
+  const [isLoadingLocalTransferItems, setIsLoadingLocalTransferItems] = useState(false)
   const [excludedPreparationKeys, setExcludedPreparationKeys] = useState<string[]>([])
   const [basketCounts, setBasketCounts] = useState<Record<string, number>>({})
   const [restockByCity, setRestockByCity] = useState<Record<string, RestockSuggestion>>({})
@@ -3871,15 +4227,35 @@ function ReceptionView() {
   // Villes déjà desservies par session : une session peut être envoyée en plusieurs fois
   // vers des magasins différents (la liste se compose par forme/genre/gamme/nombre), d'où
   // un tableau de villes et non une seule.
-  const [sentListSessions, setSentListSessions] = useState<Record<string, Array<{ city: string; dispatched: boolean }>>>({})
+  const [sentListSessions, setSentListSessions] = useState<Record<string, Array<{ city: string; dispatched: boolean; pendingId: number | null }>>>({})
+  // Version brute des mêmes listes, pour l'action « Liste envoyer » : sentListSessions
+  // regroupe déjà par session/ville pour les cartes de session, mais perd le détail par
+  // liste (id, date) dont le tableau d'historique a besoin.
+  const [sentListsRaw, setSentListsRaw] = useState<any[]>([])
+  // Contenu d'une liste envoyée, ouverte depuis son historique — même route que
+  // scan.tsx (openListe) côté magasinier : GET /inventory/send-lists/:id/items.
+  const [openSentList, setOpenSentList] = useState<any | null>(null)
+  const [openSentListItems, setOpenSentListItems] = useState<any[]>([])
+  const [isLoadingSentListItems, setIsLoadingSentListItems] = useState(false)
   const [magasinOptions, setMagasinOptions] = useState<Array<{ city: string; country: string }>>([])
   const [countryOptions, setCountryOptions] = useState<Array<{ id: number; name: string; code?: string }>>([])
+  // Id de la station magasin de chaque ville — nécessaire pour adresser un transfert
+  // magasin → magasin (from_station_id/to_station_id), que la ville seule ne donne pas.
+  const [magasinStationIds, setMagasinStationIds] = useState<Record<string, number>>({})
+  // Id de la station de type STOCK_GENERAL — même besoin que magasinStationIds, mais pour
+  // le retour d'un magasin vers le stock général (renderLocalStock).
+  const [generalStationId, setGeneralStationId] = useState<number | null>(null)
+  // Libellé de CHAQUE station (magasin, présentoir, labo, stock général...), pas
+  // seulement les magasins comme magasinStationIds : nécessaire pour afficher la
+  // destination d'un transfert sortant d'un magasin (renderLocalOutgoingTransfers), qui
+  // peut viser un présentoir posé depuis responsable.tsx, pas seulement un autre magasin.
+  const [stationLabelsById, setStationLabelsById] = useState<Record<number, string>>({})
   const [cityOptions, setCityOptions] = useState<Array<{ id: number; name: string; country_id: number }>>([])
   const [isLoadingCountries, setIsLoadingCountries] = useState(false)
   const [isLoadingCities, setIsLoadingCities] = useState(false)
   const [showCountriesView, setShowCountriesView] = useState(false)
   const [countryList, setCountryList] = useState<Array<{ id: number; name: string; code?: string }>>([])
-  const [supplierForm, setSupplierForm] = useState({ supplier: 'Dubai', quantity: '', date: '', note: '', country: '', city: '' })
+  const [supplierForm, setSupplierForm] = useState({ supplier: 'Dubai', quantity: '', gender: 'UNISEXE', date: '', note: '', country: '', city: '', gamme: 'classique' as SupplierOrderGamme })
   const barcodeRef = useRef<SVGSVGElement | null>(null)
 
   useEffect(() => {
@@ -3980,16 +4356,17 @@ function ReceptionView() {
         }))
       }))
 
-      const stationNames = await fetch(`${API_URL}/auth/stations`, { headers })
+      const allStations = await fetch(`${API_URL}/auth/stations`, { headers })
         .then(async response => {
           if (!response.ok) throw new Error('stations unavailable')
           const payload = await response.json().catch(() => ({}))
-          return (payload?.data?.stations || [])
-            .filter(isStoreStation)
-            .map((station: any) => normalizeStationCityName(station) || String(station.name || '').trim())
-            .filter(Boolean) as string[]
+          return (payload?.data?.stations || []) as any[]
         })
-        .catch(() => [] as string[])
+        .catch(() => [] as any[])
+      const storeStations = allStations.filter(isStoreStation)
+      const stationNames = storeStations
+        .map((station: any) => normalizeStationCityName(station) || String(station.name || '').trim())
+        .filter(Boolean) as string[]
 
       if (cancelled) return
 
@@ -4005,6 +4382,25 @@ function ReceptionView() {
       }
 
       setMagasinOptions(options.sort((a, b) => a.city.localeCompare(b.city, 'fr')))
+
+      const stationIds: Record<string, number> = {}
+      storeStations.forEach((station: any) => {
+        const city = normalizeStationCityName(station) || String(station.name || '').trim()
+        const id = Number(station.id)
+        if (city && id) stationIds[city.toLowerCase()] = id
+      })
+      setMagasinStationIds(stationIds)
+
+      const generalStation = allStations.find((station: any) => String(station.type || '').toUpperCase() === 'STOCK_GENERAL')
+      setGeneralStationId(generalStation ? Number(generalStation.id) || null : null)
+
+      const labelsById: Record<number, string> = {}
+      allStations.forEach((station: any) => {
+        const id = Number(station.id)
+        if (!id) return
+        labelsById[id] = stationDisplayLabel(String(station.name || '')) || String(station.name || '').trim() || `Station #${id}`
+      })
+      setStationLabelsById(labelsById)
     })()
 
     return () => { cancelled = true }
@@ -4051,8 +4447,9 @@ function ReceptionView() {
       })
       if (!response.ok) throw new Error('send lists unavailable')
       const payload = await response.json().catch(() => ({}))
-      const bySession: Record<string, Array<{ city: string; dispatched: boolean }>> = {}
+      const bySession: Record<string, Array<{ city: string; dispatched: boolean; pendingId: number | null }>> = {}
       for (const list of payload?.data?.lists || []) {
+        if (String(list.status || '').toUpperCase() === 'ANNULEE') continue
         const code = String(list.session_code || '').trim()
         const city = String(list.city || '').trim()
         if (!code || !city) continue
@@ -4060,18 +4457,154 @@ function ReceptionView() {
         // le magasinier, cf. listDispatched dans scan.tsx) sont deux états distincts : le
         // statut du serveur — pas une déduction côté client — tranche entre les deux.
         const dispatched = String(list.status || '').toUpperCase() === 'TRAITEE' || Number(list.sent_count || 0) > 0
+        // Id de la liste pour cette ville, annulable même une fois traitée : la Direction
+        // peut se tromper aussi (mauvais magasin, doublon) et doit pouvoir revenir en
+        // arrière. Si c'est vraiment trop tard côté serveur, cancelSendList affiche
+        // l'erreur qu'il renvoie plutôt que de bloquer le bouton par avance.
+        const listId = Number(list.id) || null
         if (!bySession[code]) bySession[code] = []
         const existing = bySession[code].find(entry => entry.city === city)
         if (existing) {
           existing.dispatched = existing.dispatched || dispatched
+          if (!existing.pendingId) existing.pendingId = listId
         } else {
-          bySession[code].push({ city, dispatched })
+          bySession[code].push({ city, dispatched, pendingId: listId })
         }
       }
       setSentListSessions(bySession)
+      setSentListsRaw(payload?.data?.lists || [])
     } catch {
       // Route absente ou réseau coupé : on ne grise rien plutôt que de bloquer l'envoi.
       setSentListSessions({})
+      setSentListsRaw([])
+    }
+  }
+
+  // DELETE /inventory/send-lists/:id marque la liste ANNULEE et libère ses montures
+  // réservées. Si les montures ont déjà bougé au point que le serveur refuse, son erreur
+  // remonte telle quelle.
+  async function cancelSendList(listId: number, city: string) {
+    if (!window.confirm(`Annuler la liste envoyée vers ${magasinLabel(city)} ?`)) return
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+
+    // Capturée avant le DELETE pour garder l'affichage annulé même si un vieux backend
+    // supprime encore physiquement la liste au lieu de la marquer ANNULEE.
+    const sourceList = sentListsRaw.find((list: any) => Number(list.id) === listId)
+    // Le détail (barcodes) est mis en cache avant l'annulation : c'est ce cache qui
+    // permettra de « Renvoyer ailleurs » plus tard sans tout ressaisir.
+    await ensureSendListItemsCached(listId)
+
+    setIsCancelingListId(listId)
+    try {
+      const response = await fetch(`${API_URL}/inventory/send-lists/${encodeURIComponent(String(listId))}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        // Le statut HTTP seul dit déjà beaucoup (404 = route absente côté serveur, 403 =
+        // droit refusé, 409/422 = déjà traitée) quand le corps ne porte ni error ni message.
+        throw new Error(payload?.error || payload?.message || `Annulation impossible (HTTP ${response.status}).`)
+      }
+      if (sourceList) {
+        setCancelledSendLists(prev => ({ ...prev, [listId]: { ...sourceList, status: 'ANNULEE' } }))
+      }
+      await loadSentLists()
+      await loadStockGlasses()
+    } catch (error: any) {
+      window.alert(error?.message || "Impossible d'annuler cette liste pour le moment.")
+    } finally {
+      setIsCancelingListId(null)
+    }
+  }
+
+  // « Renvoyer ailleurs » une liste annulée : on ne recrée pas une liste à partir de rien,
+  // on repart de l'écran normal de composition (Stock général, cases à cocher) avec les
+  // mêmes montures déjà cochées — il ne reste qu'à choisir la nouvelle destination. Une
+  // monture qui aurait bougé depuis (plus en stock général) ne sera simplement plus dans le
+  // tableau à cocher : submitStockList ignore de toute façon les codes-barres introuvables.
+  function resendCancelledList(list: any) {
+    const items = sendListItemsCache[Number(list.id)] || []
+    const barcodes = items.map((item: any) => String(item.barcode || '')).filter(Boolean)
+    if (barcodes.length === 0) {
+      window.alert("Le contenu de cette liste n'est plus disponible : impossible de la renvoyer automatiquement.")
+      return
+    }
+    setOpenSentList(null)
+    setStockScope('GENERAL')
+    setStockAction('')
+    setStockListCity('')
+    setStockListSelection(barcodes)
+    window.alert(`${barcodes.length} monture${barcodes.length > 1 ? 's' : ''} présélectionnée${barcodes.length > 1 ? 's' : ''} depuis la liste annulée. Choisissez une nouvelle destination puis validez l'envoi.`)
+  }
+
+  // Ouvre le contenu d'une liste envoyée : mêmes route et logique que openListe côté
+  // magasinier (scan.tsx) — GET /inventory/send-lists/:id/items — en lecture seule ici,
+  // la Direction ne fait que consulter ce qui a été composé.
+  // Factorisé pour servir deux fois : l'ouverture d'une liste (openSendListDetail) et la
+  // mise en cache silencieuse pour le filtre Forme/Genre/Gamme (ensureSendListItemsCached).
+  async function fetchSendListDetailedItems(listId: number, token: string): Promise<any[]> {
+    const response = await fetch(`${API_URL}/inventory/send-lists/${listId}/items`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!response.ok) throw new Error('list items unavailable')
+    const payload = await response.json().catch(() => ({}))
+    const raw: any[] = Array.isArray(payload?.data?.items) ? payload.data.items : []
+
+    // La ligne de liste ne porte ni photo ni forme : on les complète par la fiche
+    // monture, comme openListe côté magasinier (scan.tsx).
+    return Promise.all(raw.map(async item => {
+      if (!item.barcode) return item
+      try {
+        const glassResponse = await fetch(`${API_URL}/inventory/glasses/${encodeURIComponent(item.barcode)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!glassResponse.ok) return item
+        const glassPayload = await glassResponse.json().catch(() => ({}))
+        const glass = glassPayload?.data?.glass
+        return glass ? { ...item, ...glass, id: item.id } : item
+      } catch {
+        return item
+      }
+    }))
+  }
+
+  async function openSendListDetail(list: any) {
+    setOpenSentList(list)
+    // Une liste annulée n'existe plus côté serveur : si son contenu a déjà été mis en
+    // cache (avant l'annulation, ou par le filtre Forme/Genre/Gamme), on l'affiche tout
+    // de suite plutôt que de partir d'un écran vide le temps que le fetch échoue.
+    const cached = list?.id ? sendListItemsCache[Number(list.id)] : undefined
+    setOpenSentListItems(cached || [])
+    const token = window.localStorage.getItem('token')
+    if (!token || !list?.id) return
+    setIsLoadingSentListItems(!cached)
+    try {
+      const detailed = await fetchSendListDetailedItems(list.id, token)
+      setOpenSentListItems(detailed)
+      // Réutilisé par le filtre Forme/Genre/Gamme : puisqu'on vient de les récupérer,
+      // autant les garder plutôt que de les redemander si un filtre s'active ensuite.
+      setSendListItemsCache(prev => ({ ...prev, [list.id]: detailed }))
+    } catch {
+      if (!cached) setOpenSentListItems([])
+    } finally {
+      setIsLoadingSentListItems(false)
+    }
+  }
+
+  // Récupère et met en cache le contenu d'une liste SANS ouvrir son écran de détail —
+  // seul le filtre Forme/Genre/Gamme en a besoin, pour savoir si cette liste contient une
+  // monture qui correspond. Ne fait rien si déjà en cache.
+  async function ensureSendListItemsCached(listId: number) {
+    if (sendListItemsCache[listId]) return
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+    try {
+      const detailed = await fetchSendListDetailedItems(listId, token)
+      setSendListItemsCache(prev => ({ ...prev, [listId]: detailed }))
+    } catch {
+      setSendListItemsCache(prev => ({ ...prev, [listId]: [] }))
     }
   }
 
@@ -4127,12 +4660,14 @@ function ReceptionView() {
         }),
       })
       if (!response.ok) throw new Error('send list failed')
+      const payload = await response.json().catch(() => ({}))
+      const newListId = Number(payload?.data?.list?.id) || null
 
       setSendListSent(true)
       setSentListSessions(prev => {
         const cities = prev[sendListSession.id] || []
         if (cities.some(entry => entry.city === sendListMagasin)) return prev
-        return { ...prev, [sendListSession.id]: [...cities, { city: sendListMagasin, dispatched: false }] }
+        return { ...prev, [sendListSession.id]: [...cities, { city: sendListMagasin, dispatched: false, pendingId: newListId }] }
       })
     } catch {
       window.alert("Impossible d'envoyer la liste pour le moment.")
@@ -4241,6 +4776,10 @@ function ReceptionView() {
 
     setIsSavingSupplier(true)
     try {
+      // Le backend n'a pas de colonne pour la gamme d'une commande fournisseur : elle
+      // voyage dans la note, comme l'ordonnance sur une proforma. formatReceptionNote()
+      // affiche ensuite ce segment tel quel sur la carte d'expédition.
+      const noteWithGamme = [`Gamme: ${GAMME_LABELS[supplierForm.gamme]}`, supplierForm.note.trim()].filter(Boolean).join(' | ')
       const response = await fetch(`${API_URL}/inventory/expeditions`, {
         method: 'POST',
         headers: {
@@ -4250,8 +4789,10 @@ function ReceptionView() {
         body: JSON.stringify({
           supplier: supplierForm.supplier.trim(),
           quantity,
+          gender: supplierForm.gender,
+          gamme: supplierForm.gamme,
           order_date: supplierForm.date,
-          note: supplierForm.note.trim(),
+          note: noteWithGamme,
         }),
       })
 
@@ -4263,7 +4804,7 @@ function ReceptionView() {
         await createReceptionSession(Number(order.id), quantity, order.supplier || supplierForm.supplier.trim())
       }
       setShowSupplierModal(false)
-      setSupplierForm({ supplier: 'Dubai', quantity: '', date: '', note: '', country: '', city: '' })
+      setSupplierForm({ supplier: 'Dubai', quantity: '', gender: 'UNISEXE', date: '', note: '', country: '', city: '', gamme: 'classique' })
     } catch {
       window.alert('Impossible d\'enregistrer la commande fournisseur pour le moment.')
     } finally {
@@ -4486,18 +5027,21 @@ function ReceptionView() {
 
   function selectStockScope(scope: string) {
     setStockScope(scope)
-    setStockAction('')
+    // Stock local, Panier et Envoi ne sont plus des actions du menu : cliquer un magasin
+    // retombe donc sur le même « Action… » vide que Stock général, pas sur une vue précise.
+    // Statistique et Liste envoyer font exception — elles restent affichées en changeant de
+    // magasin, juste recalculées sur le nouveau scope, pour naviguer d'un stock à l'autre
+    // sans repasser par le menu Action à chaque fois.
+    setStockAction(prev => (prev === 'STATISTIQUE' || prev === 'LISTE_ENVOYER' ? prev : ''))
     setExcludedPreparationKeys([])
     setExcludedDemandIds([])
-  }
-
-  // Cliquer un panier ouvre directement la demande du magasin : c'est le chemin le plus court
-  // entre « il y a 4 demandes à Kinshasa » et « voilà ce qu'on peut leur envoyer ».
-  function openBasket(magasin: string) {
-    setStockScope(magasin)
-    setStockAction('PANIER')
-    setExcludedPreparationKeys([])
-    setExcludedDemandIds([])
+    setLocalTransferSelection([])
+    setLocalTransferDestination('')
+    // Un détail de liste ouvert appartient à l'ancien scope : sans ce reset, changer de
+    // magasin en restant sur Liste envoyer laisserait la fiche d'une liste de l'ancien
+    // magasin affichée par-dessus la liste du nouveau.
+    setOpenSentList(null)
+    setOpenLocalTransfer(null)
   }
 
   function matchesStockFilters(glass: any) {
@@ -4575,6 +5119,9 @@ function ReceptionView() {
     const generalGlasses = (stockGlasses || []).filter((g: any) =>
       isGeneralStockStatus(g.status) || String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI')
     const magasinGlasses = (stockGlasses || []).filter((g: any) => isLocalStockStatus(g.status))
+    // Accès direct aux grisées, en dehors du bloc de filtres (Forme/Genre/Gamme + radio
+    // Griser) : un clic sur ce badge fait ce que fait déjà le radio, sans avoir à l'y chercher.
+    const reservedCount = generalGlasses.filter((g: any) => String(g.status || '').trim().toUpperCase() === 'RESERVEE_ENVOI').length
 
     const configuredMagasins = magasinOptions.map(option => String(option.city || '').trim()).filter(Boolean)
     // Les paniers sont indexés par VILLE côté serveur, alors que les montures portent un nom
@@ -4613,26 +5160,18 @@ function ReceptionView() {
       generalGlasses.map((g: any) => resolveFrameGamme(g.material, g.price)).filter(Boolean)
     )).sort((a, b) => a.localeCompare(b, 'fr'))
 
-    const header = selectedMagasin
-      ? {
-        title: stockAction === 'PANIER'
-          ? `Panier — ${magasinLabel(selectedMagasin)}`
-          : stockAction === 'ENVOI'
-            ? `Envoyer le stock — ${magasinLabel(selectedMagasin)}`
-            : magasinLabel(selectedMagasin),
-        // Au moment de préparer un colis, le besoin de réapprovisionnement et les demandes
-        // clients se répondent : combien envoyer, et quoi choisir en priorité.
-        subtitle: stockAction === 'PANIER'
-          ? restockSubtitle(selectedMagasin)
-          : stockAction === 'ENVOI'
-            ? 'Bon de préparation des montures à sortir du stock général.'
-            : "Choisissez l'action à effectuer sur ce magasin.",
-      }
-      : { title: 'Stock général', subtitle: 'Liste des lunettes enregistrées en base.' }
+    const scopeLabel = selectedMagasin ? magasinLabel(selectedMagasin) : 'Stock général'
+    const header = stockAction === 'LISTE_ENVOYER'
+      ? { title: `Liste envoyer — ${scopeLabel}` }
+      : stockAction === 'STATISTIQUE'
+        ? { title: selectedMagasin ? `Statistique — ${scopeLabel}` : 'Statistique' }
+        : selectedMagasin
+          ? { title: scopeLabel }
+          : { title: 'Stock général' }
 
     return (
       <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3">
           <div className="flex items-start gap-2">
             <button
               onClick={() => setShowStockPage(false)}
@@ -4641,10 +5180,7 @@ function ReceptionView() {
             >
               {ic.back('w-5 h-5')}
             </button>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">{header.title}</h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{header.subtitle}</p>
-            </div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">{header.title}</h2>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <select value={stockScope} onChange={e => selectStockScope(e.target.value)} className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-700 dark:bg-green-900/20 dark:text-green-200">
@@ -4655,15 +5191,15 @@ function ReceptionView() {
             </select>
             <select
               value={stockAction}
-              disabled={!selectedMagasin}
               onChange={e => { setStockAction(e.target.value as StockAction); setExcludedPreparationKeys([]) }}
-              className={`rounded-xl border px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${selectedMagasin && !stockAction
-                ? 'border-amber-300 bg-amber-50 text-amber-700 ring-2 ring-amber-200 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200 dark:ring-amber-900'
-                : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200'}`}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300"
             >
               <option value="">Action…</option>
-              <option value="PANIER">Voir le panier</option>
-              <option value="ENVOI">Envoyer le stock</option>
+              <option value="LISTE_ENVOYER">Liste envoyer</option>
+              {/* Depuis Stock général, « ce qu'il a reçu » n'a pas de sens : c'est lui qui
+                  expédie, jamais l'inverse — Statistique. Depuis un magasin, même option
+                  mais scopée à SON stock (cf. renderStockStatistics). */}
+              <option value="STATISTIQUE">Statistique</option>
             </select>
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-800/60">
               <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Forme</label>
@@ -4681,30 +5217,83 @@ function ReceptionView() {
                 <option value="all">Toutes</option>
                 {stockGammeOptions.map(option => <option key={option} value={option}>{option}</option>)}
               </select>
-              <button onClick={() => { setStockFormeFilter('all'); setStockGenreFilter('all'); setStockGammeFilter('all') }} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700">Reset</button>
-            </div>
-            {/* Filtre de liste (isole les réservées vs. liste complète) : la grise, elle,
-                s'applique de toute façon toujours à une monture RESERVEE_ENVOI dès qu'elle
-                est affichée, quel que soit ce réglage. */}
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800/60">
-              <label className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200">
-                <input type="radio" name="grey-reserved" checked={greyReserved} onChange={() => setGreyReserved(true)} className="h-3.5 w-3.5 accent-blue-600" />
-                Griser
-              </label>
-              <label className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200">
-                <input type="radio" name="grey-reserved" checked={!greyReserved} onChange={() => setGreyReserved(false)} className="h-3.5 w-3.5 accent-blue-600" />
-                Ne pas griser
-              </label>
+              {/* Isole les réservées (RESERVEE_ENVOI) vs. la liste complète : elles restent
+                  grisées dans le tableau quel que soit ce réglage, il ne fait qu'y isoler. */}
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Grisées</label>
+              <select value={greyReserved ? 'only' : 'all'} onChange={e => setGreyReserved(e.target.value === 'only')} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                <option value="all">Toutes</option>
+                <option value="only">Grisées uniquement{reservedCount > 0 ? ` (${reservedCount})` : ''}</option>
+              </select>
+              <button onClick={() => { setStockFormeFilter('all'); setStockGenreFilter('all'); setStockGammeFilter('all'); setGreyReserved(false) }} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700">Reset</button>
             </div>
           </div>
         </div>
 
-        {renderBasketRow(magasins, selectedMagasin)}
+        {/* La sélection (cases à cocher + composition d'une liste) vit sur la vue par
+            défaut, pas sous « Liste envoyer » : cette dernière n'est qu'un historique
+            statique, à consulter, pas un formulaire. */}
+        {!selectedMagasin && stockAction === '' && renderGeneralStockTable(filteredGeneralGlasses, magasins)}
+        {selectedMagasin && stockAction === '' && renderLocalStock(selectedMagasin, magasinGlasses, magasins)}
+        {/* Depuis un magasin, « Liste envoyer » montre ce que CE magasin a expédié
+            (renderLocalOutgoingTransfers) — pas les listes que le Stock général lui a
+            envoyées (renderSentListsHistory), qui restent l'historique du Stock général. */}
+        {stockAction === 'LISTE_ENVOYER' && (selectedMagasin ? renderLocalOutgoingTransfers(selectedMagasin) : renderSentListsHistory(selectedMagasin))}
+        {stockAction === 'STATISTIQUE' && renderStockStatistics()}
+      </div>
+    )
+  }
 
-        {!selectedMagasin && renderGeneralStockTable(filteredGeneralGlasses, magasins)}
-        {selectedMagasin && !stockAction && renderStockActionChooser(selectedMagasin)}
-        {selectedMagasin && stockAction === 'PANIER' && renderBasketAnalysis(selectedMagasin, filteredGeneralGlasses)}
-        {selectedMagasin && stockAction === 'ENVOI' && renderStockPreparation(selectedMagasin, filteredGeneralGlasses)}
+  // Vue Statistique — affichage par colonnes verticales pour Forme/Gamme/Marque/Genre
+  function renderStockStatistics() {
+    // Stock général : diagramme sur tout le stock (comportement d'origine). Un magasin
+    // précis : même diagramme, recentré sur les montures de CE magasin (tous statuts
+    // confondus — local, présentoir, caisse, labo, réserve, vendues…), à la place de
+    // l'ancienne « Liste reçu ».
+    const magasin = stockScope !== 'GENERAL' ? stockScope : ''
+    const base = magasin
+      ? stockGlasses.filter((g: any) =>
+          normalizeStationCityName({ name: String(g.station_name || ''), city: String(g.station_city || '') }) === magasin)
+      : stockGlasses
+    const filtered = hasActiveStockFilters() ? base.filter(matchesStockFilters) : base
+    const formeTotals = computeAttrTotals(filtered, g => normalizeShapeName(g.shape))
+    const gammeTotals = computeGammeTotals(filtered)
+    const brandTotals = computeAttrTotals(filtered, g => g.brand)
+    const genreTotals = computeAttrTotals(filtered, g => normalizeGenderName(g.gender))
+
+    return (
+      <div className="mx-auto max-w-4xl space-y-4">
+        <div className="rounded-2xl border border-slate-100 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-bold text-slate-900 dark:text-white">
+              {magasin ? `Statistique — ${magasinLabel(magasin)}` : 'Statistique — Diagramme en colonnes'}
+            </p>
+            <span className="text-xs font-bold tabular-nums text-slate-400">
+              {filtered.length.toLocaleString('fr-FR')} monture{filtered.length > 1 ? 's' : ''}
+            </span>
+          </div>
+          {filtered.length === 0 ? (
+            <p className="text-xs text-slate-400">Aucune donnée.</p>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Forme</p>
+                <StatColumns items={formeTotals} height={140} />
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Gamme</p>
+                <StatColumns items={gammeTotals} height={140} />
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Marque</p>
+                <StatColumns items={brandTotals} height={140} />
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-bold text-slate-900 dark:text-white">Genre</p>
+                <StatColumns items={genreTotals} height={140} />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     )
   }
@@ -4782,47 +5371,6 @@ function ReceptionView() {
       ? `${restock.to_send.toLocaleString('fr-FR')} monture${restock.to_send > 1 ? 's' : ''} à renvoyer`
       : 'Stock au niveau de la dernière livraison'
     return `${need} — ${restock.current_stock} en stock sur ${restock.last_box_qty} au dernier carton. ${demands}`
-  }
-
-  function renderBasketRow(magasins: string[], selectedMagasin: string) {
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Réapprovisionnement</span>
-        {magasins.map(magasin => {
-          // Le chiffre est une quantité à préparer, plafonnée au dernier carton reçu. Une
-          // ville jamais livrée n'a pas de suggestion : rien à afficher, et surtout pas
-          // d'alerte sur un magasin qui n'a encore rien reçu.
-          const restock = restockByCity[magasin.trim().toLowerCase()]
-          const toSend = restock?.to_send || 0
-          const isAlert = Boolean(restock?.alert)
-          const demands = basketCounts[magasin] || 0
-          const isActive = magasin === selectedMagasin && stockAction === 'PANIER'
-          const hint = restock
-            ? `${restock.current_stock} en stock sur ${restock.last_box_qty} livrées au dernier carton${demands ? ` · ${demands} demande${demands > 1 ? 's' : ''} client` : ''}`
-            : 'Aucun carton encore livré à ce magasin'
-          return (
-            <button
-              key={`basket-${magasin}`}
-              onClick={() => openBasket(magasin)}
-              title={hint}
-              className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold transition-colors ${isActive
-                ? 'border-blue-500 bg-blue-600 text-white'
-                : isAlert
-                  ? 'border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800'}`}
-            >
-              {ic.cart('w-4 h-4')}
-              {magasinLabel(magasin)}
-              <span className={`min-w-[1.5rem] rounded-full px-1.5 py-0.5 text-xs font-bold tabular-nums ${isAlert
-                ? 'bg-amber-500 text-white'
-                : isActive ? 'bg-blue-500 text-blue-100' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'}`}>
-                {toSend}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    )
   }
 
   function renderGeneralStockTable(generalGlasses: any[], magasins: string[]) {
@@ -4913,7 +5461,7 @@ function ReceptionView() {
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
-        <div className="min-w-[760px]">
+        <div className="min-w-190">
           <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
             <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
               <tr>
@@ -5024,37 +5572,283 @@ function ReceptionView() {
     )
   }
 
-  function renderStockActionChooser(magasin: string) {
-    const choices: Array<{ action: StockAction; icon: React.ReactElement; label: string; hint: string; accent: string }> = [
-      {
-        action: 'PANIER',
-        icon: ic.cart('w-5 h-5'),
-        label: 'Voir le panier',
-        hint: `Les recherches client enregistrées pour ${magasin}, et ce que le stock général peut couvrir.`,
-        accent: 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200',
-      },
-      {
-        action: 'ENVOI',
-        icon: ic.transfer('w-5 h-5'),
-        label: 'Envoyer le stock',
-        hint: 'Préparer la liste des montures à sortir du stock général.',
-        accent: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200',
-      },
-    ]
+  // Charge ce qu'un magasin a lui-même expédié : tous les transferts dont il est
+  // l'origine, quel que soit qui les a créés (ici ou depuis responsable.tsx) ni leur
+  // destination (autre magasin, Stock général, présentoir). from_station_id en query non
+  // confirmé côté backend (même famille que station_id sur /inventory/glasses) — filtré
+  // aussi côté client par sécurité si le serveur l'ignore et renvoie tout.
+  async function loadLocalOutgoingTransfers(magasin: string) {
+    const token = window.localStorage.getItem('token')
+    const fromStationId = magasinStationIds[magasin.trim().toLowerCase()]
+    if (!token || !fromStationId) {
+      setLocalOutgoingTransfers([])
+      return
+    }
+
+    setIsLoadingLocalOutgoing(true)
+    try {
+      const response = await fetch(`${API_URL}/inventory/transfers?from_station_id=${fromStationId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) throw new Error('transfers unavailable')
+      const payload = await response.json().catch(() => ({}))
+      const list: any[] = payload?.data?.transfers || payload?.data || []
+      setLocalOutgoingTransfers(list.filter((t: any) => Number(t.from_station_id) === fromStationId))
+    } catch {
+      setLocalOutgoingTransfers([])
+    } finally {
+      setIsLoadingLocalOutgoing(false)
+    }
+  }
+
+  // Factorisé pour servir deux fois : l'ouverture d'un transfert (openLocalTransferDetail)
+  // et la mise en cache silencieuse pour le filtre Forme/Genre/Gamme
+  // (ensureTransferItemsCached) — même complément que fetchSendListDetailedItems, mais les
+  // items d'un transfert n'ont que barcode/status au départ (vendeuse.tsx), pas de second
+  // appel /items à faire d'abord.
+  async function fetchTransferDetailedItems(items: any[], token: string): Promise<any[]> {
+    return Promise.all(items.map(async (item: any) => {
+      if (!item.barcode) return item
+      try {
+        const glassResponse = await fetch(`${API_URL}/inventory/glasses/${encodeURIComponent(item.barcode)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!glassResponse.ok) return item
+        const glassPayload = await glassResponse.json().catch(() => ({}))
+        const glass = glassPayload?.data?.glass
+        return glass ? { ...item, ...glass, transferStatus: item.status } : item
+      } catch {
+        return item
+      }
+    }))
+  }
+
+  async function openLocalTransferDetail(transfer: any) {
+    setOpenLocalTransfer(transfer)
+    setOpenLocalTransferItems([])
+    const token = window.localStorage.getItem('token')
+    const items: any[] = Array.isArray(transfer?.items) ? transfer.items : []
+    if (!token || items.length === 0) return
+
+    setIsLoadingLocalTransferItems(true)
+    try {
+      const detailed = await fetchTransferDetailedItems(items, token)
+      setOpenLocalTransferItems(detailed)
+      setTransferItemsCache(prev => ({ ...prev, [transfer.id]: detailed }))
+    } catch {
+      setOpenLocalTransferItems([])
+    } finally {
+      setIsLoadingLocalTransferItems(false)
+    }
+  }
+
+  // Comme ensureSendListItemsCached, côté transferts : ne fait rien si déjà en cache.
+  async function ensureTransferItemsCached(transfer: any) {
+    if (transferItemsCache[transfer.id]) return
+    const token = window.localStorage.getItem('token')
+    const items: any[] = Array.isArray(transfer?.items) ? transfer.items : []
+    if (!token || items.length === 0) return
+    try {
+      const detailed = await fetchTransferDetailedItems(items, token)
+      setTransferItemsCache(prev => ({ ...prev, [transfer.id]: detailed }))
+    } catch {
+      setTransferItemsCache(prev => ({ ...prev, [transfer.id]: [] }))
+    }
+  }
+
+  // Transfert magasin → magasin (ou magasin → Stock général, valeur sentinelle 'GENERAL'
+  // pour localTransferDestination, alignée sur celle de stockScope) : même mécanique à
+  // trois appels que « Mise en présentoir » dans responsable.tsx (POST /transfers →
+  // POST /transfers/:id/items → .../dispatch). À confirmer avec le backend : ce chemin
+  // n'a pour l'instant été vérifié que pour un magasin → présentoir.
+  // Comme pour le Stock Général, la Direction compose la liste ; les montures partent
+  // EN_TRANSIT et il reste un scan à faire côté destinataire pour les réceptionner.
+  async function submitLocalTransfer(fromMagasin: string, rows: any[]) {
+    const token = window.localStorage.getItem('token')
+    if (!token || !localTransferDestination || localTransferSelection.length === 0) return
+
+    const fromStationId = magasinStationIds[fromMagasin.trim().toLowerCase()]
+    const toStationId = localTransferDestination === 'GENERAL'
+      ? generalStationId
+      : magasinStationIds[localTransferDestination.trim().toLowerCase()]
+    if (!fromStationId || !toStationId) {
+      window.alert('Station introuvable pour cette destination : impossible de créer le transfert.')
+      return
+    }
+
+    const byBarcode = new Map(rows.map((g: any) => [String(g.barcode || ''), g]))
+    const barcodes = localTransferSelection.filter(barcode => byBarcode.has(barcode))
+    if (barcodes.length === 0) return
+
+    setIsSendingLocalTransfer(true)
+    try {
+      const creation = await fetch(`${API_URL}/inventory/transfers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ from_station_id: fromStationId, to_station_id: toStationId }),
+      })
+      const creationPayload = await creation.json().catch(() => ({}))
+      if (!creation.ok) throw new Error(creationPayload?.error || creationPayload?.message || 'Impossible de créer le transfert.')
+      const transferId = creationPayload?.data?.id
+      if (!transferId) throw new Error("Le serveur n'a pas renvoyé de transfert.")
+
+      const refused: string[] = []
+      for (const barcode of barcodes) {
+        const response = await fetch(`${API_URL}/inventory/transfers/${transferId}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ barcode }),
+        })
+        if (!response.ok) {
+          const glass = byBarcode.get(barcode)
+          refused.push(glass ? (glass.reference || barcode) : barcode)
+        }
+      }
+      // Un transfert vide laisserait une coquille en base sans rien déplacer.
+      if (refused.length === barcodes.length) {
+        throw new Error(`Aucune monture n'a pu être ajoutée au transfert (${refused.join(', ')}).`)
+      }
+
+      const dispatch = await fetch(`${API_URL}/inventory/transfers/${transferId}/dispatch`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!dispatch.ok) {
+        const dispatchPayload = await dispatch.json().catch(() => ({}))
+        throw new Error(dispatchPayload?.error || dispatchPayload?.message || "Le transfert a été créé mais n'a pas pu être expédié.")
+      }
+
+      const sent = barcodes.length - refused.length
+      const destinationLabel = localTransferDestination === 'GENERAL' ? 'Stock général' : magasinLabel(localTransferDestination)
+      window.alert(
+        `${sent} monture${sent > 1 ? 's' : ''} expédiée${sent > 1 ? 's' : ''} de ${magasinLabel(fromMagasin)} vers ${destinationLabel}.`
+        + ' À scanner là-bas pour finaliser l\'arrivée.'
+        + (refused.length ? ` Non expédiées : ${refused.join(', ')}.` : '')
+      )
+      setLocalTransferSelection([])
+      await loadStockGlasses()
+    } catch (error: any) {
+      window.alert(error?.message || "Impossible d'envoyer ces montures vers un autre magasin.")
+    } finally {
+      setIsSendingLocalTransfer(false)
+    }
+  }
+
+  // Stock déjà arrivé à CE magasin (pas le stock général) : c'est ce qui permet à la
+  // Direction de voir qu'une monture manquante ici existe ailleurs, et de la faire suivre
+  // sans repasser par le stock général.
+  // Le stock local d'un magasin n'est pas le stock général : seules les montures déjà
+  // EN_STOCK_SOUS_STATION comptent, celles que le responsable magasin a effectivement
+  // réceptionnées. Une RESERVEE_ENVOI réservée pour ce magasin reste au stock général
+  // (cf. AGENTS.md) tant qu'elle n'a pas été scannée à l'arrivée : elle n'a rien à faire
+  // ici, sous peine de laisser croire que Pointe-Noire a déjà ce que le Stock Général n'a
+  // encore fait que réserver.
+  function renderLocalStock(magasin: string, allMagasinGlasses: any[], magasins: string[]) {
+    // matchesStockFilters (Forme/Genre/Gamme) manquait ici : le stock général en profitait
+    // déjà via filteredGeneralGlasses, mais le stock local d'un magasin ignorait
+    // silencieusement le même bandeau de filtres.
+    const rows = allMagasinGlasses
+      .filter((g: any) => normalizeStationCityName({ name: String(g.station_name || ''), city: String(g.station_city || '') }) === magasin)
+      .filter(matchesStockFilters)
+    const destinations = magasins.filter(m => m !== magasin)
+    const allSelected = rows.length > 0 && rows.every((g: any) => localTransferSelection.includes(String(g.barcode || '')))
 
     return (
-      <div className="grid gap-3 sm:grid-cols-2">
-        {choices.map(choice => (
-          <button
-            key={choice.action}
-            onClick={() => { setStockAction(choice.action); setExcludedPreparationKeys([]) }}
-            className={`flex flex-col items-start gap-2 rounded-2xl border p-4 text-left transition-colors active:scale-[0.99] ${choice.accent}`}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            {localTransferSelection.length > 0
+              ? `${localTransferSelection.length} monture${localTransferSelection.length > 1 ? 's' : ''} sélectionnée${localTransferSelection.length > 1 ? 's' : ''}`
+              : `Cochez les montures de ${magasinLabel(magasin)} à renvoyer vers un autre magasin ou le Stock général`}
+          </span>
+          <select
+            value={localTransferDestination}
+            onChange={e => setLocalTransferDestination(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
           >
-            {choice.icon}
-            <span className="text-sm font-semibold">{choice.label}</span>
-            <span className="text-xs opacity-80">{choice.hint}</span>
+            <option value="">Destination…</option>
+            <option value="GENERAL">Stock général</option>
+            <optgroup label="Stock magasin">
+              {destinations.map(city => <option key={`local-dest-${city}`} value={city}>{magasinLabel(city)}</option>)}
+            </optgroup>
+          </select>
+          <button
+            onClick={() => submitLocalTransfer(magasin, rows)}
+            disabled={isSendingLocalTransfer || !localTransferDestination || localTransferSelection.length === 0}
+            className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isSendingLocalTransfer ? 'Envoi…' : 'Envoyer'}
           </button>
-        ))}
+          {localTransferSelection.length > 0 && (
+            <button onClick={() => setLocalTransferSelection([])} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700">
+              Tout décocher
+            </button>
+          )}
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-purple-200 dark:border-purple-700">
+          <div className="min-w-180">
+            <table className="w-full min-w-full divide-y divide-purple-200 dark:divide-purple-700 text-xs sm:text-sm">
+              <thead className="bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-200">
+                <tr>
+                  <th className="px-2 py-2 text-left font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={() => setLocalTransferSelection(allSelected ? [] : rows.map((g: any) => String(g.barcode || '')).filter(Boolean))}
+                      title="Tout sélectionner"
+                      className="h-4 w-4 cursor-pointer accent-purple-600"
+                    />
+                  </th>
+                  <th className="px-2 py-2 text-left font-semibold">Photo</th>
+                  <th className="px-2 py-2 text-left font-semibold">Réf</th>
+                  <th className="px-2 py-2 text-left font-semibold">Marque</th>
+                  <th className="px-2 py-2 text-left font-semibold">Forme</th>
+                  <th className="px-2 py-2 text-left font-semibold">Genre</th>
+                  <th className="px-2 py-2 text-left font-semibold">Statut</th>
+                  <th className="px-2 py-2 text-left font-semibold">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-200 dark:divide-purple-700 bg-white dark:bg-slate-900">
+                {rows.length === 0 ? (
+                  <tr><td colSpan={8} className="px-3 py-6 text-center text-purple-700">Aucune monture en stock local pour ce magasin.</td></tr>
+                ) : (
+                  rows.map((g: any, idx: number) => {
+                    const barcode = String(g.barcode || '')
+                    return (
+                      <tr
+                        key={`local-${g.id || idx}`}
+                        className={`transition-colors ${localTransferSelection.includes(barcode) ? 'bg-purple-50 dark:bg-purple-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                      >
+                        <td className="px-2 py-2" onClick={event => event.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={localTransferSelection.includes(barcode)}
+                            onChange={() => setLocalTransferSelection(prev => prev.includes(barcode) ? prev.filter(b => b !== barcode) : [...prev, barcode])}
+                            className="h-4 w-4 cursor-pointer accent-purple-600"
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          {g.photo_monture_url ? (
+                            <img src={g.photo_monture_url} alt={g.reference || g.barcode || ''} className="h-12 w-12 rounded-md object-cover" />
+                          ) : (
+                            <span className="inline-block rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-500">—</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 font-mono text-slate-900 dark:text-white">{g.reference || g.barcode || '—'}</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.brand || g.marque || '—'}</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.shape || '—'}</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.gender || '—'}</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">En stock</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{g.created_at ? String(g.created_at).slice(0, 10) : '—'}</td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     )
   }
@@ -5111,7 +5905,7 @@ function ReceptionView() {
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
-          <div className="min-w-[680px]">
+          <div className="min-w-170">
             <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
               <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
                 <tr>
@@ -5209,7 +6003,7 @@ function ReceptionView() {
         </p>
 
         <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
-          <div className="min-w-[680px]">
+          <div className="min-w-170">
             <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
               <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
                 <tr>
@@ -5252,6 +6046,347 @@ function ReceptionView() {
         </div>
       </div>
     )
+  }
+
+  // « Liste envoyer » vue depuis un magasin : ses propres transferts sortants
+  // (loadLocalOutgoingTransfers), pas les listes que le Stock général lui a envoyées.
+  // Aucun second appel réseau pour le détail : items[] voyage déjà dans la réponse de
+  // /inventory/transfers (même forme que dans vendeuse.tsx), contrairement à
+  // renderSentListsHistory qui doit rappeler /send-lists/:id/items.
+  function renderLocalOutgoingTransfers(magasin: string) {
+    // Même logique de filtre que filterSendLists (défini plus bas dans le fichier, mais
+    // hoisté comme toute déclaration de fonction dans ce scope) — transferItemsCache au
+    // lieu de sendListItemsCache, seule différence entre un transfert et une liste ici.
+    const filtered = hasActiveStockFilters()
+      ? localOutgoingTransfers.filter((transfer: any) => {
+          const items = transferItemsCache[Number(transfer.id)]
+          return items ? items.some(matchesStockFilters) : false
+        })
+      : localOutgoingTransfers
+    const sorted = [...filtered].sort((a: any, b: any) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+
+    // Grille de blocs cliquables — même forme que « Listes reçues » côté Magasinier
+    // (scan.tsx : ListesScreen). Le détail, lui, suit renderGeneralStockTable (photo 48px)
+    // plutôt que GlassTable, dont les lignes sont trop compactes pour cet écran.
+    if (openLocalTransfer) {
+      const destinationLabel = stationLabelsById[Number(openLocalTransfer.to_station_id)] || '—'
+      return (
+        <div className="space-y-3">
+          <div className="flex items-start gap-2">
+            <button
+              onClick={() => setOpenLocalTransfer(null)}
+              aria-label="Retour à Liste envoyer"
+              className="mt-0.5 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            >
+              {ic.back('w-5 h-5')}
+            </button>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Transfert</p>
+              <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-white">#{openLocalTransfer.id} · {destinationLabel}</h2>
+            </div>
+          </div>
+
+          {renderGlassListTable(openLocalTransferItems, isLoadingLocalTransferItems, 'Aucune monture dans ce transfert.')}
+        </div>
+      )
+    }
+
+    return (
+      <div className="mx-auto max-w-4xl space-y-3">
+        {/* Compteur en tête, comme ListesScreen (scan.tsx) : une grille sans rien
+            au-dessus se lit comme un fragment, pas comme un écran à part entière. */}
+        <p className="text-sm text-slate-400">
+          {isLoadingLocalOutgoing ? 'Chargement…' : `${sorted.length} envoi${sorted.length > 1 ? 's' : ''} effectué${sorted.length > 1 ? 's' : ''} par ${magasinLabel(magasin)}`}
+        </p>
+
+        {hasActiveStockFilters() && isCachingFilterItems ? (
+          <div className="rounded-2xl border border-slate-100 bg-white p-8 text-center text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800">Filtrage en cours...</div>
+        ) : isLoadingLocalOutgoing ? null : sorted.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-slate-100 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-sm text-slate-400">Aucun envoi effectué par {magasinLabel(magasin)} pour le moment.</p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {sorted.map((transfer: any, idx: number) => {
+              const items: any[] = Array.isArray(transfer.items) ? transfer.items : []
+              const stillInTransit = items.some(item => String(item?.status || '').toUpperCase() === 'IN_TRANSIT')
+              const destinationLabel = stationLabelsById[Number(transfer.to_station_id)] || '—'
+              return (
+                <button
+                  key={`local-transfer-${transfer.id || idx}`}
+                  type="button"
+                  onClick={() => void openLocalTransferDetail(transfer)}
+                  className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-4 text-left transition-all hover:border-slate-300 dark:hover:border-slate-600"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate text-sm font-bold text-slate-900 dark:text-white">#{transfer.id || '—'} · {destinationLabel}</p>
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${stillInTransit ? 'bg-[#2563eb]/10 text-[#2563eb]' : 'bg-[#16a34a]/10 text-[#16a34a]'}`}>
+                      {stillInTransit ? 'En transit' : 'Reçue'}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-slate-400">
+                    {items.length} lunette{items.length > 1 ? 's' : ''} · {transfer.created_at ? String(transfer.created_at).slice(0, 10) : '—'}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Action « Liste envoyer » : historique des listes composées depuis le stock général,
+  // avec leur destination et leur statut — sentListSessions regroupe déjà par session pour
+  // les cartes de l'historique, mais sentListsRaw garde le détail liste par liste dont ce
+  // tableau a besoin (id pour l'annulation, date d'envoi).
+  // Contenu d'une liste/d'un transfert : même gabarit que renderGeneralStockTable (photo
+  // 48px, en-tête vert, cellules px-2 py-2) — pas GlassTable, dont les lignes sont trop
+  // compactes pour cet écran (retour explicite après une première tentative avec GlassTable).
+  // Les filtres Forme/Genre/Gamme du bandeau du haut s'appliquent ici aussi : ils ne
+  // doivent pas se limiter aux tableaux de stock, une liste ouverte reste une liste de
+  // montures comme une autre.
+  function renderGlassListTable(rawItems: any[], loading: boolean, emptyLabel: string) {
+    const items = rawItems.filter(matchesStockFilters)
+    return (
+      <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
+        <div className="min-w-190">
+          <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
+            <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
+              <tr>
+                <th className="px-2 py-2 text-left font-semibold">Photo</th>
+                <th className="px-2 py-2 text-left font-semibold">Réf</th>
+                <th className="px-2 py-2 text-left font-semibold">Marque</th>
+                <th className="px-2 py-2 text-left font-semibold">Forme</th>
+                <th className="px-2 py-2 text-left font-semibold">Genre</th>
+                <th className="px-2 py-2 text-left font-semibold">Statut</th>
+                <th className="px-2 py-2 text-left font-semibold">Date</th>
+                <th className="px-2 py-2 text-left font-semibold">Emplacement</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-green-200 dark:divide-green-700 bg-white dark:bg-slate-900">
+              {loading ? (
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-green-700">Chargement...</td></tr>
+              ) : items.length === 0 ? (
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-green-700">{emptyLabel}</td></tr>
+              ) : items.map((item: any, idx: number) => {
+                const photo = item.photo_monture_url || item.image_url || item.photo_url || item.image || item.monture_image || item.frame_image
+                return (
+                  <tr key={`glass-item-${item.id || item.barcode || idx}`} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <td className="px-2 py-2">
+                      {photo ? (
+                        <img src={photo} alt={item.reference || item.barcode || ''} className="h-12 w-12 rounded-md object-cover" />
+                      ) : (
+                        <span className="inline-block rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-500 dark:bg-slate-800">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 font-mono text-slate-900 dark:text-white">{item.reference || item.barcode || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{item.brand || item.marque || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{item.shape || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{item.gender || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{item.status || item.transferStatus || '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{item.created_at ? String(item.created_at).slice(0, 10) : '—'}</td>
+                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{item.location_code || '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
+  // Détail d'une liste envoyée, ouvert via openSentList/openSentListItems.
+  function renderSendListDetail() {
+    const list = openSentList
+    const listId = Number(list.id) || null
+    const dispatched = String(list.status || '').toUpperCase() === 'TRAITEE' || Number(list.sent_count || 0) > 0
+    const isCancelled = Boolean(list._cancelled) || String(list.status || '').toUpperCase() === 'ANNULEE'
+
+    return (
+      <div className="space-y-3">
+        {/* Les actions (Annuler, ou Renvoyer une fois annulée) vivent sur la
+            même ligne que le titre — pas dans un bloc à part en dessous : c'est ici, en
+            ouvrant la liste, qu'on décide quoi en faire. */}
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex items-start gap-2">
+            <button
+              onClick={() => setOpenSentList(null)}
+              aria-label="Retour"
+              className="mt-0.5 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            >
+              {ic.back('w-5 h-5')}
+            </button>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Liste</p>
+              <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+                {list.session_code || '—'} · {magasinLabel(String(list.city || '')) || '—'}
+                {isCancelled && <span className="ml-2 rounded-full bg-orange-500/10 px-2 py-0.5 align-middle text-[11px] font-bold text-orange-600 dark:text-orange-400">Annulée</span>}
+              </h2>
+            </div>
+          </div>
+          {isCancelled ? (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => resendCancelledList(list)}
+                className="rounded-lg border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/20"
+              >
+                Renvoyer ailleurs
+              </button>
+            </div>
+          ) : !dispatched && listId ? (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void cancelSendList(listId, String(list.city || ''))}
+                disabled={isCancelingListId === listId}
+                className="rounded-lg border border-amber-300 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/20"
+              >
+                Annuler
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Même gabarit que le tableau Stock général (renderGeneralStockTable) : photo
+            48px, cellules px-2 py-2, texte xs/sm — pas le format compact de GlassTable. */}
+        {renderGlassListTable(openSentListItems, isLoadingSentListItems, 'Aucune monture dans cette liste.')}
+      </div>
+    )
+  }
+
+  // Grille de blocs cliquables — même forme que « Listes reçues » côté Magasinier
+  // (scan.tsx : ListesScreen) — plutôt que le tableau de lignes d'avant. showCancel
+  // distingue « Liste envoyer » (peut encore être annulée) de « Liste reçu » (lecture
+  // seule, l'annulation vit sur l'autre onglet). noun accorde le compteur au singulier
+  // (« envoyée », « reçue » — le pluriel n'est qu'un « s » de plus dans les deux cas).
+  function renderSendListCards(sorted: any[], options: { showCancel: boolean; emptyLabel: string; noun: string }) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-3">
+        {/* Compteur en tête, comme ListesScreen (scan.tsx) : une grille de cartes sans rien
+            au-dessus se lit comme un fragment, pas comme un écran à part entière. */}
+        <p className="text-sm text-slate-400">
+          {sorted.length} liste{sorted.length > 1 ? 's' : ''} {options.noun}{sorted.length > 1 ? 's' : ''}
+        </p>
+
+        {sorted.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-slate-100 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-sm text-slate-400">{options.emptyLabel}</p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {sorted.map((list: any, idx: number) => {
+          const dispatched = String(list.status || '').toUpperCase() === 'TRAITEE' || Number(list.sent_count || 0) > 0
+          const isCancelled = Boolean(list._cancelled) || String(list.status || '').toUpperCase() === 'ANNULEE'
+          const listId = Number(list.id) || null
+          // Bordure = statut, au même titre que le badge : orange annulée (gardée pour
+          // mémoire, pas supprimée de la vue), verte traitée, bleue en attente.
+          const borderClass = isCancelled
+            ? 'border-orange-300 dark:border-orange-700'
+            : dispatched
+              ? 'border-emerald-200 dark:border-emerald-800'
+              : 'border-blue-200 dark:border-blue-800'
+          const badgeClass = isCancelled
+            ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-[3px] border-orange-300 dark:border-orange-700'
+            : dispatched
+              ? 'bg-[#16a34a]/10 text-[#16a34a] border-[3px] border-emerald-300 dark:border-emerald-700'
+              : 'bg-[#2563eb]/10 text-[#2563eb] border-[3px] border-blue-300 dark:border-blue-700'
+          const badgeLabel = isCancelled ? 'Annulée' : dispatched ? 'Traitée' : 'En attente'
+          return (
+            // div + role="button" plutôt qu'un <button> : le bouton Annuler à l'intérieur
+            // interdit d'imbriquer un vrai <button> autour (HTML invalide).
+            <div
+              key={`sent-${list.id || idx}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => void openSendListDetail(list)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') void openSendListDetail(list) }}
+              className={`cursor-pointer bg-white dark:bg-slate-800 rounded-2xl border-[3px] p-4 text-left transition-shadow hover:shadow-md ${borderClass}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{list.session_code || '—'}</p>
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${badgeClass}`}>
+                  {badgeLabel}
+                </span>
+              </div>
+              <p className="mt-1 truncate text-xs text-slate-400">
+                {magasinLabel(String(list.city || '')) || '—'} · {list.created_at ? String(list.created_at).slice(0, 10) : '—'}
+              </p>
+              {/* Annulable seulement tant qu'elle est encore en cours : une fois traitée
+                  par le magasin (ou déjà annulée), le bouton disparaît. */}
+              {options.showCancel && listId && !dispatched && !isCancelled && (
+                <div className="mt-3 flex justify-end" onClick={event => event.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => void cancelSendList(listId, String(list.city || ''))}
+                    disabled={isCancelingListId === listId}
+                    className="rounded-lg border border-amber-300 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/20"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              )}
+              {/* Une fois annulée, l'admin peut renvoyer ces montures vers un autre magasin. */}
+              {options.showCancel && listId && isCancelled && (
+                <div className="mt-3 flex justify-end" onClick={event => event.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => resendCancelledList(list)}
+                    className="rounded-lg border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/20"
+                  >
+                    Renvoyer ailleurs
+                  </button>
+                </div>
+              )}
+            </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Un filtre Forme/Genre/Gamme actif ne garde que les listes contenant au moins une
+  // monture qui correspond, via le cache alimenté par l'effet ci-dessus — sendListItemsCache
+  // pour une liste envoyée/reçue, transferItemsCache pour un transfert local. Une liste pas
+  // encore en cache est masquée plutôt que montrée à tort : isCachingFilterItems dit à
+  // l'appelant d'afficher « Chargement » à la place le temps que la boucle finisse.
+  function hasActiveStockFilters() {
+    return stockFormeFilter !== 'all' || stockGenreFilter !== 'all' || stockGammeFilter !== 'all'
+  }
+
+  function filterSendLists(rows: any[]) {
+    if (!hasActiveStockFilters()) return rows
+    return rows.filter((list: any) => {
+      const items = sendListItemsCache[Number(list.id)]
+      return items ? items.some(matchesStockFilters) : false
+    })
+  }
+
+  function renderSentListsHistory(magasin: string) {
+    const rows = sentListsRaw.filter((list: any) =>
+      !magasin || String(list.city || '').trim().toLowerCase() === magasin.trim().toLowerCase())
+    // Les anciens backends supprimaient une liste annulée ; cancelledSendLists garde ces
+    // cas visibles. Les backends récents renvoient directement le statut ANNULEE.
+    const activeIds = new Set(rows.map((list: any) => Number(list.id)))
+    const cancelled = Object.values(cancelledSendLists)
+      .filter((list: any) => !activeIds.has(Number(list.id)))
+      .filter((list: any) => !magasin || String(list.city || '').trim().toLowerCase() === magasin.trim().toLowerCase())
+      .map((list: any) => ({ ...list, _cancelled: true }))
+    const sorted = [...filterSendLists([...rows, ...cancelled])].sort((a: any, b: any) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+
+    // Ouvrir une liste remplace l'historique par son contenu, comme un vrai écran
+    // (retour en arrière), pas un pop-up par-dessus.
+    if (openSentList) return renderSendListDetail()
+
+    if (hasActiveStockFilters() && isCachingFilterItems) {
+      return <div className="mx-auto max-w-4xl bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-8 text-center text-sm text-slate-400">Filtrage en cours...</div>
+    }
+
+    return renderSendListCards(sorted, { showCancel: true, emptyLabel: 'Aucune liste envoyée pour le moment.', noun: 'envoyée' })
   }
 
   async function openReceptionDetail(session: (typeof RECEPTION_SESSIONS)[number]) {
@@ -5449,6 +6584,40 @@ function ReceptionView() {
     void loadBasketItems(stockScope)
   }, [showStockPage, stockScope, stockAction])
 
+  useEffect(() => {
+    if (!showStockPage || stockScope === 'GENERAL' || stockAction !== 'LISTE_ENVOYER') {
+      setOpenLocalTransfer(null)
+      return
+    }
+    void loadLocalOutgoingTransfers(stockScope)
+  }, [showStockPage, stockScope, stockAction])
+
+  // Réchauffe le cache Forme/Genre/Gamme dès qu'un de ces filtres est actif sur Liste
+  // envoyer : sans ça, la première ouverture avec un filtre déjà réglé afficherait
+  // un instant tout, non filtré, le temps du premier passage de ensureXCached. hasFilter
+  // à 'all' partout ne coûte rien — la boucle ne se lance jamais dans ce cas.
+  useEffect(() => {
+    if (!showStockPage) return
+    const hasFilter = stockFormeFilter !== 'all' || stockGenreFilter !== 'all' || stockGammeFilter !== 'all'
+    if (!hasFilter) return
+    if (stockAction !== 'LISTE_ENVOYER') return
+
+    let cancelled = false
+    void (async () => {
+      setIsCachingFilterItems(true)
+      try {
+        if (stockScope !== 'GENERAL' && stockAction === 'LISTE_ENVOYER') {
+          await Promise.all(localOutgoingTransfers.map(transfer => ensureTransferItemsCached(transfer)))
+        } else {
+          await Promise.all(sentListsRaw.map((list: any) => list.id ? ensureSendListItemsCached(Number(list.id)) : Promise.resolve()))
+        }
+      } finally {
+        if (!cancelled) setIsCachingFilterItems(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [showStockPage, stockAction, stockScope, stockFormeFilter, stockGenreFilter, stockGammeFilter, sentListsRaw, localOutgoingTransfers])
+
   // Changer un filtre ou de magasin remet en première page : rester en page 3 d'une liste
   // qui vient d'être réduite donnerait un tableau vide sans explication.
   useEffect(() => {
@@ -5566,7 +6735,7 @@ function ReceptionView() {
             <button onClick={() => setDetailSession(null)} className="text-slate-400 hover:text-slate-600">{ic.x()}</button>
           </div>
           <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
-            <div className="min-w-[720px]">
+            <div className="min-w-180">
               <table className="w-full min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-xs sm:text-sm">
                 <thead className="text-white" style={{ backgroundColor: detailTableAccent }}>
                   <tr>
@@ -5790,7 +6959,7 @@ function ReceptionView() {
 
             <div className="mt-4 space-y-3">
               <div className="overflow-x-auto rounded-2xl border border-emerald-200 dark:border-emerald-700">
-                <div className="min-w-[520px]">
+                <div className="min-w-130">
                   <table className="w-full min-w-full divide-y divide-emerald-200 dark:divide-emerald-700 text-xs sm:text-sm">
                     <thead className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-200">
                       <tr>
@@ -5981,6 +7150,20 @@ function ReceptionView() {
                     {sentListSessions[s.id].map(entry => (
                       <span key={entry.city} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-300">
                         {entry.dispatched ? ic.truck('w-3.5 h-3.5') : ic.store('w-3.5 h-3.5')} {entry.city}
+                        {/* Annulable seulement tant que le magasinier ne l'a pas encore traitée
+                            (statut toujours « en cours ») : une fois TRAITEE, plus de croix ici —
+                            même règle que dans « Liste envoyer » (renderSendListCards). */}
+                        {entry.pendingId && !entry.dispatched && (
+                          <button
+                            type="button"
+                            onClick={() => void cancelSendList(entry.pendingId as number, entry.city)}
+                            disabled={isCancelingListId === entry.pendingId}
+                            title="Annuler cette liste"
+                            className="ml-0.5 rounded-full p-0.5 text-emerald-500 hover:bg-emerald-100 hover:text-emerald-800 disabled:opacity-50 dark:text-emerald-400 dark:hover:bg-emerald-900/40"
+                          >
+                            {ic.x('w-3 h-3')}
+                          </button>
+                        )}
                       </span>
                     ))}
                   </div>
@@ -6077,7 +7260,7 @@ function ReceptionView() {
             {sendListSent ? (
               <>
                 <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-900/20">
-                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
                     {ic.check('w-5 h-5')}
                   </span>
                   <div>
@@ -6130,7 +7313,7 @@ function ReceptionView() {
                         ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:border-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-200'
                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800'}`}
                     >
-                      <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${isActive ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${isActive ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>
                         {ic.store('w-4 h-4')}
                       </span>
                       <span className="min-w-0">
@@ -6271,6 +7454,23 @@ function ReceptionView() {
                 <div>
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Quantité commandée *</label>
                   <input required type="number" min="1" step="1" value={supplierForm.quantity} onChange={e => setSupplierForm(f => ({ ...f, quantity: e.target.value }))} placeholder="Ex. 500" className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Genre *</label>
+                  <select required value={supplierForm.gender} onChange={e => setSupplierForm(f => ({ ...f, gender: e.target.value }))} className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white">
+                    <option value="HOMME">Homme</option>
+                    <option value="FEMME">Femme</option>
+                    <option value="ENFANT">Enfant</option>
+                    <option value="UNISEXE">Unisexe</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Gamme *</label>
+                  <select required value={supplierForm.gamme} onChange={e => setSupplierForm(f => ({ ...f, gamme: e.target.value as SupplierOrderGamme }))} className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white">
+                    {(['classique', 'moyenne', 'luxe', 'panache'] as const).map(option => (
+                      <option key={option} value={option}>{GAMME_LABELS[option]}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Date de commande</label>
@@ -6478,54 +7678,17 @@ const ROLE_OPTIONS = [
 
 interface StationRow { id: number; name: string; type: string; city: string }
 
-/** Le poste où travaille l'employé. Il n'est pas stocké tel quel : c'est la station
- *  correspondante qui part dans users.station_id, parce que c'est elle qui cadre les
- *  requêtes de chaque écran (`glasses?station_id=…`) et que labo.tsx l'envoie avec sa
- *  livraison. Un poste sans station laisse le champ vide. */
-const POSTE_OPTIONS: Array<{
-  id: string
-  label: string
-  /** Station reconnue par son nom. */
-  stationName?: string
-  /** Station reconnue par son type plutôt que par son nom. */
-  stationType?: string
-  /** Le magasin de la ville choisie dans le formulaire. */
-  cityStore?: boolean
-}> = [
-  { id: 'caisse', label: 'Caisse', stationName: 'Caisse' },
-  { id: 'vendeur', label: 'Vendeur', stationName: 'Présentoir' },
-  { id: 'labo', label: 'Laboratoire', stationName: 'Laboratoire' },
-  // Le SAV suit des clients, il ne détient aucune monture : pas de station.
-  { id: 'sav', label: 'SAV' },
-  { id: 'responsable', label: 'Responsable Magasin', cityStore: true },
-  { id: 'magasinier', label: 'Magasinier', stationType: 'STOCK_GENERAL' },
-]
-
 function foldAccents(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
 }
 
-function resolveStationId(posteId: string, stations: StationRow[], city: string): number | null {
-  const poste = POSTE_OPTIONS.find(p => p.id === posteId)
-  if (!poste) return null
+function resolveStoreStationId(stations: StationRow[], city: string): number | null {
+  const wanted = foldAccents(city)
+  if (!wanted) return null
 
-  if (poste.stationType) {
-    // Aucune station de type STOCK_GENERAL n'est semée par les migrations : on retombe
-    // sur son nom, celui que stationDisplayLabel() sait déjà reconnaître.
-    return stations.find(s => s.type === poste.stationType)?.id
-      ?? stations.find(s => /^stock\s+(principal|g[ée]n[ée]ral)$/i.test(s.name.trim()))?.id
-      ?? null
-  }
-  if (poste.cityStore) {
-    return stations.find(s => foldAccents(s.city) === foldAccents(city) && /^station\s/i.test(s.name))?.id ?? null
-  }
-  if (!poste.stationName) return null
-
-  // Une station homonyme dans la ville choisie l'emporte : le jour où chaque ville aura
-  // sa Caisse et son Laboratoire, on ne veut pas rattacher l'employé à celle d'à côté.
-  const wanted = foldAccents(poste.stationName)
-  return stations.find(s => foldAccents(s.name) === wanted && foldAccents(s.city) === foldAccents(city))?.id
-    ?? stations.find(s => foldAccents(s.name) === wanted)?.id
+  return stations.find(s => foldAccents(s.city) === wanted && /^station\s/i.test(s.name.trim()))?.id
+    ?? stations.find(s => foldAccents(s.city) === wanted)?.id
+    ?? stations.find(s => foldAccents(s.name) === wanted || foldAccents(s.name) === `station ${wanted}`)?.id
     ?? null
 }
 
@@ -6540,9 +7703,8 @@ function EmployeesView() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [hasError, setHasError] = useState(false)
-  // type et city servent à retrouver la station d'un poste (cf. resolveStationId).
+  // type et city servent à rattacher automatiquement l'employé au magasin de sa ville.
   const [stations, setStations] = useState<StationRow[]>([])
-  const [cities, setCities] = useState<Array<{ id: number; name: string }>>([])
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [employeeForm, setEmployeeForm] = useState({
     fullName: '',
@@ -6551,13 +7713,141 @@ function EmployeesView() {
     email: '',
     city: '',
     roleId: '',
-    posteId: '',
   })
   const [isSavingEmployee, setIsSavingEmployee] = useState(false)
   const [employeeFormError, setEmployeeFormError] = useState('')
-  const groups = ['Station Générale', 'Sous-stations', 'Laboratoire']
-  // Même principe que les étapes : les cartes restent affichées, seule la liste change.
-  const [selectedGroup, setSelectedGroup] = useState<string>(groups[0])
+  const [employeeDetailId, setEmployeeDetailId] = useState<number | null>(null)
+  const [employeeStats, setEmployeeStats] = useState<EmployeeStats | null>(null)
+  const [isLoadingEmployeeStats, setIsLoadingEmployeeStats] = useState(false)
+
+  // Navigation Magasin : Pays -> Villes -> liste des employés de la ville. Remplace
+  // l'ancien regroupement Station Générale / Sous-stations / Laboratoire : l'étape à
+  // respecter est clic Magasin -> blocs Pays -> clic pays -> blocs Villes -> clic ville
+  // -> liste + bouton "Ajouter un employé", exactement à cet endroit.
+  const [magasinCountries, setMagasinCountries] = useState<Array<{ id: number; name: string }>>([])
+  const [magasinCitiesByCountryId, setMagasinCitiesByCountryId] = useState<Record<number, Array<{ id: number; name: string }>>>({})
+  const [isLoadingGeo, setIsLoadingGeo] = useState(false)
+  const [selectedPaysId, setSelectedPaysId] = useState<number | null>(null)
+  const [selectedVille, setSelectedVille] = useState<string | null>(null)
+  const [villePosteFilter, setVillePosteFilter] = useState('')
+
+  // Création d'un magasin — pays d'abord pour filtrer la liste des villes. Contrairement
+  // aux blocs de navigation ci-dessus (magasinCountries/magasinCitiesByCountryId, lus
+  // depuis /inventory/countries+cities), ce formulaire s'appuie sur AFRICAN_COUNTRIES,
+  // une liste tenue côté frontend : le backend ne connaît que les pays/villes où un
+  // magasin existe déjà, donc partir de lui rendrait impossible l'ouverture d'un magasin
+  // dans une ville pas encore en base. Pas de nom séparé : le magasin est identifié par
+  // sa ville.
+  const [showAddStore, setShowAddStore] = useState(false)
+  const [storeForm, setStoreForm] = useState({ country: '', city: '' })
+  const [isSavingStore, setIsSavingStore] = useState(false)
+  const [storeFormError, setStoreFormError] = useState('')
+  // AFRICAN_COUNTRIES ne peut pas couvrir toutes les villes réelles : bascule vers une
+  // saisie libre plutôt que de prétendre que la liste est complète.
+  const [customCity, setCustomCity] = useState(false)
+
+  // Un seul chargement, au montage : tous les pays puis, pour chacun, ses villes. Sert à
+  // la fois aux blocs Pays -> Villes de navigation et au formulaire "Ajouter un magasin".
+  useEffect(() => {
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+    setIsLoadingGeo(true)
+    Promise.all([
+      fetch(`${API_URL}/inventory/countries`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/auth/stations`, { headers: { Authorization: `Bearer ${token}` } }),
+    ])
+      .then(async ([countriesResponse, stationsResponse]) => {
+        const payload = countriesResponse.ok ? await countriesResponse.json().catch(() => ({})) : {}
+        const stationsPayload = await stationsResponse.json().catch(() => ({}))
+        const list = Array.isArray(payload?.data?.countries) ? payload.data.countries : []
+        const countries: Array<{ id: number; name: string }> = list.map((c: any) => ({ id: Number(c.id) || 0, name: String(c.name || c.nom || '') }))
+        const countryById = new Map(countries.map(country => [country.id, country.name]))
+        const storesByCountry = new Map<string, string[]>()
+        if (stationsResponse.ok) {
+          const stationList = Array.isArray(stationsPayload) ? stationsPayload : (stationsPayload?.data?.stations || [])
+          stationList.forEach((station: any) => {
+            if (!isStoreStation(station)) return
+            const city = String(station.city || '').trim()
+            if (!city) return
+            const knownCountry = AFRICAN_COUNTRIES.find(country => country.cities.some(item => foldAccents(item) === foldAccents(city)))
+            const country = String(station.country || countryById.get(Number(station.pays_id)) || knownCountry?.name || '').trim()
+            if (!country) return
+            const cities = storesByCountry.get(country) || []
+            if (!cities.includes(city)) cities.push(city)
+            storesByCountry.set(country, cities)
+          })
+        }
+
+        storesByCountry.forEach((cities, countryName) => {
+          const existing = countries.find(country => foldAccents(country.name) === foldAccents(countryName))
+          if (!existing) countries.push({ id: -(countries.length + 1), name: countryName })
+        })
+
+        const entries = await Promise.all(countries.map(async (country: { id: number; name: string }) => {
+          const storeCities = storesByCountry.get(country.name) || []
+          try {
+            if (country.id < 0) return [country.id, storeCities.map((name, index) => ({ id: -(index + 1), name }))] as const
+            const res = await fetch(`${API_URL}/inventory/cities?country_id=${country.id}`, { headers: { Authorization: `Bearer ${token}` } })
+            if (!res.ok) return [country.id, storeCities.map((name, index) => ({ id: -(index + 1), name }))] as const
+            const citiesPayload = await res.json().catch(() => ({}))
+            const cityList = Array.isArray(citiesPayload?.data?.cities) ? citiesPayload.data.cities : []
+            const cityNames = Array.from(new Set([...cityList.map((c: any) => String(c.name || c.nom || '')).filter(Boolean), ...storeCities]))
+            return [country.id, cityNames.map((name, index) => ({ id: Number(cityList.find((c: any) => String(c.name || c.nom || '') === name)?.id) || -(index + 1), name }))] as const
+          } catch {
+            return [country.id, storeCities.map((name, index) => ({ id: -(index + 1), name }))] as const
+          }
+        }))
+        setMagasinCountries(countries)
+        setMagasinCitiesByCountryId(Object.fromEntries(entries))
+      })
+      .catch(() => {
+        setMagasinCountries([])
+        setMagasinCitiesByCountryId({})
+      })
+      .finally(() => setIsLoadingGeo(false))
+  }, [])
+
+  async function saveStore() {
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+
+    if (!storeForm.country || !storeForm.city.trim()) {
+      setStoreFormError('Veuillez remplir le pays et la ville.')
+      return
+    }
+
+    setIsSavingStore(true)
+    setStoreFormError('')
+
+    try {
+      const response = await fetch(`${API_URL}/auth/stations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: storeForm.city.trim(),
+          city: storeForm.city.trim(),
+          country: storeForm.country,
+        }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload?.message || 'Impossible d’ajouter le magasin')
+      }
+
+      setShowAddStore(false)
+      setStoreForm({ country: '', city: '' })
+      setCustomCity(false)
+      window.dispatchEvent(new Event('store-created'))
+    } catch (error: any) {
+      setStoreFormError(error?.message || 'Erreur lors de la création du magasin.')
+    } finally {
+      setIsSavingStore(false)
+    }
+  }
 
   useEffect(() => {
     const token = window.localStorage.getItem('token')
@@ -6572,23 +7862,15 @@ function EmployeesView() {
       Promise.all([
         fetch(`${API_URL}/auth/users`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_URL}/auth/stations`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_URL}/inventory/cities?country_id=1`, { headers: { Authorization: `Bearer ${token}` } }),
       ])
-        .then(async ([usersResponse, stationsResponse, citiesResponse]) => {
+        .then(async ([usersResponse, stationsResponse]) => {
           if (!usersResponse.ok) throw new Error('users unavailable')
           if (!stationsResponse.ok) throw new Error('stations unavailable')
-          if (!citiesResponse.ok) throw new Error('cities unavailable')
 
           const usersPayload = await usersResponse.json().catch(() => ({}))
           const stationsPayload = await stationsResponse.json().catch(() => ({}))
-          const citiesPayload = await citiesResponse.json().catch(() => ({}))
           const users = Array.isArray(usersPayload?.data?.users) ? usersPayload.data.users : []
           const stations = Array.isArray(stationsPayload?.data?.stations) ? stationsPayload.data.stations : []
-          const citiesData = Array.isArray(citiesPayload?.data?.cities)
-            ? citiesPayload.data.cities
-            : Array.isArray(citiesPayload?.cities)
-              ? citiesPayload.cities
-              : []
 
           setStations(stations.map((station: any) => ({
             id: Number(station.id) || 0,
@@ -6596,7 +7878,6 @@ function EmployeesView() {
             type: String(station.type || ''),
             city: String(station.city || ''),
           })))
-          setCities(citiesData.map((city: any) => ({ id: Number(city.id) || 0, name: String(city.nom || city.name || 'Sans nom') })))
           return users
         })
         .then((users: any[]) => {
@@ -6605,6 +7886,9 @@ function EmployeesView() {
             name: `${String(user.first_name || '').trim()} ${String(user.last_name || '').trim()}`.trim() || 'Utilisateur',
             role: String(user.role_name || user.role || 'INCONNU').toUpperCase(),
             station: String(user.station_name || 'Non assigné').trim() || 'Non assigné',
+            city: String(user.city || '').trim(),
+            phone: String(user.phone || '').trim(),
+            email: String(user.email || '').trim(),
             group: getEmployeeGroup(user.station_name),
             status: user.is_active ? 'Actif' : 'Inactif',
             avatar: getEmployeeAvatar(`${user.first_name || ''} ${user.last_name || ''}`),
@@ -6639,8 +7923,65 @@ function EmployeesView() {
     e.role.toLowerCase().includes(search.toLowerCase())
   )
 
-  const activeMeta = EMPLOYEE_GROUP_META[selectedGroup]
-  const members = filtered.filter(e => e.group === selectedGroup)
+  // Ville -> pays, dérivé de la même donnée que les blocs de navigation et le formulaire
+  // "Ajouter un magasin" : un seul chargement, deux usages.
+  const cityToCountryId: Record<string, number> = {}
+  Object.entries(magasinCitiesByCountryId).forEach(([countryId, cityList]) => {
+    cityList.forEach(c => { cityToCountryId[c.name] = Number(countryId) })
+  })
+  const allMagasinCities = Object.values(magasinCitiesByCountryId).flat()
+    .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+
+  const selectedPaysName = selectedPaysId != null
+    ? (magasinCountries.find(c => c.id === selectedPaysId)?.name || '')
+    : ''
+  const villesInPays = selectedPaysId != null ? (magasinCitiesByCountryId[selectedPaysId] || []) : []
+
+  const villeMembersAll = selectedVille ? filtered.filter(e => e.city === selectedVille) : []
+  const villeRoles = Array.from(new Set(villeMembersAll.map(e => e.role).filter(Boolean)))
+  const villeMembers = villeMembersAll.filter(e => !villePosteFilter || e.role === villePosteFilter)
+
+  const employeeDetail = employeeDetailId != null ? employees.find(e => e.id === employeeDetailId) || null : null
+
+  useEffect(() => {
+    if (employeeDetailId == null) {
+      setEmployeeStats(null)
+      return
+    }
+    const token = window.localStorage.getItem('token')
+    if (!token) return
+    const headers = { Authorization: `Bearer ${token}` }
+    setIsLoadingEmployeeStats(true)
+    Promise.all([
+      fetch(`${API_URL}/inventory/movements?user_id=${employeeDetailId}&limit=1000&offset=0`, { headers }),
+      fetch(`${API_URL}/inventory/proformas`, { headers }),
+    ])
+      .then(async ([movementsResponse, proformasResponse]) => {
+        const movementsPayload = movementsResponse.ok ? await movementsResponse.json().catch(() => ({})) : {}
+        const proformasPayload = proformasResponse.ok ? await proformasResponse.json().catch(() => ({})) : {}
+        const movements = Array.isArray(movementsPayload?.data?.movements) ? movementsPayload.data.movements : []
+        const proformas = Array.isArray(proformasPayload?.data?.proformas) ? proformasPayload.data.proformas : []
+        const actions = movements.map((movement: any) => String(movement.action || '').toUpperCase())
+        const authoredProformas = proformas.filter((proforma: any) => Number(proforma.created_by) === employeeDetailId)
+        const settledProformas = proformas.filter((proforma: any) => Number(proforma.settled_by) === employeeDetailId)
+        const activityDates = [
+          ...movements.map((movement: any) => movement.created_at),
+          ...authoredProformas.map((proforma: any) => proforma.created_at),
+          ...settledProformas.map((proforma: any) => proforma.settled_at),
+        ].filter(Boolean).sort().reverse()
+        setEmployeeStats({
+          totalActions: movements.length + authoredProformas.length + settledProformas.length,
+          proformas: authoredProformas.length,
+          paiements: settledProformas.length,
+          receptions: actions.filter((action: string) => ['RECEPTION_STATION', 'RECEPTION_FOURNISSEUR'].includes(action)).length,
+          traitement: actions.filter((action: string) => ['LABORATOIRE', 'CONTROLE_QUALITE', 'MISE_EN_CAISSE'].includes(action)).length,
+          ventes: actions.filter((action: string) => ['VENTE', 'VENDUE', 'LIVRAISON'].includes(action)).length,
+          lastActivity: activityDates[0] ? new Date(activityDates[0]).toLocaleDateString('fr-FR') : 'Aucune activité',
+        })
+      })
+      .catch(() => setEmployeeStats(null))
+      .finally(() => setIsLoadingEmployeeStats(false))
+  }, [employeeDetailId])
 
   const fullNameParts = employeeForm.fullName.trim().split(/\s+/)
   const firstName = fullNameParts.slice(0, -1).join(' ') || fullNameParts[0] || ''
@@ -6650,8 +7991,9 @@ function EmployeesView() {
     const token = window.localStorage.getItem('token')
     if (!token) return
 
-    if (!employeeForm.fullName.trim() || !employeeForm.gender || !employeeForm.phone.trim() || !employeeForm.city.trim() || !employeeForm.roleId) {
-      setEmployeeFormError('Veuillez remplir au moins le nom, le genre, le téléphone, la ville et le rôle.')
+    const city = employeeForm.city.trim() || selectedVille?.trim() || ''
+    if (!employeeForm.fullName.trim() || !employeeForm.gender || !employeeForm.phone.trim() || !city || !employeeForm.roleId) {
+      setEmployeeFormError('Veuillez remplir au moins le nom, le genre, le téléphone et le rôle.')
       return
     }
 
@@ -6671,11 +8013,9 @@ function EmployeesView() {
           email: employeeForm.email.trim(),
           phone: employeeForm.phone.trim(),
           gender: employeeForm.gender,
-          city: employeeForm.city.trim(),
+          city,
           role_id: Number(employeeForm.roleId),
-          // Le poste choisi n'est pas stocké tel quel : c'est sa station qui compte,
-          // parce que c'est elle que les écrans de poste relisent dans user.station_id.
-          station_id: employeeForm.posteId ? resolveStationId(employeeForm.posteId, stations, employeeForm.city) : null,
+          station_id: resolveStoreStationId(stations, city),
         }),
       })
 
@@ -6693,6 +8033,9 @@ function EmployeesView() {
             name: `${String(user.first_name || '').trim()} ${String(user.last_name || '').trim()}`.trim() || 'Utilisateur',
             role: String(user.role_name || user.role || 'INCONNU').toUpperCase(),
             station: String(user.station_name || 'Non assigné').trim() || 'Non assigné',
+            city: String(user.city || '').trim(),
+            phone: String(user.phone || '').trim(),
+            email: String(user.email || '').trim(),
             group: getEmployeeGroup(user.station_name),
             status: user.is_active ? 'Actif' : 'Inactif',
             avatar: getEmployeeAvatar(`${user.first_name || ''} ${user.last_name || ''}`),
@@ -6702,7 +8045,7 @@ function EmployeesView() {
       }
 
       setShowAddEmployee(false)
-      setEmployeeForm({ fullName: '', gender: '', phone: '', email: '', city: '', roleId: '', posteId: '' })
+      setEmployeeForm({ fullName: '', gender: '', phone: '', email: '', city: '', roleId: '' })
     } catch (error: any) {
       setEmployeeFormError(error?.message || 'Erreur lors de la création de l’employé.')
     } finally {
@@ -6717,11 +8060,110 @@ function EmployeesView() {
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{ic.search()}</span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un employé..." className="w-full pl-9 pr-4 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
-        <button type="button" onClick={() => setShowAddEmployee(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <button type="button" onClick={() => setShowAddStore(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
           {ic.plus('w-4 h-4')}
-          Ajouter un employé
+          Ajouter un magasin
         </button>
       </div>
+
+      {showAddStore && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={() => setShowAddStore(false)}>
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-700" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-blue-600 dark:text-blue-400" style={{ backgroundColor: '#2563eb18' }}>
+                  {ic.store('w-5 h-5')}
+                </span>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">Ajouter un magasin</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Renseignez le pays puis la ville du nouveau magasin.</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setShowAddStore(false)} className="text-slate-400 hover:text-slate-600">{ic.x()}</button>
+            </div>
+
+            <div className="space-y-4">
+              {storeFormError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                  {storeFormError}
+                </div>
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Pays *</label>
+                  <select
+                    value={storeForm.country}
+                    onChange={e => { setStoreForm(f => ({ ...f, country: e.target.value, city: '' })); setCustomCity(false) }}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="">Sélectionner</option>
+                    {AFRICAN_COUNTRIES.map(country => (
+                      <option key={country.name} value={country.name}>{country.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Ville *</label>
+                  {customCity ? (
+                    <div className="mt-1">
+                      <div className="flex items-center gap-2">
+                        <input
+                          autoFocus
+                          value={storeForm.city}
+                          onChange={e => setStoreForm(f => ({ ...f, city: e.target.value }))}
+                          placeholder="Nom de la ville"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => { setCustomCity(false); setStoreForm(f => ({ ...f, city: '' })) }}
+                          className="shrink-0 rounded-xl border border-slate-200 px-2.5 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        >
+                          Liste
+                        </button>
+                      </div>
+                      <p className="mt-1.5 text-xs text-slate-400">Ville ajoutée telle quelle, hors référentiel.</p>
+                    </div>
+                  ) : (
+                    <select
+                      value={storeForm.city}
+                      onChange={e => {
+                        if (e.target.value === '__autre__') { setCustomCity(true); setStoreForm(f => ({ ...f, city: '' })); return }
+                        setStoreForm(f => ({ ...f, city: e.target.value }))
+                      }}
+                      disabled={!storeForm.country}
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white disabled:opacity-60"
+                    >
+                      <option value="">Sélectionner</option>
+                      {(AFRICAN_COUNTRIES.find(c => c.name === storeForm.country)?.cities || []).map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                      <option value="__autre__">Autre (ville non listée)</option>
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              {storeForm.country && storeForm.city.trim() && (
+                <div className="flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/80 px-3 py-2 text-sm font-medium text-blue-700 dark:border-blue-800/60 dark:bg-blue-900/20 dark:text-blue-300">
+                  {ic.store('w-4 h-4')}
+                  <span className="truncate">{storeForm.city.trim()}, {storeForm.country}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button type="button" disabled={isSavingStore || !storeForm.country || !storeForm.city.trim()} onClick={saveStore} className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+                  {isSavingStore ? 'Enregistrement...' : 'Enregistrer'}
+                </button>
+                <button type="button" onClick={() => setShowAddStore(false)} className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={() => setShowAddEmployee(false)}>
@@ -6764,29 +8206,11 @@ function EmployeesView() {
                   <input type="email" value={employeeForm.email} onChange={e => setEmployeeForm(f => ({ ...f, email: e.target.value }))} placeholder="jean.dupont@lunetterie.com" className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Ville *</label>
-                  <select value={employeeForm.city} onChange={e => setEmployeeForm(f => ({ ...f, city: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
-                    <option value="">Sélectionner</option>
-                    {cities.map(city => (
-                      <option key={city.id} value={city.name}>{city.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Rôle *</label>
                   <select value={employeeForm.roleId} onChange={e => setEmployeeForm(f => ({ ...f, roleId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
                     <option value="">Sélectionner</option>
                     {ROLE_OPTIONS.map(role => (
                       <option key={role.id} value={role.id}>{role.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Poste</label>
-                  <select value={employeeForm.posteId} onChange={e => setEmployeeForm(f => ({ ...f, posteId: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
-                    <option value="">Sélectionner</option>
-                    {POSTE_OPTIONS.map(poste => (
-                      <option key={poste.id} value={poste.id}>{poste.label}</option>
                     ))}
                   </select>
                 </div>
@@ -6815,66 +8239,242 @@ function EmployeesView() {
         </div>
       ) : (
         <>
-          {/* Cartes de groupe — mêmes blocs que les étapes, carrousel sur mobile */}
-          <div className={`${CARD_ROW_CLASS} sm:grid-cols-3`}>
-            {groups.map(group => {
-              const groupMembers = filtered.filter(e => e.group === group)
-              const meta = EMPLOYEE_GROUP_META[group]
-              const isActive = group === selectedGroup
-              return (
-                <button
-                  key={group}
-                  type="button"
-                  onClick={() => setSelectedGroup(group)}
-                  aria-pressed={isActive}
-                  className={`${CARD_CLASS} ${isActive
-                    ? 'bg-white dark:bg-slate-900'
-                    : 'border-slate-200 bg-white hover:border-blue-200 dark:border-slate-700 dark:bg-slate-900'}`}
-                  style={isActive ? { borderColor: meta.color, backgroundColor: `${meta.color}0f` } : undefined}
-                >
-                  <span
-                    className="flex h-[42px] w-[42px] items-center justify-center rounded-lg"
-                    style={isActive
-                      ? { backgroundColor: meta.color, color: '#fff' }
-                      : { backgroundColor: `${meta.color}1f`, color: meta.color }}
-                  >
-                    {meta.icon()}
-                  </span>
-                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{group}</span>
-                  <span className="mt-auto text-[28px] font-extrabold leading-none tracking-tight tabular-nums text-slate-900 dark:text-white">{groupMembers.length}</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">employé{groupMembers.length > 1 ? 's' : ''}</span>
+          {employeeDetail ? (
+            /* Fiche employé — prend toute la page plutôt qu'une modale : on y arrive depuis
+               une liste dense, autant profiter de la place pour tout lire d'un coup. */
+            <div className={`overflow-hidden ${BLOCK_CLASS}`}>
+              <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+                <button type="button" onClick={() => setEmployeeDetailId(null)} aria-label="Retour à la liste" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                  {ic.back('w-4 h-4')}
                 </button>
-              )
-            })}
-          </div>
-
-          {/* .stage-activity — la liste du groupe sélectionné */}
-          <div className={`overflow-hidden ${BLOCK_CLASS}`}>
-            <h3 className="flex items-center gap-2 border-b border-slate-200 px-5 py-4 text-[15px] font-bold text-slate-900 dark:border-slate-700 dark:text-white">
-              <span style={{ color: activeMeta.color }}>{activeMeta.icon('w-[17px] h-[17px]')}</span>
-              {selectedGroup}
-              <span className="ml-1 text-sm font-medium text-slate-500 dark:text-slate-400">· {members.length} employé{members.length > 1 ? 's' : ''}</span>
-            </h3>
-
-            {members.length === 0 ? (
-              <div className="px-5 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
-                {search ? 'Aucun employé ne correspond à cette recherche.' : 'Aucun employé dans ce groupe.'}
+                <h3 className="text-[15px] font-bold text-slate-900 dark:text-white">Fiche employé</h3>
               </div>
-            ) : (
-              <div className="flex flex-col">
-                {members.map(emp => (
-                  <div key={emp.id} className="flex items-center gap-3.5 border-b border-slate-100 px-5 py-3.5 transition-colors last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60">
-                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-xs font-black text-white shadow-sm" style={{ backgroundColor: ROLE_COLOR[emp.role] || '#6b7280' }}>{emp.avatar}</div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{emp.name}</p>
-                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">{ROLE_LABEL[emp.role] || emp.role} · {stationDisplayLabel(emp.station)}</p>
-                    </div>
-                    <Badge status={emp.status} />
+              <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-start">
+                <div className="flex shrink-0 flex-col items-center gap-3 sm:w-48">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-2xl text-2xl font-black text-white shadow-sm" style={{ backgroundColor: ROLE_COLOR[employeeDetail.role] || '#6b7280' }}>
+                    {employeeDetail.avatar}
                   </div>
-                ))}
+                  <p className="text-center text-base font-bold text-slate-900 dark:text-white">{employeeDetail.name}</p>
+                  <Badge status={employeeDetail.status} />
+                </div>
+                <div className="grid flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Rôle</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{ROLE_LABEL[employeeDetail.role] || employeeDetail.role}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Magasin</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{stationDisplayLabel(employeeDetail.station) || employeeDetail.station}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Ville</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{employeeDetail.city || '—'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Statut</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{employeeDetail.status}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Téléphone</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{employeeDetail.phone || '—'}</p>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+              <div className="border-t border-slate-200 p-6 dark:border-slate-700">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">Statistiques de l'employé</h4>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Activité enregistrée selon son rôle</p>
+                  </div>
+                  {isLoadingEmployeeStats && <span className="text-xs text-slate-400">Chargement...</span>}
+                </div>
+                {employeeStats && (() => {
+                  const role = employeeDetail.role.toUpperCase()
+                  const metrics = role.includes('VENDEUR')
+                    ? [['Proformas créées', employeeStats.proformas], ['Ventes', employeeStats.ventes], ['Actions', employeeStats.totalActions]]
+                    : role.includes('CAISS')
+                      ? [['Paiements validés', employeeStats.paiements], ['Ventes', employeeStats.ventes], ['Actions', employeeStats.totalActions]]
+                      : role.includes('LABOR')
+                        ? [['Traitements', employeeStats.traitement], ['Réceptions', employeeStats.receptions], ['Actions', employeeStats.totalActions]]
+                        : role.includes('MAGASIN')
+                          ? [['Réceptions', employeeStats.receptions], ['Traitements', employeeStats.traitement], ['Actions', employeeStats.totalActions]]
+                          : [['Actions', employeeStats.totalActions], ['Proformas', employeeStats.proformas], ['Ventes', employeeStats.ventes]]
+                  return (
+                    <>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        {metrics.map(([label, value]) => (
+                          <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                            <p className="text-xs font-semibold text-slate-400">{label}</p>
+                            <p className="mt-1 text-2xl font-black tabular-nums text-blue-600 dark:text-blue-400">{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Dernière activité : <span className="font-semibold text-slate-700 dark:text-slate-200">{employeeStats.lastActivity}</span></p>
+                    </>
+                  )
+                })()}
+                {!isLoadingEmployeeStats && !employeeStats && <p className="text-sm text-slate-500 dark:text-slate-400">Statistiques indisponibles pour le moment.</p>}
+              </div>
+            </div>
+          ) : selectedVille ? (
+            /* Niveau Ville — l'étape à respecter : c'est ici, et seulement ici, que vit le
+               bouton "Ajouter un employé". */
+            <div className={`overflow-hidden ${BLOCK_CLASS}`}>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+                <h3 className="flex items-center gap-2 text-[15px] font-bold text-slate-900 dark:text-white">
+                  <button type="button" onClick={() => setSelectedVille(null)} aria-label="Retour aux villes" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                    {ic.back('w-4 h-4')}
+                  </button>
+                  {selectedVille}
+                  <span className="ml-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                    · {villeMembers.length} employé{villeMembers.length > 1 ? 's' : ''}
+                  </span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => { setEmployeeForm(f => ({ ...f, city: selectedVille || '' })); setShowAddEmployee(true) }}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {ic.plus('w-4 h-4')}
+                  Ajouter un employé
+                </button>
+              </div>
+
+              {villeRoles.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-700">
+                  <select
+                    value={villePosteFilter}
+                    onChange={e => setVillePosteFilter(e.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="">Tous les postes</option>
+                    {villeRoles.map(role => (
+                      <option key={role} value={role}>{ROLE_LABEL[role] || role}</option>
+                    ))}
+                  </select>
+                  {villePosteFilter && (
+                    <button type="button" onClick={() => setVillePosteFilter('')} className="text-xs font-semibold text-blue-600 hover:text-blue-700">
+                      Réinitialiser
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {villeMembers.length === 0 ? (
+                <div className="px-5 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
+                  {search || villePosteFilter ? 'Aucun employé ne correspond à ces critères.' : 'Aucun employé dans cette ville pour le moment.'}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
+                        <th className="px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Nom</th>
+                        <th className="px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Poste</th>
+                        <th className="px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Magasin</th>
+                        <th className="px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {villeMembers.map(emp => (
+                        <tr
+                          key={emp.id}
+                          onClick={() => setEmployeeDetailId(emp.id)}
+                          className="cursor-pointer border-b border-slate-100 transition-colors last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
+                        >
+                          <td className="flex items-center gap-2.5 px-5 py-3">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-black text-white" style={{ backgroundColor: ROLE_COLOR[emp.role] || '#6b7280' }}>{emp.avatar}</span>
+                            <span className="font-semibold text-slate-900 dark:text-white">{emp.name}</span>
+                          </td>
+                          <td className="px-5 py-3 text-slate-600 dark:text-slate-300">{ROLE_LABEL[emp.role] || emp.role}</td>
+                          <td className="px-5 py-3 text-slate-600 dark:text-slate-300">{stationDisplayLabel(emp.station) || emp.station}</td>
+                          <td className="px-5 py-3"><Badge status={emp.status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : selectedPaysId != null ? (
+            /* Niveau Pays — blocs Villes de ce pays. */
+            <div className={`overflow-hidden ${BLOCK_CLASS}`}>
+              <h3 className="flex items-center gap-2 border-b border-slate-200 px-5 py-4 text-[15px] font-bold text-slate-900 dark:border-slate-700 dark:text-white">
+                <button type="button" onClick={() => setSelectedPaysId(null)} aria-label="Retour aux pays" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                  {ic.back('w-4 h-4')}
+                </button>
+                {selectedPaysName}
+                <span className="ml-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                  · {villesInPays.length} ville{villesInPays.length > 1 ? 's' : ''}
+                </span>
+              </h3>
+              {villesInPays.length === 0 ? (
+                <div className="px-5 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
+                  Aucune ville enregistrée pour ce pays.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-3">
+                  {villesInPays.map(city => {
+                    const count = filtered.filter(e => e.city === city.name).length
+                    return (
+                      <button
+                        key={city.id}
+                        type="button"
+                        onClick={() => setSelectedVille(city.name)}
+                        className="flex flex-col items-start gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                      >
+                        <span className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: '#0891b21f', color: '#0891b2' }}>
+                          {ic.store('w-5 h-5')}
+                        </span>
+                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{city.name}</span>
+                        <span className="text-2xl font-black tabular-nums text-slate-900 dark:text-white">{count}</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">employé{count > 1 ? 's' : ''}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          ) : isLoadingGeo ? (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 p-4 text-sm text-slate-500 dark:text-slate-400">
+              Chargement des pays…
+            </div>
+          ) : (
+            /* Niveau racine — clic sur "Magasin" : blocs Pays. */
+            <div className={`overflow-hidden ${BLOCK_CLASS}`}>
+              <h3 className="flex items-center gap-2 border-b border-slate-200 px-5 py-4 text-[15px] font-bold text-slate-900 dark:border-slate-700 dark:text-white">
+                <span className="text-blue-600">{ic.store('w-[17px] h-[17px]')}</span>
+                Magasins
+                <span className="ml-1 text-sm font-medium text-slate-500 dark:text-slate-400">· {magasinCountries.length} pays</span>
+              </h3>
+              {magasinCountries.length === 0 ? (
+                <div className="px-5 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
+                  Aucun pays enregistré.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-3">
+                  {magasinCountries.map(country => {
+                    const count = filtered.filter(e => cityToCountryId[e.city] === country.id).length
+                    return (
+                      <button
+                        key={country.id}
+                        type="button"
+                        onClick={() => setSelectedPaysId(country.id)}
+                        className="flex flex-col items-start gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                      >
+                        <span className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: '#2563eb1f', color: '#2563eb' }}>
+                          {ic.box('w-5 h-5')}
+                        </span>
+                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{country.name}</span>
+                        <span className="text-2xl font-black tabular-nums text-slate-900 dark:text-white">{count}</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">employé{count > 1 ? 's' : ''}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -7054,7 +8654,7 @@ function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose
 
   return (
     <div className="fixed bottom-4 right-4 w-80 bg-white dark:bg-slate-950 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden z-50" style={{ height: 400 }}>
-      <div className="px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 flex items-center justify-between flex-shrink-0">
+      <div className="px-4 py-3 bg-linear-to-r from-blue-600 to-blue-700 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           {ic.bot('w-4 h-4 text-white')}
           <span className="font-bold text-white text-sm">Lunette AI</span>
@@ -7072,7 +8672,7 @@ function ChatBot({ onClose, onNavigate, currentScreen, stockSummary }: { onClose
         ))}
         <div ref={endRef} />
       </div>
-      <div className="px-3 py-2.5 border-t border-slate-100 dark:border-slate-800 flex gap-2 flex-shrink-0">
+      <div className="px-3 py-2.5 border-t border-slate-100 dark:border-slate-800 flex gap-2 shrink-0">
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} disabled={isSending} placeholder="Posez une question..." className="flex-1 px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 border border-slate-200 dark:border-slate-700 disabled:opacity-60" />
         <button onClick={toggleMic} className={`p-2 rounded-xl transition-all ${listening ? 'bg-red-500 text-white scale-110' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-blue-600'}`}>{ic.mic()}</button>
         <button onClick={send} disabled={isSending} className="p-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors active:scale-95 disabled:opacity-60">{ic.send()}</button>
@@ -7091,13 +8691,13 @@ function Sidebar({ currentScreen, onNavigate, dark, onToggleDark, onLogout }: {
   const isDash = ['dashboard', 'pays', 'city', 'frame'].includes(currentScreen.type)
 
   return (
-    <aside className="hidden md:flex flex-col w-56 lg:w-60 bg-slate-900 dark:bg-slate-950 h-screen sticky top-0 flex-shrink-0">
+    <aside className="hidden md:flex flex-col w-56 lg:w-60 bg-slate-900 dark:bg-slate-950 h-screen sticky top-0 shrink-0">
       {/* Même composition que la sidebar de direction.html : le logo en grand, centré, avec
           le rôle dessous. Pas de texte « La Lunetterie » — le logo porte déjà le nom.
           Le fond blanc est nécessaire ici, le JPEG n'a pas de transparence. */}
-      <div className="px-4 py-5 border-b border-slate-800 flex-shrink-0">
+      <div className="px-4 py-5 border-b border-slate-800 shrink-0">
         <div className="flex flex-col items-center gap-2.5 text-center">
-          <div className="w-full max-w-[180px] rounded-xl bg-white px-3 py-2">
+          <div className="w-full max-w-45 rounded-xl bg-white px-3 py-2">
             <img src={logoUrl} alt="La Lunetterie" className="w-full h-auto object-contain" />
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Direction</p>
@@ -7105,30 +8705,32 @@ function Sidebar({ currentScreen, onNavigate, dark, onToggleDark, onLogout }: {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-        <button
-          onClick={() => onNavigate({ type: 'dashboard' })}
-          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-left transition-all ${isDash ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-        >
-          <span className="flex-shrink-0">{ic.home('w-4 h-4')}</span>
-          <span className="truncate font-semibold">Tableau de bord</span>
-        </button>
+        {isFeatureEnabled('direction', 'dashboard') && (
+          <button
+            onClick={() => onNavigate({ type: 'dashboard' })}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-left transition-all ${isDash ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+          >
+            <span className="shrink-0">{ic.home('w-4 h-4')}</span>
+            <span className="truncate font-semibold">Tableau de bord</span>
+          </button>
+        )}
 
         <div className="my-2 h-px bg-slate-800" />
 
-        {SIDEBAR_MODULES.map(mod => {
+        {SIDEBAR_MODULES.filter(mod => isFeatureEnabled('direction', mod.id)).map(mod => {
           const active = currentScreen.type === 'module' && (currentScreen as any).id === mod.id
           return (
             <button key={mod.id} onClick={() => onNavigate({ type: 'module', id: mod.id })}
               className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-left transition-all ${active ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
             >
-              <span className="flex-shrink-0">{mod.icon('w-4 h-4')}</span>
+              <span className="shrink-0">{mod.icon('w-4 h-4')}</span>
               <span className="truncate font-medium">{mod.label}</span>
             </button>
           )
         })}
       </nav>
 
-      <div className="px-4 py-3 border-t border-slate-800 space-y-3 flex-shrink-0">
+      <div className="px-4 py-3 border-t border-slate-800 space-y-3 shrink-0">
         <button onClick={onToggleDark} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full">
           {dark ? ic.sun('w-4 h-4') : ic.moon('w-4 h-4')}
           <span className="text-xs">{dark ? 'Thème clair' : 'Thème sombre'}</span>
@@ -7155,8 +8757,8 @@ function MobileNav({ currentScreen, onNavigate }: { currentScreen: NavScreen; on
   const isDash = ['dashboard', 'pays', 'city', 'frame'].includes(currentScreen.type)
 
   const tabs: { label: string; icon: (c?: string) => React.ReactElement; active: boolean; nav: NavScreen }[] = [
-    { label: 'Tableau de bord', icon: ic.home, active: isDash, nav: { type: 'dashboard' } },
-    ...SIDEBAR_MODULES.map(mod => ({
+    ...(isFeatureEnabled('direction', 'dashboard') ? [{ label: 'Tableau de bord', icon: ic.home, active: isDash, nav: { type: 'dashboard' } as NavScreen }] : []),
+    ...SIDEBAR_MODULES.filter(mod => isFeatureEnabled('direction', mod.id)).map(mod => ({
       label: mod.short,
       icon: mod.icon,
       active: currentScreen.type === 'module' && (currentScreen as any).id === mod.id,
@@ -7169,7 +8771,7 @@ function MobileNav({ currentScreen, onNavigate }: { currentScreen: NavScreen; on
       <div className="flex min-w-max">
         {tabs.map(tab => (
           <button key={tab.label} onClick={() => onNavigate(tab.nav)}
-            className={`flex-1 min-w-[68px] flex flex-col items-center py-3 gap-1 transition-colors ${tab.active ? 'text-blue-600' : 'text-slate-400'}`}
+            className={`flex-1 min-w-17 flex flex-col items-center py-3 gap-1 transition-colors ${tab.active ? 'text-blue-600' : 'text-slate-400'}`}
           >
             {tab.icon('w-5 h-5')}
             <span className="text-[10px] font-semibold leading-none whitespace-nowrap">{tab.label}</span>
@@ -7186,7 +8788,11 @@ function TopBar({ navStack, onBack, dark, onToggleDark, onOpenChat, onLogout }: 
   dark: boolean; onToggleDark: () => void; onOpenChat: () => void; onLogout: () => void
 }) {
   const current = navStack[navStack.length - 1]
-  const canGoBack = navStack.length > 1
+  // Masquée à la racine d'un module (ex. juste après un clic sur « Expédition » dans la
+  // barre latérale, toujours visible à côté) : la flèche y était redondante. Elle reste
+  // nécessaire au-delà — Pays → Ville → Référence (FrameDetailScreen n'a aucun autre moyen
+  // d'en sortir, pas d'onNavigate local) n'a pas d'équivalent dans la barre latérale.
+  const canGoBack = navStack.length > 2
 
   const SUIVI_SECTION_LABEL: Record<SuiviSection, string> = {
     stock: 'Stock', labo: 'Labo', presentoire: 'Présentoire', placement: 'Placement',
@@ -7194,7 +8800,7 @@ function TopBar({ navStack, onBack, dark, onToggleDark, onOpenChat, onLogout }: 
 
   function getTitle(s: NavScreen): string {
     if (s.type === 'dashboard') return 'Tableau de bord'
-    if (s.type === 'pays') return s.block === 'total' ? 'Total lunette' : s.block === 'ca' ? "Chiffre d'affaire" : 'Suivie lunette'
+    if (s.type === 'pays') return s.block === 'total' ? 'Total lunettes' : s.block === 'ca' ? "Chiffre d'affaire" : 'Suivi des lunettes'
     if (s.type === 'city') return s.city
     if (s.type === 'suivi-detail') return SUIVI_SECTION_LABEL[s.section]
     if (s.type === 'stock-general') return 'Stock général'
@@ -7204,26 +8810,38 @@ function TopBar({ navStack, onBack, dark, onToggleDark, onOpenChat, onLogout }: 
   }
 
   function getSubtitle(s: NavScreen): string {
-    if (s.type === 'city') return `${s.pays} · ${s.block === 'total' ? 'Total lunette' : 'CA'}`
-    if (s.type === 'suivi-detail') return `${s.pays} · ${s.city} · Suivi lunette`
+    if (s.type === 'city') return `${s.pays} · ${s.block === 'total' ? 'Total lunettes' : 'CA'}`
+    if (s.type === 'suivi-detail') return `${s.pays} · ${s.city} · Suivi magasin`
     if (s.type === 'frame') return s.city
     return ''
   }
 
   const subtitle = getSubtitle(current)
+  // ReceptionView (Expédition) et HistoryView (Suivi Global) affichent déjà leur propre
+  // titre en tête de page — celui-ci ferait doublon. PresentoirBlocModule, lui, n'a aucun
+  // titre à lui : sans celui-ci l'écran resterait sans nom, donc on ne le masque pas.
+  const hasOwnTitle = current.type === 'module' && (current.id === 'reception' || current.id === 'history')
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-100 dark:border-slate-800 px-4 md:px-6 h-14 flex items-center gap-3 flex-shrink-0">
+    // md:hidden quand hasOwnTitle : sur ces deux écrans, rien ne s'y affiche à partir de
+    // md (titre masqué, retour toujours faux ici, boutons thème/déconnexion déjà en
+    // md:hidden) — la barre ne servirait plus qu'à occuper 56px de vide. En dessous de md,
+    // elle reste : c'est le seul accès au thème/à la déconnexion, la sidebar n'existe pas.
+    <header className={`sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-100 dark:border-slate-800 px-4 md:px-6 h-14 items-center gap-3 shrink-0 ${hasOwnTitle ? 'flex md:hidden' : 'flex'}`}>
       {canGoBack && (
-        <button onClick={onBack} className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex-shrink-0">
+        <button onClick={onBack} className="p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all shrink-0">
           {ic.back('w-5 h-5')}
         </button>
       )}
       <div className="flex-1 min-w-0">
-        <h1 className="font-bold text-slate-900 dark:text-white text-sm md:text-base truncate leading-tight">{getTitle(current)}</h1>
-        {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
+        {!hasOwnTitle && (
+          <>
+            <h1 className="font-bold text-slate-900 dark:text-white text-sm md:text-base truncate leading-tight">{getTitle(current)}</h1>
+            {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
+          </>
+        )}
       </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         {/* Thème et déconnexion vivent dans la barre latérale ; sur mobile elle n'existe
             pas, ils remontent donc ici (même geste que scan.tsx). */}
         <button onClick={onToggleDark} className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors">
@@ -7408,7 +9026,7 @@ function SocietesView() {
           </span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[560px]">
+          <table className="w-full text-sm min-w-140">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-700">
                 <th className="text-left py-2 px-3 text-xs font-semibold text-slate-400">Nom</th>
@@ -7523,6 +9141,7 @@ export default function App() {
   const [dark, setDark] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [stockSummary, setStockSummary] = useState<any[]>([])
+  const [initialStock, setInitialStock] = useState(0)
   const [cityStockCounts, setCityStockCounts] = useState<Record<string, CityStats>>({})
   const [stationCities, setStationCities] = useState<string[]>([])
   const [framesByCity, setFramesByCity] = useState<Record<string, FrameRecord[]>>({})
@@ -7545,6 +9164,13 @@ export default function App() {
         if (!response.ok) throw new Error('stock summary unavailable')
         const payload = await response.json().catch(() => ({}))
         return payload?.data?.items || []
+      })
+
+    const supplierOrdersPromise = fetch(`${API_URL}/inventory/expeditions`, { headers })
+      .then(async response => {
+        if (!response.ok) throw new Error('supplier orders unavailable')
+        const payload = await response.json().catch(() => ({}))
+        return payload?.data?.orders || []
       })
 
     const stationsPromise = fetch(`${API_URL}/auth/stations`, { headers })
@@ -7571,9 +9197,13 @@ export default function App() {
         return payload?.data?.proformas || []
       })
 
-    Promise.allSettled([stockSummaryPromise, stationsPromise, activeGlassesPromise, proformasPromise])
-      .then(async ([stockResult, stationsResult, glassesResult, proformasResult]) => {
+    Promise.allSettled([stockSummaryPromise, stationsPromise, activeGlassesPromise, proformasPromise, supplierOrdersPromise])
+      .then(async ([stockResult, stationsResult, glassesResult, proformasResult, supplierOrdersResult]) => {
         const summary = stockResult.status === 'fulfilled' ? summarizeStockSummary(stockResult.value) : { totalUnits: 0, hasData: false }
+
+        setInitialStock(supplierOrdersResult.status === 'fulfilled'
+          ? supplierOrdersResult.value.reduce((sum: number, order: any) => sum + Math.max(0, Number(order.quantity) || 0), 0)
+          : 0)
 
         if (stockResult.status === 'fulfilled') {
           setStockSummary(stockResult.value)
@@ -7648,6 +9278,7 @@ export default function App() {
       })
       .catch(() => {
         setStockSummary([])
+        setInitialStock(0)
         setCityStockCounts({})
         setStationCities([])
         setRevenueByCity({})
@@ -7685,6 +9316,31 @@ export default function App() {
   function navigateRoot(screen: NavScreen) {
     setNavStack([{ type: 'dashboard' }, screen])
   }
+
+  // Un écran désactivé depuis la page Fonctionnalités (le poste Direction lui-même, ou
+  // un de ses onglets) ne doit pas rester ouvert juste parce qu'on l'avait déjà sous les
+  // yeux — on retombe sur le tableau de bord, ou le premier module encore actif.
+  const [, forceFlagsRerender] = useState(0)
+  useEffect(() => {
+    const handler = () => forceFlagsRerender(n => n + 1)
+    window.addEventListener('storage', handler)
+    window.addEventListener(FEATURE_FLAGS_EVENT, handler)
+    return () => {
+      window.removeEventListener('storage', handler)
+      window.removeEventListener(FEATURE_FLAGS_EVENT, handler)
+    }
+  }, [])
+  useEffect(() => {
+    const isCurrentEnabled = current.type === 'dashboard'
+      ? isFeatureEnabled('direction', 'dashboard')
+      : current.type === 'module'
+        ? isFeatureEnabled('direction', current.id)
+        : true
+    if (isCurrentEnabled) return
+    if (isFeatureEnabled('direction', 'dashboard')) { navigateRoot({ type: 'dashboard' }); return }
+    const fallback = SIDEBAR_MODULES.find(mod => isFeatureEnabled('direction', mod.id))
+    if (fallback) navigateRoot({ type: 'module', id: fallback.id })
+  })
 
   function handleChatButtonPointerDown(event: React.PointerEvent<HTMLButtonElement>) {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -7740,7 +9396,7 @@ export default function App() {
 
   function renderScreen() {
     switch (current.type) {
-      case 'dashboard': return <DashboardScreen onNavigate={navigate} stockSummary={stockSummary} cityStockCounts={cityStockCounts} stationCities={stationCities} />
+      case 'dashboard': return <DashboardScreen onNavigate={navigate} stockSummary={stockSummary} initialStock={initialStock} cityStockCounts={cityStockCounts} stationCities={stationCities} />
       case 'pays': return <PaysScreen block={current.block} onNavigate={navigate} cityStockCounts={cityStockCounts} stationCities={stationCities} stockSummary={stockSummary} />
       case 'city': return <CityDetailScreen block={current.block} pays={current.pays} city={current.city} onNavigate={navigate} cityStockCounts={cityStockCounts} framesByCity={framesByCity} revenueByCity={revenueByCity} />
       case 'suivi-detail': return <SuiviDetailScreen pays={current.pays} city={current.city} section={current.section} cityStockCounts={cityStockCounts} framesByCity={framesByCity} onNavigate={navigate} />
@@ -7781,3 +9437,67 @@ export default function App() {
     </div>
   )
 }
+
+// Arrondit un maximum d'axe à une valeur « ronde » divisible en 4 graduations lisibles
+// (5/10/15/20, pas 4/8/12/16.4…) — même logique que les générateurs d'axes des outils de
+// graphiques classiques, réduite au strict nécessaire puisqu'il n'y a pas de bibliothèque
+// de graphiques dans ce projet (cf. StatBar).
+function niceAxisMax(rawMax: number): number {
+  const step = Math.max(rawMax, 1) / 4
+  const magnitude = Math.pow(10, Math.floor(Math.log10(step)))
+  const residual = step / magnitude
+  const niceResidual = residual > 5 ? 10 : residual > 2 ? 5 : residual > 1 ? 2 : 1
+  return niceResidual * magnitude * 4
+}
+
+// Diagramme en colonnes verticales, avec axe gradué et grille horizontale — le pendant
+// vertical de StatBar (même principe : une div dont la hauteur/largeur est proportionnelle,
+// pas de bibliothèque de graphiques). Chaque item devient une colonne colorée.
+function StatColumns({ items, height = 120 }: { items: Array<{ label: string; value: number; color: string }>; height?: number }) {
+  if (!items || items.length === 0) return <p className="text-xs text-slate-400">Aucune donnée.</p>
+
+  const rawMax = Math.max(0, ...items.map(i => i.value))
+  const axisMax = niceAxisMax(rawMax)
+  const ticks = [axisMax, (axisMax * 3) / 4, axisMax / 2, axisMax / 4, 0]
+  const columnsMinWidth = Math.max(items.length * 56, 160)
+
+  return (
+    <div className="flex gap-2">
+      <div className="flex flex-col justify-between text-right text-[10px] tabular-nums text-slate-400 dark:text-slate-500" style={{ height }}>
+        {ticks.map((tick, idx) => <span key={idx}>{Math.round(tick).toLocaleString('fr-FR')}</span>)}
+      </div>
+
+      <div className="flex-1 overflow-x-auto">
+        <div className="relative" style={{ height, minWidth: columnsMinWidth }}>
+          {/* Grille : 4 lignes fines, la ligne du bas (0) plus marquée pour faire office d'axe. */}
+          <div className="pointer-events-none absolute inset-0 z-0 flex flex-col justify-between">
+            {ticks.map((_, idx) => (
+              <div key={idx} className={idx === ticks.length - 1 ? 'border-t border-slate-300 dark:border-slate-600' : 'border-t border-slate-100 dark:border-slate-700/60'} />
+            ))}
+          </div>
+
+          <div className="relative z-10 flex h-full items-stretch justify-around gap-2 px-1">
+            {items.map(it => {
+              const pct = axisMax > 0 ? Math.max((it.value / axisMax) * 100, it.value > 0 ? 1.5 : 0) : 0
+              return (
+                <div key={it.label} className="flex flex-1 items-end justify-center">
+                  <div title={`${it.label} : ${it.value}`} className="w-full max-w-10 transition-all duration-500" style={{ height: `${pct}%`, backgroundColor: it.color }} />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="mt-1.5 flex justify-around gap-2 px-1" style={{ minWidth: columnsMinWidth }}>
+          {items.map(it => (
+            <span key={it.label} className="flex-1 truncate text-center text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400" style={{ maxWidth: 56 }}>
+              {it.label}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+

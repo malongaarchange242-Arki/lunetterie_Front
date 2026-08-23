@@ -6,6 +6,7 @@ import './index.css'
 import logoUrl from '../logo.jpeg'
 import type { ReactElement, ReactNode } from 'react'
 import { GlassTable } from './GlassTable'
+import { isFeatureEnabled, isPosteEnabled, FEATURE_FLAGS_EVENT } from './featureFlags'
 
 // Écran du poste Laboratoire (rôle LABORATOIRE).
 //
@@ -440,6 +441,12 @@ function LaboPage() {
       window.location.replace('/magasin.html')
       return
     }
+    // Poste désactivé depuis la page Fonctionnalités : refuse même avec un jeton et un
+    // `poste` valides, sinon un onglet déjà ouvert resterait utilisable.
+    if (!isPosteEnabled('labo')) {
+      window.location.replace('/magasin.html')
+      return
+    }
 
     void (async () => {
       try {
@@ -481,7 +488,7 @@ function LaboPage() {
     [data.aMonter],
   )
 
-  const TABS: { id: TabId; label: string; short: string; icon: IconFn; count?: number }[] = [
+  const ALL_TABS: { id: TabId; label: string; short: string; icon: IconFn; count?: number }[] = [
     // Le compteur inclut les montures en route : ce sont elles qui appellent un geste,
     // les afficher sans les compter reviendrait à les cacher dans la navigation.
     { id: 'arrivees', label: 'Arrivées', short: 'Arrivées', icon: ic.flask, count: aMonter.length + data.enRoute.length },
@@ -490,6 +497,26 @@ function LaboPage() {
     { id: 'prete', label: 'Montures prêtes', short: 'Prêtes', icon: ic.hand, count: data.pretes.length },
     { id: 'magasin', label: 'Magasin', short: 'Magasin', icon: ic.glasses, count: data.pretes.length },
   ]
+  const TABS = ALL_TABS.filter(item => isFeatureEnabled('labo', item.id))
+
+  // Un onglet désactivé depuis la page Fonctionnalités (Direction) ne doit pas rester actif
+  // ici juste parce qu'il l'était avant le réglage — on retombe sur le premier restant.
+  useEffect(() => {
+    if (TABS.length > 0 && !TABS.some(t => t.id === tab)) setTab(TABS[0].id)
+  }, [TABS, tab])
+
+  // 'storage' ne se déclenche pas dans l'onglet qui vient d'écrire, seulement dans les
+  // autres : c'est justement le cas normal ici (Direction change le réglage ailleurs).
+  const [, forceFlagsRerender] = useState(0)
+  useEffect(() => {
+    const handler = () => forceFlagsRerender(n => n + 1)
+    window.addEventListener('storage', handler)
+    window.addEventListener(FEATURE_FLAGS_EVENT, handler)
+    return () => {
+      window.removeEventListener('storage', handler)
+      window.removeEventListener(FEATURE_FLAGS_EVENT, handler)
+    }
+  }, [])
 
   function toggle(barcode: string) {
     setSelection(list => (list.includes(barcode) ? list.filter(b => b !== barcode) : [...list, barcode]))

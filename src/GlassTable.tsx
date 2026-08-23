@@ -21,13 +21,14 @@ import { useRef, useState } from 'react'
    aux trois autres écrans.
    ========================================================================== */
 
-export type GlassTableTone = 'green' | 'slate' | 'amber' | 'blue'
+export type GlassTableTone = 'green' | 'slate' | 'amber' | 'blue' | 'cyan'
 
 const TONES: Record<GlassTableTone, string> = {
   green: 'bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-300',
   slate: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
   amber: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
   blue: 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  cyan: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300',
 }
 
 /** Le formatage vit ici et nulle part ailleurs : chaque écran avait sa copie de
