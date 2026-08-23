@@ -2801,7 +2801,9 @@ function ScanPage() {
       if (a.color) detected.couleur = normalizeColorValue(a.color)
       if (a.material) detected.matiere = a.material
       if (a.brand) detected.marque = a.brand
-      if (a.gender) detected.genre = a.gender
+      // Le genre de la session décrit la commande reçue et prime sur une estimation IA
+      // de chaque photo. Sans ce garde-fou, l'analyse remplaçait le genre prérempli.
+      if (a.gender && !session?.genre) detected.genre = a.gender
 
       applyDetection(detected)
     } catch (error) {
