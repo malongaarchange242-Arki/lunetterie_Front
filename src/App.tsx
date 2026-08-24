@@ -310,7 +310,7 @@ const GAMME_FILTER_OPTIONS = ['all', 'classique', 'moyenne', 'luxe'] as const
 // pour une expédition qui mélange plusieurs gammes — ce cas n'existe pas au niveau
 // d'une monture individuelle (resolveFrameGamme ne renvoie jamais 'panache'), donc
 // GAMME_FILTER_OPTIONS n'en a pas besoin.
-type SupplierOrderGamme = 'classique' | 'moyenne' | 'luxe' | 'panache'
+type SupplierOrderGamme = 'classique' | 'moyenne' | 'luxe' | 'panache' | 'lecture' | 'solaire' | 'securite'
 // Libellés lisibles pour la note d'expédition (`Gamme: …`) — le reste de l'app
 // affiche les valeurs brutes du filtre, mais la note est lue par des humains.
 const GAMME_LABELS: Record<SupplierOrderGamme, string> = {
@@ -318,6 +318,9 @@ const GAMME_LABELS: Record<SupplierOrderGamme, string> = {
   moyenne: 'Moyenne gamme',
   luxe: 'Luxe',
   panache: 'Panaché (mélangé)',
+  lecture: 'Lecture',
+  solaire: 'Solaire',
+  securite: 'Sécurité',
 }
 // Genres de monture — à ne pas confondre avec le genre d'un employé (Homme/Femme/Autre),
 // qui décrit une personne et n'a rien à voir avec ces valeurs.
@@ -7467,7 +7470,7 @@ function ReceptionView() {
                 <div className="md:col-span-2">
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Gamme *</label>
                   <select required value={supplierForm.gamme} onChange={e => setSupplierForm(f => ({ ...f, gamme: e.target.value as SupplierOrderGamme }))} className="mt-1 w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white">
-                    {(['classique', 'moyenne', 'luxe', 'panache'] as const).map(option => (
+                    {(['classique', 'moyenne', 'luxe', 'panache', 'lecture', 'solaire', 'securite'] as const).map(option => (
                       <option key={option} value={option}>{GAMME_LABELS[option]}</option>
                     ))}
                   </select>

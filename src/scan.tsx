@@ -253,7 +253,9 @@ function normalizeSessionGenre(value: unknown) {
 
 function normalizeSessionGamme(value: unknown) {
   const normalized = String(value || '').trim().toLowerCase()
-  return normalized === 'moyenne' ? 'moyenne gamme' : normalized === 'classique' || normalized === 'luxe' ? normalized : ''
+  if (normalized === 'moyenne') return 'moyenne gamme'
+  if (['classique', 'luxe', 'lecture', 'solaire', 'securite'].includes(normalized)) return normalized
+  return ''
 }
 
 // ── Icônes ─────────────────────────────────────────────────────────────────────
@@ -3765,6 +3767,9 @@ function ScanPage() {
                           <option value="classique">Classique</option>
                           <option value="moyenne gamme">Moyenne gamme</option>
                           <option value="luxe">Luxe</option>
+                          <option value="lecture">Lecture</option>
+                          <option value="solaire">Solaire</option>
+                          <option value="securite">Sécurité</option>
                         </select>
                         {form.gamme === 'luxe' && (
                           <input
