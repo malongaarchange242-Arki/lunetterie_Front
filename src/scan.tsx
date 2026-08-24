@@ -3144,9 +3144,15 @@ function ScanPage() {
         console.warn('Réponse inattendue de /increment, valeurs de secours utilisées :', command)
       }
 
-      setSession({ ...session, registered: nextRegistered, target: nextTarget, status: command.status || session.status })
+      setSession(previous => previous ? {
+        ...previous,
+        registered: nextRegistered,
+        target: nextTarget,
+        status: command.status || previous.status,
+      } : previous)
     } catch (error) {
       console.error('Erreur incrémentation commande', error)
+      throw error
     }
   }
 
