@@ -253,7 +253,9 @@ function normalizeSessionGenre(value: unknown) {
 
 function normalizeSessionGamme(value: unknown) {
   const normalized = String(value || '').trim().toLowerCase()
-  return normalized === 'moyenne' ? 'moyenne gamme' : normalized === 'classique' || normalized === 'luxe' ? normalized : ''
+  if (normalized === 'moyenne') return 'moyenne gamme'
+  if (['classique', 'luxe', 'lecture', 'solaire', 'securite'].includes(normalized)) return normalized
+  return ''
 }
 
 // ── Icônes ─────────────────────────────────────────────────────────────────────
@@ -291,7 +293,7 @@ const ic = {
 }
 
 // ------------------ MonturesManager (capture d'abord, revue ensuite) ---------
-function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemaining, sessionCode }: { onClose: () => void; initialBatchDesired?: number; autoStart?: boolean; sessionRemaining?: number; sessionCode?: string }) {
+function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemaining, sessionCode, sessionGenre, sessionGamme, onRecorded }: { onClose: () => void; initialBatchDesired?: number; autoStart?: boolean; sessionRemaining?: number; sessionCode?: string; sessionGenre?: string; sessionGamme?: string; onRecorded?: () => Promise<void> }) {
   const [montures, setMontures] = useState<any[]>(() => {
     try { return JSON.parse(localStorage.getItem('montures') || '[]') } catch { return [] }
   })
@@ -310,6 +312,15 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
   const [tempBranche, setTempBranche] = useState<string | null>(null)
 
   useEffect(() => { localStorage.setItem('montures', JSON.stringify(montures)) }, [montures])
+
+  useEffect(() => {
+    if (!sessionGenre && !sessionGamme) return
+    setMontures(previous => previous.map(m => ({
+      ...m,
+      genre: m.genre || sessionGenre || '',
+      gamme: m.gamme || sessionGamme || '',
+    })))
+  }, [sessionGenre, sessionGamme])
 
   // If local drafts exceed the known session remaining, trim them on mount
   useEffect(() => {
@@ -330,7 +341,7 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
       window.alert(`Impossible : la session ne permet pas d'enregistrer plus de ${sessionRemaining} monture(s).`)
       return
     }
-    const newMonture = { id: Date.now(), photoFace: null, photoBranche: null, marque: '', couleur: '', matiere: '', reference: '', notes: '' }
+    const newMonture = { id: Date.now(), photoFace: null, photoBranche: null, marque: '', couleur: '', matiere: '', reference: '', genre: sessionGenre || '', gamme: sessionGamme || '', notes: '' }
     const updated = [...montures, newMonture].slice(0, maxItems)
     setMontures(updated)
     setCurrentIndex(updated.length - 1)
@@ -418,7 +429,7 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
       window.alert('Le nombre de montures prévu est atteint.')
       return
     }
-    const newM = { id: Date.now() + Math.random(), photoFace: tempFace || null, photoBranche: data, marque: '', couleur: '', matiere: '', reference: '', notes: '' }
+    const newM = { id: Date.now() + Math.random(), photoFace: tempFace || null, photoBranche: data, marque: '', couleur: '', matiere: '', reference: '', genre: sessionGenre || '', gamme: sessionGamme || '', notes: '' }
     const updated = [...montures, newM].slice(0, maxItems)
     setMontures(updated)
     const nextIndex = batchIndex + 1
@@ -508,7 +519,7 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
         if (sessionCode) body.append('reception_command_code', sessionCode)
         body.append('reference', m.reference || '')
         body.append('brand', m.marque || '')
-        body.append('gender', m.genre || '')
+        body.append('gender', m.genre || sessionGenre || '')
         body.append('shape', m.forme || '')
         body.append('detected_shape', '')
         body.append('color', m.couleur || '')
@@ -519,6 +530,7 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
         // keep returned barcode / emplacement
         recorded.push(data)
         m.uploadResult = data
+        if (onRecorded) await onRecorded()
       } catch (err) {
         console.error('upload error', err)
         window.alert('Erreur lors de l\'upload — vérifiez votre connexion et réessayez')
@@ -560,6 +572,13 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
 
         {viewMode === 'upload' && (
           <div>
+            <video
+              ref={videoRefLocal}
+              autoPlay
+              playsInline
+              muted
+              className={`mx-4 mb-4 aspect-video w-[calc(100%-2rem)] rounded-xl bg-black object-cover sm:mx-6 sm:w-[calc(100%-3rem)] ${cameraOnLocal ? '' : 'hidden'}`}
+            />
             {!cameraOnLocal && (
               <div className="mx-4 mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900 dark:bg-indigo-950/30 sm:mx-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -574,7 +593,6 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
             {cameraOnLocal && (
               <div className="mb-4 px-4 sm:px-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                  <video ref={videoRefLocal} autoPlay className="aspect-video w-full rounded-xl bg-black object-cover sm:w-1/2" playsInline muted />
                   <div className="min-w-0 flex-1">
                     <div className="mb-2">
                       <div className="font-medium">Prise en lot: {batchDesired ?? '—'}</div>
@@ -685,6 +703,12 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
                       <option value="classique">Classique</option>
                       <option value="moyenne gamme">Moyenne gamme</option>
                       <option value="luxe">Luxe</option>
+                      <option value="lecture">Lecture</option>
+                      <option value="solaire">Solaire</option>
+                      <option value="securite">Sécurité</option>
+                      <option value="lecture">Lecture</option>
+                      <option value="solaire">Solaire</option>
+                      <option value="securite">Sécurité</option>
                     </select>
                     {current.gamme === 'luxe' && (
                       <input value={current.prixCustom||''} onChange={e=>updateMonture(current.id,'prixCustom',e.target.value)} placeholder="Prix (Luxe)" className="mt-2 w-full p-2 border rounded" />
@@ -4332,7 +4356,16 @@ function ScanPage() {
           hasSession={Boolean(session)}
           newLists={newLists}
         />
-        {showMonturesManager && <MonturesManager initialBatchDesired={batchForManager} autoStart={Boolean(batchForManager)} sessionRemaining={session ? Math.max(0, (session.target || 0) - (session.registered || 0)) : undefined} sessionCode={session?.code} onClose={() => { setShowMonturesManager(false); setBatchForManager(undefined); void loadCommands(); }} />}
+        {showMonturesManager && <MonturesManager
+          initialBatchDesired={batchForManager}
+          autoStart={Boolean(batchForManager)}
+          sessionRemaining={session ? Math.max(0, (session.target || 0) - (session.registered || 0)) : undefined}
+          sessionCode={session?.code}
+          sessionGenre={session?.genre}
+          sessionGamme={session?.gamme}
+          onRecorded={incrementSession}
+          onClose={() => { setShowMonturesManager(false); setBatchForManager(undefined); void loadCommands(); }}
+        />}
         {/* visible indicator when a batch is pending */}
         {batchForManager ? <div className="fixed top-24 right-6 z-[10000] rounded-md bg-indigo-600 text-white px-3 py-2 shadow">Batch prévu: {batchForManager}{session ? ` (reste: ${Math.max(0, (session.target || 0) - (session.registered || 0))})` : ''}</div> : null}
 
