@@ -534,13 +534,14 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
   const current = montures[currentIndex]
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/40 flex items-start justify-center p-6 overflow-auto">
-      <div className="w-full max-w-5xl bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold">Gestionnaire de montures (local)</h2>
-          <div className="flex items-center gap-2">
-            <button onClick={() => uploadAllToServer(stationIdOf(JSON.parse(localStorage.getItem('user')||'{}')), sessionCode)} className="bg-green-600 text-white px-3 py-2 rounded">Envoyer le lot</button>
-            <button onClick={onClose} className="px-3 py-2 rounded border">Fermer</button>
+    <div className="fixed inset-0 z-9999 overflow-y-auto bg-black/50 p-2 sm:p-6">
+      <div className="mx-auto flex min-h-full w-full max-w-5xl items-start justify-center py-2 sm:py-6">
+      <div className="w-full overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4 dark:border-slate-700 sm:p-6">
+          <h2 className="text-lg font-bold">Capture en lot</h2>
+          <div className="flex w-full gap-2 sm:w-auto">
+            <button onClick={() => uploadAllToServer(stationIdOf(JSON.parse(localStorage.getItem('user')||'{}')), sessionCode)} className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white sm:flex-none">Envoyer le lot</button>
+            <button onClick={onClose} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold dark:border-slate-700">Fermer</button>
           </div>
         </div>
 
@@ -549,27 +550,38 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
           <div className="mb-3 p-2 rounded bg-yellow-100 text-sm text-yellow-800">Ouvert pour capture en lot : {initialBatchDesired} (autoStart: {autoStart ? 'oui' : 'non'})</div>
         ) : null}
 
-              <div className="mb-4 flex gap-3">
+              <div className="mb-4 flex flex-wrap items-center gap-2 p-4 pb-0 sm:p-6 sm:pb-0">
                 <button onClick={() => setViewMode('upload')} className={`px-4 py-2 rounded ${viewMode==='upload'?'bg-indigo-600 text-white':'bg-gray-100'}`}>Upload</button>
                 <button onClick={() => setViewMode('review')} className={`px-4 py-2 rounded ${viewMode==='review'?'bg-indigo-600 text-white':'bg-gray-100'}`}>Revoir ({montures.length})</button>
-                <div className="ml-auto">{montures.length}/{maxItems}</div>
+                <div className="ml-auto text-sm font-semibold text-slate-500">{montures.length}/{maxItems}</div>
               </div>
 
         {viewMode === 'upload' && (
           <div>
+            {!cameraOnLocal && (
+              <div className="mx-4 mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900 dark:bg-indigo-950/30 sm:mx-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">Caméra de capture</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Activez la caméra pour photographier les montures du lot.</p>
+                  </div>
+                  <button onClick={() => void startCameraLocal()} className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white sm:w-auto">Activer la caméra</button>
+                </div>
+              </div>
+            )}
             {cameraOnLocal && (
-              <div className="mb-4">
-                <div className="flex gap-3 items-start">
-                  <video ref={videoRefLocal} className="w-1/2 bg-black rounded" playsInline muted />
-                  <div className="flex-1">
+              <div className="mb-4 px-4 sm:px-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                  <video ref={videoRefLocal} autoPlay className="aspect-video w-full rounded-xl bg-black object-cover sm:w-1/2" playsInline muted />
+                  <div className="min-w-0 flex-1">
                     <div className="mb-2">
                       <div className="font-medium">Prise en lot: {batchDesired ?? '—'}</div>
                       <div className="text-sm text-slate-500">Photo actuelle: {captureTargetLocal}</div>
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={()=>captureLocal()} className="bg-indigo-600 text-white px-3 py-2 rounded">Prendre photo</button>
-                      <button onClick={()=>{ if (captureTargetLocal==='branche') { setTempBranche(null); setCaptureTargetLocal('face') } else { setTempFace(null) } }} className="px-3 py-2 rounded border">Reprendre</button>
-                      <button onClick={()=>stopCameraLocal()} className="px-3 py-2 rounded border">Arrêter</button>
+                    <div className="flex flex-wrap gap-2">
+                      <button onClick={()=>captureLocal()} className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white sm:flex-none">Prendre photo</button>
+                      <button onClick={()=>{ if (captureTargetLocal==='branche') { setTempBranche(null); setCaptureTargetLocal('face') } else { setTempFace(null) } }} className="rounded-lg border px-3 py-2 text-sm font-semibold">Reprendre</button>
+                      <button onClick={()=>stopCameraLocal()} className="rounded-lg border px-3 py-2 text-sm font-semibold">Arrêter</button>
                     </div>
                     <div className="mt-2">
                       {tempFace && <img src={tempFace} className="w-24 h-24 object-cover rounded mr-2 inline" />}
@@ -585,7 +597,7 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
                 <button onClick={addMonture} className="mt-4 bg-indigo-600 text-white px-4 py-2 rounded">+ Ajouter</button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-3 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-3">
                 {montures.map((m, idx) => (
                   <div key={m.id} className="bg-slate-50 p-3 rounded">
                     <div className="font-bold mb-2">Monture #{idx+1}</div>
@@ -612,7 +624,7 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
           <div>
             {!current ? <div className="p-6 text-center">Aucune monture</div> : (
               <div>
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                   <div>{current.photoFace ? <img src={current.photoFace} className="w-full h-80 object-cover rounded"/> : <div className="w-full h-80 bg-gray-100 rounded flex items-center justify-center">Pas de photo</div>}</div>
                   <div>{current.photoBranche ? <img src={current.photoBranche} className="w-full h-80 object-cover rounded"/> : <div className="w-full h-80 bg-gray-100 rounded flex items-center justify-center">Pas de photo</div>}</div>
                 </div>
@@ -691,6 +703,7 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }
@@ -4344,8 +4357,7 @@ function ScanPage() {
                     setBatchForManager(n)
                   }
                   setShowBatchModal(false)
-                  // ensure state is set before opening manager
-                  window.setTimeout(() => setShowMonturesManager(true), 50)
+                  setShowMonturesManager(true)
                 }} className="px-3 py-2 rounded bg-indigo-600 text-white">Démarrer</button>
               </div>
             </div>
