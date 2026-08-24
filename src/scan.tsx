@@ -412,6 +412,40 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
     return c.toDataURL('image/jpeg', 0.92)
   }
 
+  async function analyzeBatchMonture(montureId: number, photoFace: string, photoBranche: string) {
+    try {
+      const body = new FormData()
+      body.append('image', dataURLtoBlob(photoFace), 'monture.jpg')
+      const payload = await apiFetch('/inventory/analyze', { method: 'POST', body })
+      const analysis = payload.data || {}
+      setMontures(previous => previous.map(m => m.id === montureId ? {
+        ...m,
+        marque: analysis.brand || m.marque,
+        reference: analysis.reference || m.reference,
+        couleur: analysis.color ? normalizeColorValue(analysis.color) : m.couleur,
+        matiere: analysis.material || m.matiere,
+        forme: analysis.shape || m.forme,
+        genre: m.genre || (sessionGenre ? sessionGenre : normalizeSessionGenre(analysis.gender)),
+      } : m))
+    } catch (error) {
+      console.warn('Analyse monture du lot indisponible', error)
+    }
+
+    try {
+      const body = new FormData()
+      body.append('image', dataURLtoBlob(photoBranche), 'branche.jpg')
+      const payload = await apiFetch('/inventory/analyze-branche', { method: 'POST', body })
+      const analysis = payload.data || {}
+      setMontures(previous => previous.map(m => m.id === montureId ? {
+        ...m,
+        marque: analysis.brand || m.marque,
+        reference: analysis.reference || m.reference,
+      } : m))
+    } catch (error) {
+      console.warn('Analyse branche du lot indisponible', error)
+    }
+  }
+
   async function captureLocal() {
     const data = snapshotLocal()
     if (!data) return
@@ -432,6 +466,9 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
     const newM = { id: Date.now() + Math.random(), photoFace: tempFace || null, photoBranche: data, marque: '', couleur: '', matiere: '', reference: '', genre: sessionGenre || '', gamme: sessionGamme || '', notes: '' }
     const updated = [...montures, newM].slice(0, maxItems)
     setMontures(updated)
+    if (newM.photoFace && newM.photoBranche) {
+      void analyzeBatchMonture(newM.id, newM.photoFace, newM.photoBranche)
+    }
     const nextIndex = batchIndex + 1
     setBatchIndex(nextIndex)
     setTempFace(null)
@@ -439,30 +476,9 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
     setCaptureTargetLocal('face')
     // continue or finish
     if (batchDesired && nextIndex >= batchDesired) {
-      // finished: stop camera and analyze all montures just captured
+      // La photo de chaque monture est déjà analysée dès sa capture ; on peut afficher
+      // la revue immédiatement sans attendre la fin des requêtes IA.
       stopCameraLocal()
-      // run analyze for the newly added montures (last batchDesired entries)
-      const start = Math.max(0, updated.length - (batchDesired || 0))
-      for (let i = start; i < updated.length; i += 1) {
-        try {
-          const a = await apiFetch('/inventory/analyze', { method: 'POST', body: (() => { const b = new FormData(); b.append('image', dataURLtoBlob(updated[i].photoFace || ''), 'monture.jpg'); return b })() })
-          const ad = a.data || {}
-          if (ad.brand) updated[i].marque = ad.brand
-          if (ad.reference) updated[i].reference = ad.reference
-          if (ad.color) updated[i].couleur = normalizeColorValue(ad.color)
-          if (ad.material) updated[i].matiere = ad.material
-          if (ad.shape) updated[i].forme = ad.shape
-          if (ad.gender && !sessionGenre) updated[i].genre = normalizeSessionGenre(ad.gender)
-        } catch (err) { console.warn('analyse monture failed', err) }
-        try {
-          const b = new FormData(); b.append('image', dataURLtoBlob(updated[i].photoBranche || ''), 'branche.jpg')
-          const br = await apiFetch('/inventory/analyze-branche', { method: 'POST', body: b })
-          const bd = br.data || {}
-          if (bd.reference) updated[i].reference = bd.reference
-          if (bd.brand) updated[i].marque = bd.brand
-        } catch (err) { console.warn('analyse branche failed', err) }
-      }
-      setMontures(updated)
       setViewMode('review')
       setBatchDesired(null)
       setBatchIndex(0)
