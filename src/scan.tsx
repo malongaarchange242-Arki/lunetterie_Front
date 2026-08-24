@@ -908,11 +908,11 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700">
+                <div className="flex flex-col gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700 sm:flex-row sm:flex-wrap sm:items-center">
                   <Btn onClick={backToCaptureLocal}>{ic.arrowLeft()} Reprendre les photos</Btn>
                   {/* Sur la dernière monture du lot, ce même bouton termine et enregistre
                       tout le lot : plus de bouton « Envoyer » séparé. */}
-                  <Btn variant={isLastOfBatch ? 'success' : 'primary'} className="ml-auto" onClick={confirmBatchMonture}>
+                  <Btn variant={isLastOfBatch ? 'success' : 'primary'} className="w-full sm:ml-auto sm:w-auto" onClick={confirmBatchMonture}>
                     {ic.check()} {isLastOfBatch ? 'Terminer le lot →' : 'Confirmer et ajouter au lot →'}
                   </Btn>
                 </div>
@@ -4701,8 +4701,9 @@ function ScanPage() {
                         {/* `resetAll` sait déjà distinguer les deux cas : relancer la
                             caméra tant qu'il reste du quota, sortir vers « Mes sessions »
                             quand il est épuisé. Seul le libellé change. */}
-                        <div className="ml-auto flex items-center gap-2">
+                        <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
                           <Btn
+                            className="w-full sm:w-auto"
                             variant={sessionFull ? 'success' : 'primary'}
                             onClick={() => {
                               if (sessionFull) {
@@ -4756,13 +4757,13 @@ function ScanPage() {
           onClose={() => { setShowMonturesManager(false); setBatchForManager(undefined); void loadCommands(); }}
         />}
         {showBatchModal && (
-          <div className="fixed inset-0 z-[10001] bg-black/50 flex items-center justify-center">
-            <div className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-xl p-6">
+          <div className="fixed inset-0 z-[10001] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
+            <div className="w-full max-w-sm rounded-xl bg-white p-4 dark:bg-slate-800 sm:p-6">
               <h3 className="font-semibold mb-2">Capture en lot</h3>
               <p className="text-sm text-slate-500 mb-4">Combien de montures allez-vous capturer ? (1–30)</p>
               <input type="number" min={1} max={30} value={batchModalValue} onChange={e => setBatchModalValue(e.target.value)} className="w-full p-2 border rounded mb-4" />
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setShowBatchModal(false)} className="px-3 py-2 rounded border">Annuler</button>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button onClick={() => setShowBatchModal(false)} className="w-full rounded border px-3 py-2 sm:w-auto">Annuler</button>
                 <button onClick={() => {
                   const n = Number(batchModalValue)
                   if (!Number.isFinite(n) || n <= 0 || n > 30) { window.alert('Veuillez entrer un nombre entre 1 et 30'); return }
@@ -4782,7 +4783,7 @@ function ScanPage() {
                   }
                   setShowBatchModal(false)
                   setShowMonturesManager(true)
-                }} className="px-3 py-2 rounded bg-indigo-600 text-white">Démarrer</button>
+                }} className="w-full rounded bg-indigo-600 px-3 py-2 text-white sm:w-auto">Démarrer</button>
               </div>
             </div>
           </div>
