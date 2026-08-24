@@ -377,6 +377,8 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
     setTempBranche(null)
   }
 
+  useEffect(() => () => stopCameraLocal(), [])
+
   // If an initial desired batch is provided from the parent, apply and optionally auto-start
   useEffect(() => {
     if (typeof initialBatchDesired === 'number' && initialBatchDesired > 0) {
@@ -3999,6 +4001,9 @@ function ScanPage() {
                 window.alert('La session est pleine — ouvrez une autre session.')
                 return
               }
+              // Le bouton lot ne doit jamais laisser le flux de l'enregistrement individuel
+              // actif derrière la fenêtre : certains mobiles refusent alors le second flux.
+              stopCamera()
               setBatchModalValue('')
               setShowBatchModal(true)
             }}
