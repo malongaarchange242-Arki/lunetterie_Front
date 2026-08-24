@@ -413,11 +413,12 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
   }
 
   async function analyzeBatchMonture(montureId: number, photoFace: string, photoBranche: string) {
+    setMontures(previous => previous.map(m => m.id === montureId ? { ...m, analysisStatus: 'Analyse IA en cours…' } : m))
     try {
       const body = new FormData()
       body.append('image', dataURLtoBlob(photoFace), 'monture.jpg')
       const payload = await apiFetch('/inventory/analyze', { method: 'POST', body })
-      const analysis = payload.data || {}
+      const analysis = payload.data?.analysis || payload.data?.result || payload.data || payload
       setMontures(previous => previous.map(m => m.id === montureId ? {
         ...m,
         marque: analysis.brand || m.marque,
@@ -435,14 +436,16 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
       const body = new FormData()
       body.append('image', dataURLtoBlob(photoBranche), 'branche.jpg')
       const payload = await apiFetch('/inventory/analyze-branche', { method: 'POST', body })
-      const analysis = payload.data || {}
+      const analysis = payload.data?.analysis || payload.data?.result || payload.data || payload
       setMontures(previous => previous.map(m => m.id === montureId ? {
         ...m,
         marque: analysis.brand || m.marque,
         reference: analysis.reference || m.reference,
+        analysisStatus: 'Analyse IA terminée',
       } : m))
     } catch (error) {
       console.warn('Analyse branche du lot indisponible', error)
+      setMontures(previous => previous.map(m => m.id === montureId ? { ...m, analysisStatus: 'Analyse IA terminée, vérification nécessaire' } : m))
     }
   }
 
@@ -638,7 +641,10 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
               <div className="grid grid-cols-1 gap-3 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-3">
                 {montures.map((m, idx) => (
                   <div key={m.id} className="bg-slate-50 p-3 rounded">
-                    <div className="font-bold mb-2">Monture #{idx+1}</div>
+                    <div className="flex items-center justify-between gap-2 font-bold mb-2">
+                      <span>Monture #{idx + 1}</span>
+                      {m.analysisStatus && <span className="text-[10px] font-semibold text-indigo-600">{m.analysisStatus}</span>}
+                    </div>
                     <div className="mb-2">
                       {m.photoFace ? <img src={m.photoFace} className="w-full h-28 object-cover rounded"/> : <div className="w-full h-28 bg-gray-100 rounded flex items-center justify-center">Pas de photo</div>}
                       <input type="file" accept="image/*" onChange={e=>handleImageUploadLocal(m.id,'face', e.target.files?.[0]||null)} className="w-full mt-2" />
