@@ -448,9 +448,11 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
           const a = await apiFetch('/inventory/analyze', { method: 'POST', body: (() => { const b = new FormData(); b.append('image', dataURLtoBlob(updated[i].photoFace || ''), 'monture.jpg'); return b })() })
           const ad = a.data || {}
           if (ad.brand) updated[i].marque = ad.brand
+          if (ad.reference) updated[i].reference = ad.reference
           if (ad.color) updated[i].couleur = normalizeColorValue(ad.color)
           if (ad.material) updated[i].matiere = ad.material
           if (ad.shape) updated[i].forme = ad.shape
+          if (ad.gender && !sessionGenre) updated[i].genre = normalizeSessionGenre(ad.gender)
         } catch (err) { console.warn('analyse monture failed', err) }
         try {
           const b = new FormData(); b.append('image', dataURLtoBlob(updated[i].photoBranche || ''), 'branche.jpg')
@@ -3250,6 +3252,7 @@ function ScanPage() {
       setAiMountType(a.mount_type || '')
 
       const detected: Partial<Record<FieldKey, string>> = {}
+      if (a.reference) detected.reference = a.reference
       if (a.shape) detected.forme = a.shape
       if (a.color) detected.couleur = normalizeColorValue(a.color)
       if (a.material) detected.matiere = a.material
