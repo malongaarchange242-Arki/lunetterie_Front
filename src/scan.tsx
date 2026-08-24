@@ -292,41 +292,33 @@ const ic = {
   alert: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></svg>,
 }
 
-// ------------------ MonturesManager (capture d'abord, revue ensuite) ---------
-function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemaining, sessionCode, sessionGenre, sessionGamme, onRecorded }: { onClose: () => void; initialBatchDesired?: number; autoStart?: boolean; sessionRemaining?: number; sessionCode?: string; sessionGenre?: string; sessionGamme?: string; onRecorded?: () => Promise<void> }) {
-  // Le brouillon local est marqué avec le code de la session qui l'a produit : sans
-  // ça, un lot abandonné (fermeture d'onglet, rechargement — pas le bouton Fermer,
-  // qui vide déjà tout) réapparaissait sur Revoir dès qu'on ouvrait un lot pour une
-  // AUTRE session, faussant au passage sa limite et le compteur affiché en haut.
-  const [montures, setMontures] = useState<any[]>(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('montures') || 'null')
-      if (raw && !Array.isArray(raw) && raw.sessionCode === (sessionCode || null) && Array.isArray(raw.items)) {
-        return raw.items
-      }
-    } catch { /* format inconnu : on repart d'un brouillon vide */ }
-    return []
-  })
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [viewMode, setViewMode] = useState<'upload'|'review'>('upload')
+// ------------------ MonturesManager (capture, vérification par monture) ------
+function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre, sessionGamme, onRecorded }: { onClose: () => void; sessionRemaining?: number; sessionCode?: string; sessionGenre?: string; sessionGamme?: string; onRecorded?: () => Promise<void> }) {
+  // Brouillon gardé en mémoire seulement, le temps de l'écran ouvert : plus de
+  // persistance dans localStorage. Elle rejouait un lot abandonné (fermeture
+  // d'onglet, rechargement) au prochain ouverture, parfois pour une autre session,
+  // ce qui faussait le compteur et la capacité affichés en haut.
+  const [montures, setMontures] = useState<any[]>([])
 
   // Camera batch capture local states
   const [cameraOnLocal, setCameraOnLocal] = useState(false)
   const videoRefLocal = useRef<HTMLVideoElement | null>(null)
   const streamRefLocal = useRef<MediaStream | null>(null)
   const [captureTargetLocal, setCaptureTargetLocal] = useState<'face'|'branche'>('face')
-  const [batchDesired, setBatchDesired] = useState<number | null>(null)
-  const [batchIndex, setBatchIndex] = useState(0)
   const [tempFace, setTempFace] = useState<string | null>(null)
   const [tempBranche, setTempBranche] = useState<string | null>(null)
 
-  // Le lot n'est plus plafonné à un nombre fixe : la capacité suit ce que le
-  // magasinier a demandé dans la modale (batchDesired), sinon le quota restant
-  // de la session, sinon un plafond large par défaut — plus de troncature
-  // silencieuse à 20 quand le lot demandé était plus grand.
-  const maxItems = (typeof batchDesired === 'number' && batchDesired > 0)
-    ? batchDesired
-    : (typeof sessionRemaining === 'number' && sessionRemaining > 0 ? sessionRemaining : 30)
+  // Taille de lot choisie par le magasinier, éditable à tout moment depuis l'écran
+  // (pas de modale bloquante). Sans elle, le lot n'était jamais borné que par le
+  // quota entier de la session — correct, mais imposé : impossible de s'arrêter
+  // à un sous-lot plus petit sans y penser à chaque monture.
+  const [batchTarget, setBatchTarget] = useState<number | null>(null)
+
+  // Le quota de la session reste la seule contrainte qu'on ne peut pas dépasser
+  // (impossible d'enregistrer plus de montures que la commande n'en attend). La
+  // taille de lot choisie, elle, ne fait que raccourcir la capture avant ce quota.
+  const quotaCap = (typeof sessionRemaining === 'number' && sessionRemaining > 0) ? sessionRemaining : Infinity
+  const maxItems = (typeof batchTarget === 'number' && batchTarget > 0) ? Math.min(batchTarget, quotaCap) : quotaCap
 
   // Étape 2 (vérification) par monture, avant de l'ajouter au lot — mêmes routes et
   // le même composant Field que l'enregistrement individuel (voir plus bas dans ce fichier).
@@ -350,10 +342,6 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
   const [uploadDone, setUploadDone] = useState(false)
 
   useEffect(() => {
-    localStorage.setItem('montures', JSON.stringify({ sessionCode: sessionCode || null, items: montures }))
-  }, [montures, sessionCode])
-
-  useEffect(() => {
     if (!sessionGenre && !sessionGamme) return
     setMontures(previous => previous.map(m => ({
       ...m,
@@ -362,19 +350,6 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
     })))
   }, [sessionGenre, sessionGamme])
 
-  // If local drafts exceed the known session remaining, trim them on mount
-  useEffect(() => {
-    if (typeof sessionRemaining === 'number' && sessionRemaining > 0 && montures.length > sessionRemaining) {
-      window.alert(`Les brouillons locaux dépassent la capacité restante (${sessionRemaining}). Ils seront tronqués.`)
-      setMontures(prev => prev.slice(0, sessionRemaining))
-      setCurrentIndex(0)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // debug mount
-  // removed debug logs
-
   const addMonture = () => {
     // Prevent adding beyond session remaining if known
     if (typeof sessionRemaining === 'number' && sessionRemaining > 0 && montures.length >= sessionRemaining) {
@@ -382,20 +357,8 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
       return
     }
     const newMonture = { id: Date.now(), photoFace: null, photoBranche: null, marque: '', couleur: '', matiere: '', reference: '', genre: sessionGenre || '', gamme: sessionGamme || '', notes: '' }
-    const updated = [...montures, newMonture]
+    const updated = [...montures, newMonture].slice(0, maxItems)
     setMontures(updated)
-    setCurrentIndex(updated.length - 1)
-  }
-
-  const handleImageUploadLocal = (montureId: number, type: 'face'|'branche', file: File | null) => {
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const data = e.target?.result as string
-      const updated = montures.map(m => m.id === montureId ? { ...m, [type === 'face' ? 'photoFace' : 'photoBranche']: data } : m)
-      setMontures(updated)
-    }
-    reader.readAsDataURL(file)
   }
 
   // Local camera helpers
@@ -443,17 +406,12 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
 
   useEffect(() => () => cancelCaptureLocal(), [])
 
-  // If an initial desired batch is provided from the parent, apply and optionally auto-start
+  // La caméra démarre dès l'ouverture de l'écran : plus de modale « combien de
+  // montures » à valider avant de pouvoir photographier la première.
   useEffect(() => {
-    if (typeof initialBatchDesired === 'number' && initialBatchDesired > 0) {
-      const capped = (typeof sessionRemaining === 'number' && sessionRemaining > 0) ? Math.min(initialBatchDesired, sessionRemaining) : initialBatchDesired
-      setBatchDesired(capped)
-    }
-    if (autoStart && initialBatchDesired && initialBatchDesired > 0) {
-      void startCameraLocal()
-    }
+    void startCameraLocal()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialBatchDesired, autoStart, sessionRemaining])
+  }, [])
 
   function snapshotLocal() {
     const v = videoRefLocal.current
@@ -596,7 +554,7 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
     }
 
     if (montures.length >= maxItems) {
-      window.alert('Le nombre de montures prévu est atteint.')
+      window.alert(maxItems === quotaCap ? 'Le quota de la session est atteint.' : 'La taille de lot choisie est atteinte — augmentez-la ou terminez le lot.')
       return
     }
 
@@ -616,9 +574,6 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
     const updated = [...montures, newM]
     setMontures(updated)
 
-    const nextIndex = batchIndex + 1
-    setBatchIndex(nextIndex)
-
     setTempFace(null)
     setTempBranche(null)
     setCaptureTargetLocal('face')
@@ -628,28 +583,15 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
     setVCollapsed({})
     setVInvalid({})
 
-    if (batchDesired && nextIndex >= batchDesired) {
-      setBatchDesired(null)
-      setBatchIndex(0)
+    // Seule la vraie contrainte — le quota de la session, quand il est connu —
+    // referme le lot toute seule. Sinon la capture continue jusqu'à ce que le
+    // magasinier clique lui-même sur « Terminer le lot ».
+    if (Number.isFinite(maxItems) && updated.length >= maxItems) {
       void runBatchUpload(updated)
     } else {
       void startCameraLocal()
     }
   }
-
-  const updateMonture = (montureId: number, field: string, value: any) => {
-    const updated = montures.map(m => m.id === montureId ? { ...m, [field]: value } : m)
-    setMontures(updated)
-  }
-
-  const deleteMontureLocal = (montureId: number) => {
-    const updated = montures.filter(m => m.id !== montureId)
-    setMontures(updated)
-    if (currentIndex >= updated.length && currentIndex > 0) setCurrentIndex(currentIndex - 1)
-  }
-
-  const goNext = () => { if (currentIndex < montures.length - 1) setCurrentIndex(currentIndex + 1) }
-  const goPrev = () => { if (currentIndex > 0) setCurrentIndex(currentIndex - 1) }
 
   // ── Envoi du lot ─────────────────────────────────────────────────────────────
   // Déclenché par « Terminer », le dernier « Confirmer » du lot : une monture à la
@@ -703,20 +645,26 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
       }
     }
     setUploadDone(true)
-    localStorage.removeItem('montures')
   }
 
-  const current = montures[currentIndex]
-  const isLastOfBatch = typeof batchDesired === 'number' && batchDesired > 0 && (batchIndex + 1) >= batchDesired
+  // Vrai seulement quand la prochaine monture confirmée épuiserait le quota
+  // connu de la session — sans quota connu, le lot ne se referme jamais tout seul.
+  const willReachQuota = Number.isFinite(maxItems) && montures.length + 1 >= maxItems
+  // Une monture en cours de capture ou de vérification n'est pas encore dans
+  // `montures` : sans ce garde-fou, « Terminer » ou « Fermer » la perdrait en silence.
+  const hasUnconfirmedCapture = verifying || Boolean(tempFace) || Boolean(tempBranche)
 
-  // Ferme et vide le brouillon local : sans ça, les montures d'un lot resteraient en
-  // cache et se compteraient dans la limite du prochain lot ouvert, qui la trouverait
-  // déjà atteinte avant même sa première monture.
   function closeAndReset() {
+    if (hasUnconfirmedCapture && !window.confirm('La monture en cours de capture n\'a pas été confirmée et sera perdue. Fermer quand même ?')) return
     if (montures.length > 0 && !window.confirm(`${montures.length} monture(s) non envoyée(s) seront perdues. Fermer quand même ?`)) return
     setMontures([])
-    localStorage.removeItem('montures')
     onClose()
+  }
+
+  function finishBatch() {
+    if (hasUnconfirmedCapture && !window.confirm('La monture en cours de capture n\'a pas été confirmée et sera perdue. Terminer quand même ?')) return
+    stopCameraStreamLocal()
+    void runBatchUpload(montures)
   }
 
   return (
@@ -729,30 +677,54 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Réception</p>
               <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-white">Capture en lot</h2>
             </div>
-            {typeof initialBatchDesired === 'number' && initialBatchDesired > 0 && (
-              <span className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-sm font-bold text-white shadow-sm">
-                Batch prévu : {initialBatchDesired}{typeof sessionRemaining === 'number' ? ` (reste : ${sessionRemaining})` : ''}
+            {Number.isFinite(quotaCap) && (
+              <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
+                Quota de la session : {quotaCap}
               </span>
             )}
+            {/* Taille du lot éditable à tout moment, pas une valeur imposée par la
+                session : elle ne fait que raccourcir la capture avant le quota,
+                jamais l'allonger au-delà. Vide = pas de sous-lot, on capture
+                jusqu'au quota (ou sans fin s'il n'y en a pas). */}
+            <label className="flex items-center gap-1.5 rounded-lg bg-[#2563eb]/10 px-3 py-1.5 text-xs font-bold text-[#2563eb]">
+              Taille du lot
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={Number.isFinite(quotaCap) ? quotaCap : undefined}
+                value={batchTarget ?? ''}
+                onChange={e => {
+                  const raw = e.target.value.trim()
+                  if (!raw) { setBatchTarget(null); return }
+                  const n = Number(raw)
+                  if (Number.isFinite(n) && n > 0) setBatchTarget(Math.trunc(n))
+                }}
+                placeholder={Number.isFinite(quotaCap) ? String(quotaCap) : '∞'}
+                className="w-14 rounded-md border border-[#2563eb]/30 bg-white px-1.5 py-0.5 text-xs font-bold text-[#2563eb] outline-none focus:border-[#2563eb] dark:bg-slate-900"
+              />
+            </label>
           </div>
-          <div className="flex w-full gap-2 sm:w-auto">
-            <Btn onClick={closeAndReset}>Fermer</Btn>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            {/* Le lot n'a plus de nombre imposé par défaut : c'est ce bouton qui le
+                termine, avec tout ce qui a déjà été confirmé, à n'importe quel moment. */}
+            <Btn
+              variant="success"
+              disabled={montures.length === 0}
+              onClick={finishBatch}
+              className="flex-1 sm:flex-none"
+            >
+              {ic.check()} Terminer le lot {montures.length > 0 ? `(${montures.length})` : ''}
+            </Btn>
+            <Btn onClick={closeAndReset} className="flex-1 sm:flex-none">Fermer</Btn>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 px-4 pt-4 sm:px-6">
-          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/40">
-            <button onClick={() => setViewMode('upload')} className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${viewMode === 'upload' ? 'bg-white text-[#2563eb] shadow-sm dark:bg-slate-800' : 'text-slate-500 dark:text-slate-400'}`}>Capture</button>
-            <button onClick={() => setViewMode('review')} className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${viewMode === 'review' ? 'bg-white text-[#2563eb] shadow-sm dark:bg-slate-800' : 'text-slate-500 dark:text-slate-400'}`}>Revoir ({montures.length})</button>
-          </div>
-          {typeof batchDesired === 'number' && batchDesired > 0 && (
-            <Pill tone="blue">Monture {Math.min(batchIndex + 1, batchDesired)}/{batchDesired}</Pill>
-          )}
-          <span className="ml-auto text-xs font-bold text-slate-400">{montures.length}/{maxItems}</span>
+          <span className="ml-auto text-xs font-bold text-slate-400">{montures.length}/{Number.isFinite(maxItems) ? maxItems : '∞'}</span>
         </div>
 
-        {viewMode === 'upload' && (
-          <div className="p-4 sm:p-6">
+        <div className="p-4 sm:p-6">
             {/* Le <video> ne peut pas être démonté entre les deux photos (le flux serait
                 perdu) : la vue de capture reste montée, juste masquée pendant la vérification. */}
             <div className={verifying ? 'hidden' : ''}>
@@ -912,125 +884,13 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
                   <Btn onClick={backToCaptureLocal}>{ic.arrowLeft()} Reprendre les photos</Btn>
                   {/* Sur la dernière monture du lot, ce même bouton termine et enregistre
                       tout le lot : plus de bouton « Envoyer » séparé. */}
-                  <Btn variant={isLastOfBatch ? 'success' : 'primary'} className="w-full sm:ml-auto sm:w-auto" onClick={confirmBatchMonture}>
-                    {ic.check()} {isLastOfBatch ? 'Terminer le lot →' : 'Confirmer et ajouter au lot →'}
+                  <Btn variant={willReachQuota ? 'success' : 'primary'} className="w-full sm:ml-auto sm:w-auto" onClick={confirmBatchMonture}>
+                    {ic.check()} {willReachQuota ? 'Confirmer et terminer le lot →' : 'Confirmer et ajouter au lot →'}
                   </Btn>
                 </div>
               </div>
             )}
           </div>
-        )}
-
-        {viewMode === 'review' && (
-          <div className="p-4 sm:p-6">
-            {!current ? (
-              <div className={`${CARD} flex flex-col items-center gap-2 p-10 text-center text-slate-400`}>
-                {ic.glasses('w-7 h-7')}
-                <p className="text-sm">Aucune monture</p>
-              </div>
-            ) : (
-              <div className={CARD}>
-                <CardHead
-                  icon={ic.check2('w-4 h-4')}
-                  title={`Monture ${currentIndex + 1} / ${montures.length}`}
-                  pill={<Pill tone="slate">Vérifiez les champs signalés</Pill>}
-                />
-                <div className="p-4">
-                  <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-                    <div>
-                      <div className="h-56 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
-                        {current.photoFace ? <img src={current.photoFace} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-xs text-slate-400">Pas de photo</div>}
-                      </div>
-                      <input type="file" accept="image/*" onChange={e => handleImageUploadLocal(current.id, 'face', e.target.files?.[0] || null)} className="mt-2 w-full text-[11px] text-slate-500 dark:text-slate-400" />
-                    </div>
-                    <div>
-                      <div className="h-56 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
-                        {current.photoBranche ? <img src={current.photoBranche} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-xs text-slate-400">Pas de photo</div>}
-                      </div>
-                      <input type="file" accept="image/*" onChange={e => handleImageUploadLocal(current.id, 'branche', e.target.files?.[0] || null)} className="mt-2 w-full text-[11px] text-slate-500 dark:text-slate-400" />
-                    </div>
-                  </div>
-                  <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Référence</label>
-                      <input value={current.reference || ''} onChange={e => updateMonture(current.id, 'reference', e.target.value)} className={INPUT} placeholder="Référence" />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Marque</label>
-                      <input value={current.marque || ''} onChange={e => updateMonture(current.id, 'marque', e.target.value)} className={INPUT} placeholder="Marque" />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Genre</label>
-                      <select value={current.genre || ''} onChange={e => updateMonture(current.id, 'genre', e.target.value)} className={`${SELECT} w-full`}>
-                        <option value="">À saisir</option>
-                        {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
-                      </select>
-                    </div>
-
-                    <div>
-                      <div className="mb-1 flex items-center justify-between">
-                        <label className="text-xs text-slate-500 dark:text-slate-400">Forme</label>
-                        {current.forme ? <Pill tone="green">{ic.check('w-3 h-3')} Détecté</Pill> : <Pill tone="slate">À saisir</Pill>}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <select value={current.forme || ''} onChange={e => updateMonture(current.id, 'forme', e.target.value)} className={`${SELECT} flex-1`}>
-                          <option value="">Sélectionner une forme</option>
-                          {FORMES.map(f => <option key={f} value={f}>{f}</option>)}
-                        </select>
-                        {current.forme ? <ShapeIcon name={current.forme} className="h-6 w-12 text-slate-400" /> : null}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="mb-1 flex items-center justify-between">
-                        <label className="text-xs text-slate-500 dark:text-slate-400">Couleur</label>
-                        {current.couleur ? <Pill tone="green">{ic.check('w-3 h-3')} Détecté</Pill> : <Pill tone="slate">À saisir</Pill>}
-                      </div>
-                      <input value={current.couleur || ''} onChange={e => updateMonture(current.id, 'couleur', e.target.value)} className={INPUT} placeholder="Couleur" />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Matière</label>
-                      <select value={current.matiere || ''} onChange={e => updateMonture(current.id, 'matiere', e.target.value)} className={`${SELECT} w-full`}>
-                        <option value="">Sélectionner une matière</option>
-                        {MATIERES.map(m => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Gamme</label>
-                      <select value={current.gamme || ''} onChange={e => updateMonture(current.id, 'gamme', e.target.value)} className={`${SELECT} w-full`}>
-                        <option value="">Sélectionner une gamme</option>
-                        <option value="classique">Classique</option>
-                        <option value="moyenne gamme">Moyenne gamme</option>
-                        <option value="luxe">Luxe</option>
-                        <option value="lecture">Lecture</option>
-                        <option value="solaire">Solaire</option>
-                        <option value="securite">Sécurité</option>
-                      </select>
-                      {current.gamme === 'luxe' && (
-                        <input value={current.prixCustom || ''} onChange={e => updateMonture(current.id, 'prixCustom', e.target.value)} placeholder="Prix (Luxe)" className={`${INPUT} mt-2`} />
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mb-4 flex items-center gap-4">
-                    <Btn onClick={goPrev} disabled={currentIndex === 0}>{ic.arrowLeft()} Précédent</Btn>
-                    <div className="flex gap-1.5">
-                      {montures.map((_, i) => (
-                        <button key={i} onClick={() => setCurrentIndex(i)} className={`h-2 rounded-full transition-all ${i === currentIndex ? 'w-5 bg-[#2563eb]' : 'w-2 bg-slate-200 dark:bg-slate-700'}`} />
-                      ))}
-                    </div>
-                    <Btn variant="primary" className="ml-auto" onClick={goNext} disabled={currentIndex === montures.length - 1}>Suivant →</Btn>
-                  </div>
-
-                  <button onClick={() => deleteMontureLocal(current.id)} className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Supprimer</button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
 
@@ -3508,9 +3368,6 @@ function ScanPage() {
   const [user, setUser] = useState<any>(null)
   const [screen, setScreen] = useState<Screen>('loading')
   const [showMonturesManager, setShowMonturesManager] = useState(false)
-  const [batchForManager, setBatchForManager] = useState<number|undefined>(undefined)
-  const [showBatchModal, setShowBatchModal] = useState(false)
-  const [batchModalValue, setBatchModalValue] = useState('')
 
   // Recherche + filtres de l'écran Historique : portés ici (pas dans HistoriqueScreen) pour
   // que TopBar puisse les afficher sur la même ligne que le titre.
@@ -4417,8 +4274,7 @@ function ScanPage() {
               // Le bouton lot ne doit jamais laisser le flux de l'enregistrement individuel
               // actif derrière la fenêtre : certains mobiles refusent alors le second flux.
               stopCamera()
-              setBatchModalValue('')
-              setShowBatchModal(true)
+              setShowMonturesManager(true)
             }}
           />
 
@@ -4711,8 +4567,7 @@ function ScanPage() {
                                 return
                               }
                               stopCamera()
-                              setBatchModalValue('')
-                              setShowBatchModal(true)
+                              setShowMonturesManager(true)
                             }}
                           >
                             {sessionFull
@@ -4747,47 +4602,13 @@ function ScanPage() {
           newLists={newLists}
         />
         {showMonturesManager && <MonturesManager
-          initialBatchDesired={batchForManager}
-          autoStart={Boolean(batchForManager)}
           sessionRemaining={session ? Math.max(0, (session.target || 0) - (session.registered || 0)) : undefined}
           sessionCode={session?.code}
           sessionGenre={session?.genre}
           sessionGamme={session?.gamme}
           onRecorded={incrementSession}
-          onClose={() => { setShowMonturesManager(false); setBatchForManager(undefined); void loadCommands(); }}
+          onClose={() => { setShowMonturesManager(false); void loadCommands(); }}
         />}
-        {showBatchModal && (
-          <div className="fixed inset-0 z-[10001] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
-            <div className="w-full max-w-sm rounded-xl bg-white p-4 dark:bg-slate-800 sm:p-6">
-              <h3 className="font-semibold mb-2">Capture en lot</h3>
-              <p className="text-sm text-slate-500 mb-4">Combien de montures allez-vous capturer ? (1–30)</p>
-              <input type="number" min={1} max={30} value={batchModalValue} onChange={e => setBatchModalValue(e.target.value)} className="w-full p-2 border rounded mb-4" />
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <button onClick={() => setShowBatchModal(false)} className="w-full rounded border px-3 py-2 sm:w-auto">Annuler</button>
-                <button onClick={() => {
-                  const n = Number(batchModalValue)
-                  if (!Number.isFinite(n) || n <= 0 || n > 30) { window.alert('Veuillez entrer un nombre entre 1 et 30'); return }
-                  // If session has a known target, ensure we don't exceed remaining slots
-                  if (session && session.target > 0) {
-                    const remaining = Math.max(0, session.target - session.registered)
-                    if (remaining <= 0) { window.alert('La session est pleine — impossible de démarrer un lot.'); return }
-                    if (n > remaining) {
-                      const ok = window.confirm(`Il ne reste que ${remaining} place(s) dans la session. Démarrer la capture pour ${remaining} monture(s) à la place ?`)
-                      if (!ok) return
-                      setBatchForManager(remaining)
-                    } else {
-                      setBatchForManager(n)
-                    }
-                  } else {
-                    setBatchForManager(n)
-                  }
-                  setShowBatchModal(false)
-                  setShowMonturesManager(true)
-                }} className="w-full rounded bg-indigo-600 px-3 py-2 text-white sm:w-auto">Démarrer</button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
