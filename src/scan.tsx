@@ -382,7 +382,7 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
       return
     }
     const newMonture = { id: Date.now(), photoFace: null, photoBranche: null, marque: '', couleur: '', matiere: '', reference: '', genre: sessionGenre || '', gamme: sessionGamme || '', notes: '' }
-    const updated = [...montures, newMonture].slice(0, maxItems)
+    const updated = [...montures, newMonture]
     setMontures(updated)
     setCurrentIndex(updated.length - 1)
   }
@@ -613,7 +613,7 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
       gamme: vForm.gamme,
       prixCustom: vForm.prixCustom,
     }
-    const updated = [...montures, newM].slice(0, maxItems)
+    const updated = [...montures, newM]
     setMontures(updated)
 
     const nextIndex = batchIndex + 1
