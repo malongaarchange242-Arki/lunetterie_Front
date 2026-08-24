@@ -423,6 +423,7 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
     return c.toDataURL('image/jpeg', 0.92)
   }
 
+  
   // ── Analyse IA d'une monture du lot ─────────────────────────────────────────
   // Mêmes routes et la même logique de détection que l'enregistrement individuel
   // (analyzeMonture / analyzeBranche / applyDetection plus bas dans ce fichier) :
