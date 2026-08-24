@@ -294,12 +294,21 @@ const ic = {
 
 // ------------------ MonturesManager (capture d'abord, revue ensuite) ---------
 function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemaining, sessionCode, sessionGenre, sessionGamme, onRecorded }: { onClose: () => void; initialBatchDesired?: number; autoStart?: boolean; sessionRemaining?: number; sessionCode?: string; sessionGenre?: string; sessionGamme?: string; onRecorded?: () => Promise<void> }) {
+  // Le brouillon local est marqué avec le code de la session qui l'a produit : sans
+  // ça, un lot abandonné (fermeture d'onglet, rechargement — pas le bouton Fermer,
+  // qui vide déjà tout) réapparaissait sur Revoir dès qu'on ouvrait un lot pour une
+  // AUTRE session, faussant au passage sa limite et le compteur affiché en haut.
   const [montures, setMontures] = useState<any[]>(() => {
-    try { return JSON.parse(localStorage.getItem('montures') || '[]') } catch { return [] }
+    try {
+      const raw = JSON.parse(localStorage.getItem('montures') || 'null')
+      if (raw && !Array.isArray(raw) && raw.sessionCode === (sessionCode || null) && Array.isArray(raw.items)) {
+        return raw.items
+      }
+    } catch { /* format inconnu : on repart d'un brouillon vide */ }
+    return []
   })
   const [currentIndex, setCurrentIndex] = useState(0)
   const [viewMode, setViewMode] = useState<'upload'|'review'>('upload')
-  const maxItems = 20
 
   // Camera batch capture local states
   const [cameraOnLocal, setCameraOnLocal] = useState(false)
@@ -311,7 +320,38 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
   const [tempFace, setTempFace] = useState<string | null>(null)
   const [tempBranche, setTempBranche] = useState<string | null>(null)
 
-  useEffect(() => { localStorage.setItem('montures', JSON.stringify(montures)) }, [montures])
+  // Le lot n'est plus plafonné à un nombre fixe : la capacité suit ce que le
+  // magasinier a demandé dans la modale (batchDesired), sinon le quota restant
+  // de la session, sinon un plafond large par défaut — plus de troncature
+  // silencieuse à 20 quand le lot demandé était plus grand.
+  const maxItems = (typeof batchDesired === 'number' && batchDesired > 0)
+    ? batchDesired
+    : (typeof sessionRemaining === 'number' && sessionRemaining > 0 ? sessionRemaining : 30)
+
+  // Étape 2 (vérification) par monture, avant de l'ajouter au lot — mêmes routes et
+  // le même composant Field que l'enregistrement individuel (voir plus bas dans ce fichier).
+  // Genre et gamme sont préremplis depuis la session, exactement comme resetAll() le fait
+  // pour l'enregistrement individuel : la commande reçue prime sur une saisie répétée.
+  const emptyVForm = (): VerifyForm => ({ ...EMPTY_FORM, genre: sessionGenre || '', gamme: sessionGamme || '' })
+  const [verifying, setVerifying] = useState(false)
+  const [vForm, setVForm] = useState<VerifyForm>(emptyVForm)
+  const [vSources, setVSources] = useState<Record<FieldKey, FieldSource>>(EMPTY_SOURCES)
+  const [vCollapsed, setVCollapsed] = useState<Record<string, boolean>>({})
+  const [vInvalid, setVInvalid] = useState<Record<string, boolean>>({})
+  const [vAnalyzing, setVAnalyzing] = useState(false)
+
+  // Envoi final du lot, déclenché par « Terminer » — file façon téléchargements,
+  // une monture à la fois.
+  const [uploading, setUploading] = useState(false)
+  const [uploadItems, setUploadItems] = useState<any[]>([])
+  const [uploadStatuses, setUploadStatuses] = useState<('pending' | 'uploading' | 'done' | 'error')[]>([])
+  const [uploadResults, setUploadResults] = useState<Record<number, any>>({})
+  const [uploadError, setUploadError] = useState('')
+  const [uploadDone, setUploadDone] = useState(false)
+
+  useEffect(() => {
+    localStorage.setItem('montures', JSON.stringify({ sessionCode: sessionCode || null, items: montures }))
+  }, [montures, sessionCode])
 
   useEffect(() => {
     if (!sessionGenre && !sessionGamme) return
@@ -378,17 +418,30 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
     }
   }
 
-  const stopCameraLocal = () => {
+  // Coupe juste le flux : utilisé en passant à la vérification, où la caméra n'est
+  // plus utile mais où les photos temporaires doivent rester affichées.
+  const stopCameraStreamLocal = () => {
     streamRefLocal.current?.getTracks().forEach(t => t.stop())
     streamRefLocal.current = null
     if (videoRefLocal.current) videoRefLocal.current.srcObject = null
     setCameraOnLocal(false)
+  }
+
+  // Abandon complet de la capture en cours (bouton « Arrêter », fermeture de l'écran).
+  const cancelCaptureLocal = () => {
+    stopCameraStreamLocal()
     setCaptureTargetLocal('face')
     setTempFace(null)
     setTempBranche(null)
+    // Sans ça, une détection déjà appliquée (référence, marque…) survivrait à
+    // l'abandon et pollueraient la vérification de la prochaine monture.
+    setVForm(emptyVForm())
+    setVSources(EMPTY_SOURCES)
+    setVCollapsed({})
+    setVInvalid({})
   }
 
-  useEffect(() => () => stopCameraLocal(), [])
+  useEffect(() => () => cancelCaptureLocal(), [])
 
   // If an initial desired batch is provided from the parent, apply and optionally auto-start
   useEffect(() => {
@@ -412,81 +465,175 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
     return c.toDataURL('image/jpeg', 0.92)
   }
 
-  async function analyzeBatchMonture(montureId: number, photoFace: string, photoBranche: string) {
-    setMontures(previous => previous.map(m => m.id === montureId ? { ...m, analysisStatus: 'Analyse IA en cours…' } : m))
+  // ── Analyse IA d'une monture du lot ─────────────────────────────────────────
+  // Mêmes routes et la même logique de détection que l'enregistrement individuel
+  // (analyzeMonture / analyzeBranche / applyDetection plus bas dans ce fichier) :
+  // un échec n'interrompt jamais la capture, les champs restent ouverts à la saisie.
+  function vApplyDetection(detected: Partial<Record<FieldKey, string>>) {
+    const keys = Object.keys(detected) as FieldKey[]
+    if (keys.length === 0) return
+    setVForm(previous => ({ ...previous, ...detected }))
+    setVSources(previous => {
+      const next = { ...previous }
+      keys.forEach(key => { next[key] = 'detected' })
+      return next
+    })
+    setVCollapsed(previous => {
+      const next = { ...previous }
+      keys.forEach(key => { next[key] = true })
+      return next
+    })
+  }
+
+  async function analyzeMontureLocal(dataUrl: string) {
+    setVAnalyzing(true)
     try {
       const body = new FormData()
-      body.append('image', dataURLtoBlob(photoFace), 'monture.jpg')
+      body.append('image', dataURLtoBlob(dataUrl), 'monture.jpg')
       const payload = await apiFetch('/inventory/analyze', { method: 'POST', body })
-      const analysis = payload.data?.analysis || payload.data?.result || payload.data || payload
-      setMontures(previous => previous.map(m => m.id === montureId ? {
-        ...m,
-        marque: analysis.brand || m.marque,
-        reference: analysis.reference || m.reference,
-        couleur: analysis.color ? normalizeColorValue(analysis.color) : m.couleur,
-        matiere: analysis.material || m.matiere,
-        forme: analysis.shape || m.forme,
-        genre: m.genre || (sessionGenre ? sessionGenre : normalizeSessionGenre(analysis.gender)),
-      } : m))
+      const a = payload.data || {}
+      const detected: Partial<Record<FieldKey, string>> = {}
+      if (a.reference) detected.reference = a.reference
+      if (a.shape) detected.forme = a.shape
+      if (a.color) detected.couleur = normalizeColorValue(a.color)
+      if (a.material) detected.matiere = a.material
+      if (a.brand) detected.marque = a.brand
+      // Le genre de la session décrit la commande reçue et prime sur une estimation IA.
+      if (a.gender && !sessionGenre) detected.genre = normalizeSessionGenre(a.gender)
+      vApplyDetection(detected)
     } catch (error) {
       console.warn('Analyse monture du lot indisponible', error)
-    }
-
-    try {
-      const body = new FormData()
-      body.append('image', dataURLtoBlob(photoBranche), 'branche.jpg')
-      const payload = await apiFetch('/inventory/analyze-branche', { method: 'POST', body })
-      const analysis = payload.data?.analysis || payload.data?.result || payload.data || payload
-      setMontures(previous => previous.map(m => m.id === montureId ? {
-        ...m,
-        marque: analysis.brand || m.marque,
-        reference: analysis.reference || m.reference,
-        analysisStatus: 'Analyse IA terminée',
-      } : m))
-    } catch (error) {
-      console.warn('Analyse branche du lot indisponible', error)
-      setMontures(previous => previous.map(m => m.id === montureId ? { ...m, analysisStatus: 'Analyse IA terminée, vérification nécessaire' } : m))
+    } finally {
+      setVAnalyzing(false)
     }
   }
 
-  async function captureLocal() {
+  async function analyzeBrancheLocal(dataUrl: string) {
+    setVAnalyzing(true)
+    try {
+      const body = new FormData()
+      body.append('image', dataURLtoBlob(dataUrl), 'branche.jpg')
+      const payload = await apiFetch('/inventory/analyze-branche', { method: 'POST', body })
+      const b = payload.data || {}
+      const detected: Partial<Record<FieldKey, string>> = {}
+      if (b.reference) detected.reference = b.reference
+      if (b.brand) detected.marque = b.brand
+      vApplyDetection(detected)
+    } catch (error) {
+      console.warn('OCR branche du lot indisponible', error)
+    } finally {
+      setVAnalyzing(false)
+    }
+  }
+
+  function captureSnapshotLocal() {
     const data = snapshotLocal()
     if (!data) return
     if (captureTargetLocal === 'face') {
       setTempFace(data)
+      void analyzeMontureLocal(data)
+    } else {
+      setTempBranche(data)
+      void analyzeBrancheLocal(data)
+    }
+  }
+
+  function retakeSnapshotLocal() {
+    if (captureTargetLocal === 'branche') setTempBranche(null)
+    else setTempFace(null)
+  }
+
+  function nextCaptureLocal() {
+    if (captureTargetLocal === 'face') {
+      if (!tempFace) return
       setCaptureTargetLocal('branche')
       return
     }
-    // branche
-    setTempBranche(data)
-    // create monture entry
-    // Respect sessionRemaining / batchDesired limits
-    const effectiveLimit = (typeof batchDesired === 'number' && batchDesired > 0) ? batchDesired : (typeof sessionRemaining === 'number' && sessionRemaining > 0 ? sessionRemaining : maxItems)
-    if (montures.length >= effectiveLimit) {
+    if (!tempBranche) return
+    // Le <video> reste monté (juste masqué) : c'est la vérification qui prend l'écran,
+    // la caméra n'a plus besoin de tourner pendant que le magasinier relit les champs.
+    stopCameraStreamLocal()
+    setVerifying(true)
+  }
+
+  function backToCaptureLocal() {
+    setVerifying(false)
+    void startCameraLocal()
+  }
+
+  function setVField(key: keyof VerifyForm, value: string) {
+    setVForm(previous => ({ ...previous, [key]: value }))
+    setVInvalid(previous => ({ ...previous, [key]: false }))
+    // Un champ détecté que l'on modifie devient « Corrigé » : la correction du
+    // magasinier vaut vérité face à la prédiction du modèle.
+    if (key in EMPTY_SOURCES) {
+      setVSources(previous => (previous[key as FieldKey] === 'detected'
+        ? { ...previous, [key]: 'corrected' }
+        : previous))
+    }
+  }
+
+  function confirmBatchMonture() {
+    const required: (keyof VerifyForm)[] = ['reference', 'marque', 'genre', 'forme', 'couleur', 'gamme']
+    const nextInvalid: Record<string, boolean> = {}
+    required.forEach(key => { if (!String(vForm[key]).trim()) nextInvalid[key] = true })
+
+    if (vForm.gamme === 'luxe') {
+      const numeric = Number(vForm.prixCustom.trim())
+      if (!vForm.prixCustom.trim() || !Number.isFinite(numeric) || numeric <= 0) nextInvalid.prixCustom = true
+    }
+
+    if (Object.keys(nextInvalid).length > 0) {
+      setVInvalid(nextInvalid)
+      // Un champ replié en erreur resterait invisible : on rouvre ce qui bloque.
+      setVCollapsed(previous => {
+        const next = { ...previous }
+        Object.keys(nextInvalid).forEach(key => { next[key] = false })
+        return next
+      })
+      window.alert('Veuillez remplir tous les champs obligatoires.')
+      return
+    }
+
+    if (montures.length >= maxItems) {
       window.alert('Le nombre de montures prévu est atteint.')
       return
     }
-    const newM = { id: Date.now() + Math.random(), photoFace: tempFace || null, photoBranche: data, marque: '', couleur: '', matiere: '', reference: '', genre: sessionGenre || '', gamme: sessionGamme || '', notes: '' }
+
+    const newM = {
+      id: Date.now() + Math.random(),
+      photoFace: tempFace || null,
+      photoBranche: tempBranche || null,
+      reference: vForm.reference.trim(),
+      marque: vForm.marque.trim(),
+      genre: vForm.genre,
+      forme: vForm.forme,
+      couleur: vForm.couleur,
+      matiere: vForm.matiere,
+      gamme: vForm.gamme,
+      prixCustom: vForm.prixCustom,
+    }
     const updated = [...montures, newM].slice(0, maxItems)
     setMontures(updated)
-    if (newM.photoFace && newM.photoBranche) {
-      void analyzeBatchMonture(newM.id, newM.photoFace, newM.photoBranche)
-    }
+
     const nextIndex = batchIndex + 1
     setBatchIndex(nextIndex)
+
     setTempFace(null)
     setTempBranche(null)
     setCaptureTargetLocal('face')
-    // continue or finish
+    setVerifying(false)
+    setVForm(emptyVForm())
+    setVSources(EMPTY_SOURCES)
+    setVCollapsed({})
+    setVInvalid({})
+
     if (batchDesired && nextIndex >= batchDesired) {
-      // La photo de chaque monture est déjà analysée dès sa capture ; on peut afficher
-      // la revue immédiatement sans attendre la fin des requêtes IA.
-      stopCameraLocal()
-      setViewMode('review')
       setBatchDesired(null)
       setBatchIndex(0)
+      void runBatchUpload(updated)
     } else {
-      // continue capturing: leave camera on
+      void startCameraLocal()
     }
   }
 
@@ -504,28 +651,22 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
   const goNext = () => { if (currentIndex < montures.length - 1) setCurrentIndex(currentIndex + 1) }
   const goPrev = () => { if (currentIndex > 0) setCurrentIndex(currentIndex - 1) }
 
-  // Upload to server: reuse existing apiFetch/form data format similar to saveRecord
-  const uploadAllToServer = async (stationId: string, sessionCode?: string) => {
-    if (montures.length === 0) return
-    // propose des emplacements avant l'envoi
-    try {
-      for (const m of montures) {
-        try {
-          const payload = await apiFetch(`/inventory/storage/next-free?station_id=${stationId}&zone=STOCK`)
-          m.previewLocation = payload.data?.code || '—'
-        } catch (err) {
-          m.previewLocation = '—'
-        }
-      }
-    } catch (err) {
-      console.warn('Erreur en demandant les emplacements', err)
-    }
+  // ── Envoi du lot ─────────────────────────────────────────────────────────────
+  // Déclenché par « Terminer », le dernier « Confirmer » du lot : une monture à la
+  // fois, dans l'ordre, pour que la liste ci-dessous puisse suivre laquelle part en
+  // premier (comme une file de téléchargements) plutôt qu'un seul envoi groupé opaque.
+  const runBatchUpload = async (items: any[]) => {
+    if (items.length === 0) return
+    const stationId = stationIdOf(JSON.parse(localStorage.getItem('user') || '{}'))
+    setUploadItems(items)
+    setUploadStatuses(items.map(() => 'pending' as const))
+    setUploadError('')
+    setUploadDone(false)
+    setUploading(true)
 
-    const summary = montures.map((m, i) => `${i+1}. ${m.reference || '—'} → ${m.previewLocation || '—'}`).join('\n')
-    if (!window.confirm(`Emplacements proposés :\n\n${summary}\n\nConfirmer l'envoi ?`)) return
-
-    const recorded: any[] = []
-    for (const m of montures) {
+    for (let i = 0; i < items.length; i++) {
+      const m = items[i]
+      setUploadStatuses(previous => previous.map((s, idx) => idx === i ? 'uploading' : s))
       try {
         const body = new FormData()
         if (m.photoFace) body.append('image', dataURLtoBlob(m.photoFace), 'monture.jpg')
@@ -548,205 +689,343 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
         body.append('mount_type', '')
         const payload = await apiFetch('/inventory/reception', { method: 'POST', body })
         const data = payload.data || {}
-        // keep returned barcode / emplacement
-        recorded.push(data)
-        m.uploadResult = data
         if (onRecorded) await onRecorded()
-      } catch (err) {
+        setUploadStatuses(previous => previous.map((s, idx) => idx === i ? 'done' : s))
+        setUploadResults(previous => ({ ...previous, [m.id]: data }))
+        // Retirée des brouillons dès son enregistrement : un échec plus loin dans le
+        // lot ne la fait pas repartir en double si le magasinier relance l'envoi.
+        setMontures(previous => previous.filter(x => x.id !== m.id))
+      } catch (err: any) {
         console.error('upload error', err)
-        window.alert('Erreur lors de l\'upload — vérifiez votre connexion et réessayez')
+        setUploadStatuses(previous => previous.map((s, idx) => idx === i ? 'error' : s))
+        setUploadError(`Échec sur la monture #${i + 1}${m.reference ? ` (${m.reference})` : ''} : ${err?.message || 'vérifiez votre connexion et réessayez'}`)
         return
       }
     }
-    // on peut vider les montures après upload
-    const codes = recorded.map((r,i) => String(r.barcode || r.id || r.code || `#${i+1}`)).join('\n')
-    setMontures([])
+    setUploadDone(true)
     localStorage.removeItem('montures')
-    window.alert(`${recorded.length} monture(s) envoyée(s)\nCodes :\n${codes}`)
-    onClose()
   }
 
   const current = montures[currentIndex]
+  const isLastOfBatch = typeof batchDesired === 'number' && batchDesired > 0 && (batchIndex + 1) >= batchDesired
+
+  // Ferme et vide le brouillon local : sans ça, les montures d'un lot resteraient en
+  // cache et se compteraient dans la limite du prochain lot ouvert, qui la trouverait
+  // déjà atteinte avant même sa première monture.
+  function closeAndReset() {
+    if (montures.length > 0 && !window.confirm(`${montures.length} monture(s) non envoyée(s) seront perdues. Fermer quand même ?`)) return
+    setMontures([])
+    localStorage.removeItem('montures')
+    onClose()
+  }
 
   return (
     <div className="fixed inset-0 z-9999 overflow-y-auto bg-black/50 p-2 sm:p-6">
       <div className="mx-auto flex min-h-full w-full max-w-5xl items-start justify-center py-2 sm:py-6">
       <div className="w-full overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-800">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4 dark:border-slate-700 sm:p-6">
-          <h2 className="text-lg font-bold">Capture en lot</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5 dark:border-slate-700 sm:px-6">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Réception</p>
+              <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-white">Capture en lot</h2>
+            </div>
+            {typeof initialBatchDesired === 'number' && initialBatchDesired > 0 && (
+              <span className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-sm font-bold text-white shadow-sm">
+                Batch prévu : {initialBatchDesired}{typeof sessionRemaining === 'number' ? ` (reste : ${sessionRemaining})` : ''}
+              </span>
+            )}
+          </div>
           <div className="flex w-full gap-2 sm:w-auto">
-            <button onClick={() => uploadAllToServer(stationIdOf(JSON.parse(localStorage.getItem('user')||'{}')), sessionCode)} className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white sm:flex-none">Envoyer le lot</button>
-            <button onClick={onClose} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold dark:border-slate-700">Fermer</button>
+            <Btn onClick={closeAndReset}>Fermer</Btn>
           </div>
         </div>
 
-        {/* debug banner when opened with batch */}
-        {initialBatchDesired ? (
-          <div className="mb-3 p-2 rounded bg-yellow-100 text-sm text-yellow-800">Ouvert pour capture en lot : {initialBatchDesired} (autoStart: {autoStart ? 'oui' : 'non'})</div>
-        ) : null}
-
-              <div className="mb-4 flex flex-wrap items-center gap-2 p-4 pb-0 sm:p-6 sm:pb-0">
-                <button onClick={() => setViewMode('upload')} className={`px-4 py-2 rounded ${viewMode==='upload'?'bg-indigo-600 text-white':'bg-gray-100'}`}>Upload</button>
-                <button onClick={() => setViewMode('review')} className={`px-4 py-2 rounded ${viewMode==='review'?'bg-indigo-600 text-white':'bg-gray-100'}`}>Revoir ({montures.length})</button>
-                <div className="ml-auto text-sm font-semibold text-slate-500">{montures.length}/{maxItems}</div>
-              </div>
+        <div className="flex flex-wrap items-center gap-3 px-4 pt-4 sm:px-6">
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/40">
+            <button onClick={() => setViewMode('upload')} className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${viewMode === 'upload' ? 'bg-white text-[#2563eb] shadow-sm dark:bg-slate-800' : 'text-slate-500 dark:text-slate-400'}`}>Capture</button>
+            <button onClick={() => setViewMode('review')} className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${viewMode === 'review' ? 'bg-white text-[#2563eb] shadow-sm dark:bg-slate-800' : 'text-slate-500 dark:text-slate-400'}`}>Revoir ({montures.length})</button>
+          </div>
+          {typeof batchDesired === 'number' && batchDesired > 0 && (
+            <Pill tone="blue">Monture {Math.min(batchIndex + 1, batchDesired)}/{batchDesired}</Pill>
+          )}
+          <span className="ml-auto text-xs font-bold text-slate-400">{montures.length}/{maxItems}</span>
+        </div>
 
         {viewMode === 'upload' && (
-          <div>
-            <video
-              ref={videoRefLocal}
-              autoPlay
-              playsInline
-              muted
-              className={`mx-4 mb-4 aspect-video w-[calc(100%-2rem)] rounded-xl bg-black object-cover sm:mx-6 sm:w-[calc(100%-3rem)] ${cameraOnLocal ? '' : 'hidden'}`}
-            />
-            {!cameraOnLocal && (
-              <div className="mx-4 mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900 dark:bg-indigo-950/30 sm:mx-6">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white">Caméra de capture</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Activez la caméra pour photographier les montures du lot.</p>
+          <div className="p-4 sm:p-6">
+            {/* Le <video> ne peut pas être démonté entre les deux photos (le flux serait
+                perdu) : la vue de capture reste montée, juste masquée pendant la vérification. */}
+            <div className={verifying ? 'hidden' : ''}>
+              <CaptureCard
+                target={captureTargetLocal === 'face' ? 'monture' : 'branche'}
+                photo={captureTargetLocal === 'face' ? tempFace : tempBranche}
+                cameraOn={cameraOnLocal}
+                videoRef={videoRefLocal}
+                analyzing={false}
+                onStart={() => void startCameraLocal()}
+                onStop={cancelCaptureLocal}
+                onCapture={captureSnapshotLocal}
+                onRetake={retakeSnapshotLocal}
+                onNext={nextCaptureLocal}
+              />
+
+              {captureTargetLocal === 'branche' && tempFace && (
+                <div className="mt-4 flex items-center gap-2">
+                  <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                    <img src={tempFace} className="h-full w-full object-cover" alt="Monture" />
+                    <span className="absolute bottom-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#16a34a] text-white">{ic.check('w-2.5 h-2.5')}</span>
                   </div>
-                  <button onClick={() => void startCameraLocal()} className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white sm:w-auto">Activer la caméra</button>
+                  <p className="text-xs text-slate-400">Photo de la monture déjà capturée · photographiez la branche</p>
                 </div>
-              </div>
-            )}
-            {cameraOnLocal && (
-              <div className="mb-4 px-4 sm:px-6">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-2">
-                      <div className="font-medium">Prise en lot: {batchDesired ?? '—'}</div>
-                      <div className="text-sm text-slate-500">Photo actuelle: {captureTargetLocal}</div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button onClick={()=>captureLocal()} className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white sm:flex-none">Prendre photo</button>
-                      <button onClick={()=>{ if (captureTargetLocal==='branche') { setTempBranche(null); setCaptureTargetLocal('face') } else { setTempFace(null) } }} className="rounded-lg border px-3 py-2 text-sm font-semibold">Reprendre</button>
-                      <button onClick={()=>stopCameraLocal()} className="rounded-lg border px-3 py-2 text-sm font-semibold">Arrêter</button>
-                    </div>
-                    <div className="mt-2">
-                      {tempFace && <img src={tempFace} className="w-24 h-24 object-cover rounded mr-2 inline" />}
-                      {tempBranche && <img src={tempBranche} className="w-24 h-24 object-cover rounded inline" />}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {montures.length===0 ? (
-              <div className="p-6 text-center">
-                <p className="text-gray-500">Aucune monture — commencez par ajouter</p>
-                <button onClick={addMonture} className="mt-4 bg-indigo-600 text-white px-4 py-2 rounded">+ Ajouter</button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-3">
-                {montures.map((m, idx) => (
-                  <div key={m.id} className="bg-slate-50 p-3 rounded">
-                    <div className="flex items-center justify-between gap-2 font-bold mb-2">
-                      <span>Monture #{idx + 1}</span>
-                      {m.analysisStatus && <span className="text-[10px] font-semibold text-indigo-600">{m.analysisStatus}</span>}
-                    </div>
-                    <div className="mb-2">
-                      {m.photoFace ? <img src={m.photoFace} className="w-full h-28 object-cover rounded"/> : <div className="w-full h-28 bg-gray-100 rounded flex items-center justify-center">Pas de photo</div>}
-                      <input type="file" accept="image/*" onChange={e=>handleImageUploadLocal(m.id,'face', e.target.files?.[0]||null)} className="w-full mt-2" />
-                    </div>
-                    <div className="mb-2">
-                      {m.photoBranche ? <img src={m.photoBranche} className="w-full h-20 object-cover rounded"/> : <div className="w-full h-20 bg-gray-100 rounded flex items-center justify-center">Pas de photo</div>}
-                      <input type="file" accept="image/*" onChange={e=>handleImageUploadLocal(m.id,'branche', e.target.files?.[0]||null)} className="w-full mt-2" />
-                    </div>
-                    <button onClick={()=>deleteMontureLocal(m.id)} className="w-full bg-red-100 text-red-600 py-1 rounded">Supprimer</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="mt-4 text-center">
-              {montures.length < maxItems && <button onClick={addMonture} className="bg-indigo-600 text-white px-4 py-2 rounded">+ Ajouter ({montures.length}/{maxItems})</button>}
+              )}
+
+              {montures.length < maxItems && (
+                <button onClick={addMonture} className="mt-4 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                  {ic.plus('w-3.5 h-3.5')} Ajouter une monture sans photo
+                </button>
+              )}
             </div>
+
+            {verifying && (
+              <div className={CARD}>
+                <CardHead
+                  icon={ic.check2('w-4 h-4')}
+                  title="Étape 2 · Vérification"
+                  pill={<Pill tone={vAnalyzing ? 'blue' : 'slate'}>{vAnalyzing ? 'Analyse IA en cours…' : 'Vérifiez les champs signalés'}</Pill>}
+                />
+
+                <div className="grid gap-4 p-4 lg:grid-cols-[220px_1fr]">
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+                    <PhotoBox url={tempFace} label="Monture" />
+                    <PhotoBox url={tempBranche} label="Branche" />
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <Field
+                      icon={ic.tag()} label="Référence" source={vSources.reference}
+                      collapsed={vCollapsed.reference} summary={vForm.reference} invalid={vInvalid.reference}
+                      onExpand={() => setVCollapsed(p => ({ ...p, reference: false }))}
+                    >
+                      <input type="text" value={vForm.reference} placeholder="RB2180-001" className={INPUT} onChange={e => setVField('reference', e.target.value)} />
+                    </Field>
+
+                    <Field
+                      icon={ic.building()} label="Marque" source={vSources.marque}
+                      collapsed={vCollapsed.marque} summary={vForm.marque} invalid={vInvalid.marque}
+                      onExpand={() => setVCollapsed(p => ({ ...p, marque: false }))}
+                    >
+                      <input type="text" value={vForm.marque} placeholder="Ray-Ban" className={INPUT} onChange={e => setVField('marque', e.target.value)} />
+                    </Field>
+
+                    <Field
+                      icon={ic.gender()} label="Genre" source={vSources.genre}
+                      collapsed={vCollapsed.genre} summary={vForm.genre} invalid={vInvalid.genre}
+                      onExpand={() => setVCollapsed(p => ({ ...p, genre: false }))}
+                    >
+                      <select value={vForm.genre} className={INPUT} onChange={e => setVField('genre', e.target.value)}>
+                        <option value="">Sélectionner un genre</option>
+                        {GENRES.map(genre => <option key={genre} value={genre}>{genre}</option>)}
+                      </select>
+                    </Field>
+
+                    <Field
+                      icon={ic.shapes()} label="Forme" source={vSources.forme}
+                      collapsed={vCollapsed.forme} summary={vForm.forme} invalid={vInvalid.forme}
+                      onExpand={() => setVCollapsed(p => ({ ...p, forme: false }))}
+                    >
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
+                        {FORMES.map(forme => {
+                          const selected = vForm.forme === forme
+                          return (
+                            <button
+                              key={forme}
+                              type="button"
+                              onClick={() => setVField('forme', forme)}
+                              className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-[11px] font-semibold transition-all ${selected
+                                ? 'border-[#2563eb] bg-[#2563eb]/10 text-[#2563eb]'
+                                : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'}`}
+                            >
+                              <ShapeIcon name={forme} />
+                              <span className="text-center leading-tight">{forme === 'Oeil de chat' ? 'Œil de chat' : forme}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </Field>
+
+                    <Field
+                      icon={ic.palette()} label="Couleur" source={vSources.couleur}
+                      collapsed={vCollapsed.couleur} summary={vForm.couleur} invalid={vInvalid.couleur}
+                      onExpand={() => setVCollapsed(p => ({ ...p, couleur: false }))}
+                    >
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
+                        {COULEURS.map(({ value, swatch }) => {
+                          const selected = vForm.couleur === value
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setVField('couleur', value)}
+                              className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition-all ${selected
+                                ? 'border-[#2563eb] bg-[#2563eb]/10 text-[#2563eb]'
+                                : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'}`}
+                            >
+                              <span className="h-4 w-4 flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-600" style={{ background: swatch }} />
+                              <span className="truncate">{value}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </Field>
+
+                    <Field
+                      icon={ic.cube()} label="Matière" source={vSources.matiere}
+                      collapsed={vCollapsed.matiere} summary={vForm.matiere}
+                      onExpand={() => setVCollapsed(p => ({ ...p, matiere: false }))}
+                    >
+                      <select value={vForm.matiere} className={INPUT} onChange={e => setVField('matiere', e.target.value)}>
+                        <option value="">Sélectionner une matière</option>
+                        {MATIERES.map(matiere => <option key={matiere} value={matiere}>{matiere}</option>)}
+                      </select>
+                    </Field>
+
+                    {/* La gamme n'est jamais détectée : toujours ouverte. */}
+                    <Field icon={ic.banknote()} label="Gamme" invalid={vInvalid.gamme || vInvalid.prixCustom}>
+                      <select value={vForm.gamme} className={INPUT} onChange={e => setVField('gamme', e.target.value)}>
+                        <option value="">Sélectionner une gamme</option>
+                        <option value="classique">Classique</option>
+                        <option value="moyenne gamme">Moyenne gamme</option>
+                        <option value="luxe">Luxe</option>
+                      </select>
+                      {vForm.gamme === 'luxe' && (
+                        <input
+                          type="text" inputMode="numeric" placeholder="Prix en FCFA"
+                          value={vForm.prixCustom} className={`${INPUT} mt-2`}
+                          onChange={e => setVField('prixCustom', e.target.value)}
+                        />
+                      )}
+                    </Field>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700">
+                  <Btn onClick={backToCaptureLocal}>{ic.arrowLeft()} Reprendre les photos</Btn>
+                  {/* Sur la dernière monture du lot, ce même bouton termine et enregistre
+                      tout le lot : plus de bouton « Envoyer » séparé. */}
+                  <Btn variant={isLastOfBatch ? 'success' : 'primary'} className="ml-auto" onClick={confirmBatchMonture}>
+                    {ic.check()} {isLastOfBatch ? 'Terminer le lot →' : 'Confirmer et ajouter au lot →'}
+                  </Btn>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {viewMode === 'review' && (
-          <div>
-            {!current ? <div className="p-6 text-center">Aucune monture</div> : (
-              <div>
-                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-                  <div>{current.photoFace ? <img src={current.photoFace} className="w-full h-80 object-cover rounded"/> : <div className="w-full h-80 bg-gray-100 rounded flex items-center justify-center">Pas de photo</div>}</div>
-                  <div>{current.photoBranche ? <img src={current.photoBranche} className="w-full h-80 object-cover rounded"/> : <div className="w-full h-80 bg-gray-100 rounded flex items-center justify-center">Pas de photo</div>}</div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Référence</label>
-                    <input value={current.reference||''} onChange={e=>updateMonture(current.id,'reference',e.target.value)} className="w-full p-2 border rounded" placeholder="Référence" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Marque</label>
-                    <input value={current.marque||''} onChange={e=>updateMonture(current.id,'marque',e.target.value)} className="w-full p-2 border rounded" placeholder="Marque" />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Genre</label>
-                    <select value={current.genre||''} onChange={e=>updateMonture(current.id,'genre',e.target.value)} className="w-full p-2 border rounded">
-                      <option value="">À saisir</option>
-                      {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs text-slate-500">Forme</label>
-                      {current.forme ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Détecté</span> : <span className="text-xs text-slate-400">À saisir</span>}
+          <div className="p-4 sm:p-6">
+            {!current ? (
+              <div className={`${CARD} flex flex-col items-center gap-2 p-10 text-center text-slate-400`}>
+                {ic.glasses('w-7 h-7')}
+                <p className="text-sm">Aucune monture</p>
+              </div>
+            ) : (
+              <div className={CARD}>
+                <CardHead
+                  icon={ic.check2('w-4 h-4')}
+                  title={`Monture ${currentIndex + 1} / ${montures.length}`}
+                  pill={<Pill tone="slate">Vérifiez les champs signalés</Pill>}
+                />
+                <div className="p-4">
+                  <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                    <div>
+                      <div className="h-56 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                        {current.photoFace ? <img src={current.photoFace} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-xs text-slate-400">Pas de photo</div>}
+                      </div>
+                      <input type="file" accept="image/*" onChange={e => handleImageUploadLocal(current.id, 'face', e.target.files?.[0] || null)} className="mt-2 w-full text-[11px] text-slate-500 dark:text-slate-400" />
                     </div>
-                    <div className="flex items-center gap-3">
-                      <select value={current.forme||''} onChange={e=>updateMonture(current.id,'forme',e.target.value)} className="flex-1 p-2 border rounded">
-                        <option value="">Sélectionner une forme</option>
-                        {FORMES.map(f => <option key={f} value={f}>{f}</option>)}
+                    <div>
+                      <div className="h-56 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                        {current.photoBranche ? <img src={current.photoBranche} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-xs text-slate-400">Pas de photo</div>}
+                      </div>
+                      <input type="file" accept="image/*" onChange={e => handleImageUploadLocal(current.id, 'branche', e.target.files?.[0] || null)} className="mt-2 w-full text-[11px] text-slate-500 dark:text-slate-400" />
+                    </div>
+                  </div>
+                  <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Référence</label>
+                      <input value={current.reference || ''} onChange={e => updateMonture(current.id, 'reference', e.target.value)} className={INPUT} placeholder="Référence" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Marque</label>
+                      <input value={current.marque || ''} onChange={e => updateMonture(current.id, 'marque', e.target.value)} className={INPUT} placeholder="Marque" />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Genre</label>
+                      <select value={current.genre || ''} onChange={e => updateMonture(current.id, 'genre', e.target.value)} className={`${SELECT} w-full`}>
+                        <option value="">À saisir</option>
+                        {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
                       </select>
-                      {current.forme ? <ShapeIcon name={current.forme} className="w-12 h-6" /> : null}
+                    </div>
+
+                    <div>
+                      <div className="mb-1 flex items-center justify-between">
+                        <label className="text-xs text-slate-500 dark:text-slate-400">Forme</label>
+                        {current.forme ? <Pill tone="green">{ic.check('w-3 h-3')} Détecté</Pill> : <Pill tone="slate">À saisir</Pill>}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <select value={current.forme || ''} onChange={e => updateMonture(current.id, 'forme', e.target.value)} className={`${SELECT} flex-1`}>
+                          <option value="">Sélectionner une forme</option>
+                          {FORMES.map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                        {current.forme ? <ShapeIcon name={current.forme} className="h-6 w-12 text-slate-400" /> : null}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-1 flex items-center justify-between">
+                        <label className="text-xs text-slate-500 dark:text-slate-400">Couleur</label>
+                        {current.couleur ? <Pill tone="green">{ic.check('w-3 h-3')} Détecté</Pill> : <Pill tone="slate">À saisir</Pill>}
+                      </div>
+                      <input value={current.couleur || ''} onChange={e => updateMonture(current.id, 'couleur', e.target.value)} className={INPUT} placeholder="Couleur" />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Matière</label>
+                      <select value={current.matiere || ''} onChange={e => updateMonture(current.id, 'matiere', e.target.value)} className={`${SELECT} w-full`}>
+                        <option value="">Sélectionner une matière</option>
+                        {MATIERES.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Gamme</label>
+                      <select value={current.gamme || ''} onChange={e => updateMonture(current.id, 'gamme', e.target.value)} className={`${SELECT} w-full`}>
+                        <option value="">Sélectionner une gamme</option>
+                        <option value="classique">Classique</option>
+                        <option value="moyenne gamme">Moyenne gamme</option>
+                        <option value="luxe">Luxe</option>
+                        <option value="lecture">Lecture</option>
+                        <option value="solaire">Solaire</option>
+                        <option value="securite">Sécurité</option>
+                      </select>
+                      {current.gamme === 'luxe' && (
+                        <input value={current.prixCustom || ''} onChange={e => updateMonture(current.id, 'prixCustom', e.target.value)} placeholder="Prix (Luxe)" className={`${INPUT} mt-2`} />
+                      )}
                     </div>
                   </div>
 
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs text-slate-500">Couleur</label>
-                      {current.couleur ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Détecté</span> : <span className="text-xs text-slate-400">À saisir</span>}
+                  <div className="mb-4 flex items-center gap-4">
+                    <Btn onClick={goPrev} disabled={currentIndex === 0}>{ic.arrowLeft()} Précédent</Btn>
+                    <div className="flex gap-1.5">
+                      {montures.map((_, i) => (
+                        <button key={i} onClick={() => setCurrentIndex(i)} className={`h-2 rounded-full transition-all ${i === currentIndex ? 'w-5 bg-[#2563eb]' : 'w-2 bg-slate-200 dark:bg-slate-700'}`} />
+                      ))}
                     </div>
-                    <input value={current.couleur||''} onChange={e=>updateMonture(current.id,'couleur',e.target.value)} className="w-full p-2 border rounded" placeholder="Couleur" />
+                    <Btn variant="primary" className="ml-auto" onClick={goNext} disabled={currentIndex === montures.length - 1}>Suivant →</Btn>
                   </div>
 
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Matière</label>
-                    <select value={current.matiere||''} onChange={e=>updateMonture(current.id,'matiere',e.target.value)} className="w-full p-2 border rounded">
-                      <option value="">Sélectionner une matière</option>
-                      {MATIERES.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Gamme</label>
-                    <select value={current.gamme||''} onChange={e=>updateMonture(current.id,'gamme',e.target.value)} className="w-full p-2 border rounded">
-                      <option value="">Sélectionner une gamme</option>
-                      <option value="classique">Classique</option>
-                      <option value="moyenne gamme">Moyenne gamme</option>
-                      <option value="luxe">Luxe</option>
-                      <option value="lecture">Lecture</option>
-                      <option value="solaire">Solaire</option>
-                      <option value="securite">Sécurité</option>
-                      <option value="lecture">Lecture</option>
-                      <option value="solaire">Solaire</option>
-                      <option value="securite">Sécurité</option>
-                    </select>
-                    {current.gamme === 'luxe' && (
-                      <input value={current.prixCustom||''} onChange={e=>updateMonture(current.id,'prixCustom',e.target.value)} placeholder="Prix (Luxe)" className="mt-2 w-full p-2 border rounded" />
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <button onClick={goPrev} disabled={currentIndex===0} className="px-4 py-2 rounded bg-gray-200">Précédent</button>
-                  <div className="flex gap-2">{montures.map((_,i)=>(<button key={i} onClick={()=>setCurrentIndex(i)} className={`w-3 h-3 rounded-full ${i===currentIndex?'bg-indigo-600':'bg-gray-300'}`}/>))}</div>
-                  <button onClick={goNext} disabled={currentIndex===montures.length-1} className="px-4 py-2 rounded bg-indigo-600 text-white ml-auto">Suivant</button>
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <button onClick={()=>deleteMontureLocal(current.id)} className="bg-red-100 text-red-600 px-3 py-2 rounded">Supprimer</button>
-                  <button onClick={()=>{ setMontures(prev=>{ const copy=prev.slice(); copy[currentIndex] = {...copy[currentIndex]}; return copy }) }} className="bg-gray-100 px-3 py-2 rounded">Sauvegarder local</button>
+                  <button onClick={() => deleteMontureLocal(current.id)} className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">Supprimer</button>
                 </div>
               </div>
             )}
@@ -754,6 +1033,57 @@ function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemai
         )}
       </div>
     </div>
+
+    {uploading && (
+      <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/70 p-4">
+        <div className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-800" style={{ maxHeight: '85vh' }}>
+          <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-700">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              {uploadDone ? 'Lot enregistré' : uploadError ? "Envoi interrompu" : 'Enregistrement du lot…'}
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              {uploadStatuses.filter(s => s === 'done').length} / {uploadStatuses.length} monture(s) envoyée(s)
+            </p>
+          </div>
+
+          <ul className="divide-y divide-slate-100 overflow-y-auto dark:divide-slate-700">
+            {uploadItems.map((m, i) => (
+              <li key={m.id} className={`flex items-center gap-3 px-5 py-3 transition-colors ${uploadStatuses[i] === 'uploading' ? 'bg-[#2563eb]/5' : ''}`}>
+                <UploadStatusIcon status={uploadStatuses[i] || 'pending'} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">#{i + 1} {m.reference || 'Monture'}</p>
+                  <p className="truncate text-xs text-slate-400">
+                    {uploadStatuses[i] === 'uploading' ? 'Envoi en cours…'
+                      : uploadStatuses[i] === 'done' ? (uploadResults[m.id]?.location_code || uploadResults[m.id]?.location || m.marque || 'Enregistrée')
+                      : uploadStatuses[i] === 'error' ? 'Échec'
+                      : 'En attente'}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {uploadError && (
+            <div className="mx-5 mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-400">
+              {uploadError}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 border-t border-slate-100 px-5 py-4 dark:border-slate-700">
+            {uploadDone ? (
+              <Btn variant="success" className="ml-auto" onClick={closeAndReset}>{ic.check()} Terminé</Btn>
+            ) : uploadError ? (
+              <>
+                <Btn onClick={() => setUploading(false)}>Fermer</Btn>
+                <Btn variant="primary" className="ml-auto" onClick={() => void runBatchUpload(montures)}>{ic.refresh()} Réessayer</Btn>
+              </>
+            ) : (
+              <span className="text-xs text-slate-400">Ne fermez pas cette fenêtre…</span>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   )
 }
@@ -1603,6 +1933,27 @@ function PhotoBox({ url, label }: { url: string | null; label: string }) {
   )
 }
 
+// ── File d'envoi du lot ──────────────────────────────────────────────────────────
+// Un rond par monture : vide en attente, anneau qui tourne pendant son envoi, coche
+// verte une fois enregistrée — comme une file de téléchargements.
+function UploadStatusIcon({ status }: { status: 'pending' | 'uploading' | 'done' | 'error' }) {
+  if (status === 'done') {
+    return <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#16a34a] text-white">{ic.check('w-4 h-4')}</span>
+  }
+  if (status === 'error') {
+    return <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">{ic.alert('w-4 h-4')}</span>
+  }
+  if (status === 'uploading') {
+    return (
+      <span className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center">
+        <span className="absolute inset-0 rounded-full border-2 border-[#2563eb]/20" />
+        <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-[#2563eb]" />
+      </span>
+    )
+  }
+  return <span className="h-8 w-8 flex-shrink-0 rounded-full border-2 border-dashed border-slate-200 dark:border-slate-700" />
+}
+
 // ── Écran d'activation de session ──────────────────────────────────────────────
 // Caméra + saisie manuelle du code de session — partagé par l'écran d'activation (atteint
 // sur erreur de reprise, cf. activateOrResume) et « Mes sessions », qui l'affiche directement
@@ -2083,6 +2434,14 @@ function recordPhotoBranche(record: any): string {
 }
 
 const HISTORIQUE_PAGE_SIZE = 10
+const UNDETERMINED_SHAPE = '__forme_non_determinee__'
+
+function isUndeterminedShape(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase()
+  return !normalized || normalized === '—' || normalized === 'unknown'
+    || normalized === 'inconnu' || normalized === 'non déterminé' || normalized === 'non determinee'
+    || normalized === 'non déterminée' || normalized === 'non determine'
+}
 
 const SELECT = 'rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-[#2563eb]'
 
@@ -2104,7 +2463,7 @@ function HistoriqueScreen({ movements, onPrint, query, forme, genre, page, onPag
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return movements.filter(record => {
-      if (forme && recordField(record, 'shape') !== forme) return false
+      if (forme === UNDETERMINED_SHAPE ? !isUndeterminedShape(recordField(record, 'shape')) : forme && recordField(record, 'shape') !== forme) return false
       if (genre && recordField(record, 'gender') !== genre) return false
       if (!needle) return true
       return ['reference', 'brand', 'barcode', 'color']
@@ -3083,7 +3442,7 @@ function TopBar({ current, session, dark, onToggleDark, onReset, onBack, histori
           </div>
           <select value={historique.forme} onChange={e => historique.onForme(e.target.value)} className={`${SELECT} py-1.5 text-xs`}>
             <option value="">Toutes les formes</option>
-            {historique.formes.map(value => <option key={value} value={value}>{value}</option>)}
+            {historique.formes.map(value => <option key={value} value={value}>{value === UNDETERMINED_SHAPE ? 'Forme non déterminée' : value}</option>)}
           </select>
           <select value={historique.genre} onChange={e => historique.onGenre(e.target.value)} className={`${SELECT} py-1.5 text-xs`}>
             <option value="">Tous les genres</option>
@@ -3987,12 +4346,17 @@ function ScanPage() {
     }
   }, [saved, sessionFull, screen])
 
-  const histFormes = useMemo(() => distinctValues(movements, 'shape'), [movements])
+  const histFormes = useMemo(() => {
+    const values = distinctValues(movements, 'shape')
+    return movements.some(record => isUndeterminedShape(recordField(record, 'shape')))
+      ? [UNDETERMINED_SHAPE, ...values]
+      : values
+  }, [movements])
   const histGenres = useMemo(() => distinctValues(movements, 'gender'), [movements])
   const histFilteredCount = useMemo(() => {
     const needle = histQuery.trim().toLowerCase()
     return movements.filter(record => {
-      if (histForme && recordField(record, 'shape') !== histForme) return false
+      if (histForme === UNDETERMINED_SHAPE ? !isUndeterminedShape(recordField(record, 'shape')) : histForme && recordField(record, 'shape') !== histForme) return false
       if (histGenre && recordField(record, 'gender') !== histGenre) return false
       if (!needle) return true
       return ['reference', 'brand', 'barcode', 'color']
@@ -4391,9 +4755,6 @@ function ScanPage() {
           onRecorded={incrementSession}
           onClose={() => { setShowMonturesManager(false); setBatchForManager(undefined); void loadCommands(); }}
         />}
-        {/* visible indicator when a batch is pending */}
-        {batchForManager ? <div className="fixed top-24 right-6 z-[10000] rounded-md bg-indigo-600 text-white px-3 py-2 shadow">Batch prévu: {batchForManager}{session ? ` (reste: ${Math.max(0, (session.target || 0) - (session.registered || 0))})` : ''}</div> : null}
-
         {showBatchModal && (
           <div className="fixed inset-0 z-[10001] bg-black/50 flex items-center justify-center">
             <div className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-xl p-6">
