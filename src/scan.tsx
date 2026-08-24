@@ -253,9 +253,7 @@ function normalizeSessionGenre(value: unknown) {
 
 function normalizeSessionGamme(value: unknown) {
   const normalized = String(value || '').trim().toLowerCase()
-  if (normalized === 'moyenne') return 'moyenne gamme'
-  if (['classique', 'luxe', 'lecture', 'solaire', 'securite'].includes(normalized)) return normalized
-  return ''
+  return normalized === 'moyenne' ? 'moyenne gamme' : normalized === 'classique' || normalized === 'luxe' ? normalized : ''
 }
 
 // ── Icônes ─────────────────────────────────────────────────────────────────────
@@ -290,6 +288,411 @@ const ic = {
   calendar: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><rect x="3.5" y="5" width="17" height="15.5" rx="2" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>,
   signOut: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>,
   alert: (c = 'w-4 h-4') => <svg className={c} viewBox="0 0 24 24" {...s}><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></svg>,
+}
+
+// ------------------ MonturesManager (capture d'abord, revue ensuite) ---------
+function MonturesManager({ onClose, initialBatchDesired, autoStart, sessionRemaining, sessionCode }: { onClose: () => void; initialBatchDesired?: number; autoStart?: boolean; sessionRemaining?: number; sessionCode?: string }) {
+  const [montures, setMontures] = useState<any[]>(() => {
+    try { return JSON.parse(localStorage.getItem('montures') || '[]') } catch { return [] }
+  })
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [viewMode, setViewMode] = useState<'upload'|'review'>('upload')
+  const maxItems = 20
+
+  // Camera batch capture local states
+  const [cameraOnLocal, setCameraOnLocal] = useState(false)
+  const videoRefLocal = useRef<HTMLVideoElement | null>(null)
+  const streamRefLocal = useRef<MediaStream | null>(null)
+  const [captureTargetLocal, setCaptureTargetLocal] = useState<'face'|'branche'>('face')
+  const [batchDesired, setBatchDesired] = useState<number | null>(null)
+  const [batchIndex, setBatchIndex] = useState(0)
+  const [tempFace, setTempFace] = useState<string | null>(null)
+  const [tempBranche, setTempBranche] = useState<string | null>(null)
+
+  useEffect(() => { localStorage.setItem('montures', JSON.stringify(montures)) }, [montures])
+
+  // If local drafts exceed the known session remaining, trim them on mount
+  useEffect(() => {
+    if (typeof sessionRemaining === 'number' && sessionRemaining > 0 && montures.length > sessionRemaining) {
+      window.alert(`Les brouillons locaux dépassent la capacité restante (${sessionRemaining}). Ils seront tronqués.`)
+      setMontures(prev => prev.slice(0, sessionRemaining))
+      setCurrentIndex(0)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // debug mount
+  // removed debug logs
+
+  const addMonture = () => {
+    // Prevent adding beyond session remaining if known
+    if (typeof sessionRemaining === 'number' && sessionRemaining > 0 && montures.length >= sessionRemaining) {
+      window.alert(`Impossible : la session ne permet pas d'enregistrer plus de ${sessionRemaining} monture(s).`)
+      return
+    }
+    const newMonture = { id: Date.now(), photoFace: null, photoBranche: null, marque: '', couleur: '', matiere: '', reference: '', notes: '' }
+    const updated = [...montures, newMonture].slice(0, maxItems)
+    setMontures(updated)
+    setCurrentIndex(updated.length - 1)
+  }
+
+  const handleImageUploadLocal = (montureId: number, type: 'face'|'branche', file: File | null) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const data = e.target?.result as string
+      const updated = montures.map(m => m.id === montureId ? { ...m, [type === 'face' ? 'photoFace' : 'photoBranche']: data } : m)
+      setMontures(updated)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Local camera helpers
+  const startCameraLocal = async () => {
+    if (streamRefLocal.current) return
+    const blocked = cameraUnavailableReason()
+    if (blocked) { window.alert(blocked); return }
+    try {
+      const stream = await openCamera()
+      streamRefLocal.current = stream
+      if (videoRefLocal.current) {
+        videoRefLocal.current.srcObject = stream
+        await videoRefLocal.current.play()
+      }
+      setCameraOnLocal(true)
+    } catch (err) {
+      console.error('camera local open', err)
+      window.alert(humanCameraError(err))
+      setCameraOnLocal(false)
+    }
+  }
+
+  const stopCameraLocal = () => {
+    streamRefLocal.current?.getTracks().forEach(t => t.stop())
+    streamRefLocal.current = null
+    if (videoRefLocal.current) videoRefLocal.current.srcObject = null
+    setCameraOnLocal(false)
+    setCaptureTargetLocal('face')
+    setTempFace(null)
+    setTempBranche(null)
+  }
+
+  // If an initial desired batch is provided from the parent, apply and optionally auto-start
+  useEffect(() => {
+    if (typeof initialBatchDesired === 'number' && initialBatchDesired > 0) {
+      const capped = (typeof sessionRemaining === 'number' && sessionRemaining > 0) ? Math.min(initialBatchDesired, sessionRemaining) : initialBatchDesired
+      setBatchDesired(capped)
+    }
+    if (autoStart && initialBatchDesired && initialBatchDesired > 0) {
+      void startCameraLocal()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialBatchDesired, autoStart, sessionRemaining])
+
+  function snapshotLocal() {
+    const v = videoRefLocal.current
+    if (!v) return null
+    const c = document.createElement('canvas')
+    c.width = v.videoWidth || 640
+    c.height = v.videoHeight || 480
+    c.getContext('2d')?.drawImage(v,0,0)
+    return c.toDataURL('image/jpeg', 0.92)
+  }
+
+  async function captureLocal() {
+    const data = snapshotLocal()
+    if (!data) return
+    if (captureTargetLocal === 'face') {
+      setTempFace(data)
+      setCaptureTargetLocal('branche')
+      return
+    }
+    // branche
+    setTempBranche(data)
+    // create monture entry
+    // Respect sessionRemaining / batchDesired limits
+    const effectiveLimit = (typeof batchDesired === 'number' && batchDesired > 0) ? batchDesired : (typeof sessionRemaining === 'number' && sessionRemaining > 0 ? sessionRemaining : maxItems)
+    if (montures.length >= effectiveLimit) {
+      window.alert('Le nombre de montures prévu est atteint.')
+      return
+    }
+    const newM = { id: Date.now() + Math.random(), photoFace: tempFace || null, photoBranche: data, marque: '', couleur: '', matiere: '', reference: '', notes: '' }
+    const updated = [...montures, newM].slice(0, maxItems)
+    setMontures(updated)
+    const nextIndex = batchIndex + 1
+    setBatchIndex(nextIndex)
+    setTempFace(null)
+    setTempBranche(null)
+    setCaptureTargetLocal('face')
+    // continue or finish
+    if (batchDesired && nextIndex >= batchDesired) {
+      // finished: stop camera and analyze all montures just captured
+      stopCameraLocal()
+      // run analyze for the newly added montures (last batchDesired entries)
+      const start = Math.max(0, updated.length - (batchDesired || 0))
+      for (let i = start; i < updated.length; i += 1) {
+        try {
+          const a = await apiFetch('/inventory/analyze', { method: 'POST', body: (() => { const b = new FormData(); b.append('image', dataURLtoBlob(updated[i].photoFace || ''), 'monture.jpg'); return b })() })
+          const ad = a.data || {}
+          if (ad.brand) updated[i].marque = ad.brand
+          if (ad.color) updated[i].couleur = normalizeColorValue(ad.color)
+          if (ad.material) updated[i].matiere = ad.material
+          if (ad.shape) updated[i].forme = ad.shape
+        } catch (err) { console.warn('analyse monture failed', err) }
+        try {
+          const b = new FormData(); b.append('image', dataURLtoBlob(updated[i].photoBranche || ''), 'branche.jpg')
+          const br = await apiFetch('/inventory/analyze-branche', { method: 'POST', body: b })
+          const bd = br.data || {}
+          if (bd.reference) updated[i].reference = bd.reference
+          if (bd.brand) updated[i].marque = bd.brand
+        } catch (err) { console.warn('analyse branche failed', err) }
+      }
+      setMontures(updated)
+      setViewMode('review')
+      setBatchDesired(null)
+      setBatchIndex(0)
+    } else {
+      // continue capturing: leave camera on
+    }
+  }
+
+  const updateMonture = (montureId: number, field: string, value: any) => {
+    const updated = montures.map(m => m.id === montureId ? { ...m, [field]: value } : m)
+    setMontures(updated)
+  }
+
+  const deleteMontureLocal = (montureId: number) => {
+    const updated = montures.filter(m => m.id !== montureId)
+    setMontures(updated)
+    if (currentIndex >= updated.length && currentIndex > 0) setCurrentIndex(currentIndex - 1)
+  }
+
+  const goNext = () => { if (currentIndex < montures.length - 1) setCurrentIndex(currentIndex + 1) }
+  const goPrev = () => { if (currentIndex > 0) setCurrentIndex(currentIndex - 1) }
+
+  // Upload to server: reuse existing apiFetch/form data format similar to saveRecord
+  const uploadAllToServer = async (stationId: string, sessionCode?: string) => {
+    if (montures.length === 0) return
+    // propose des emplacements avant l'envoi
+    try {
+      for (const m of montures) {
+        try {
+          const payload = await apiFetch(`/inventory/storage/next-free?station_id=${stationId}&zone=STOCK`)
+          m.previewLocation = payload.data?.code || '—'
+        } catch (err) {
+          m.previewLocation = '—'
+        }
+      }
+    } catch (err) {
+      console.warn('Erreur en demandant les emplacements', err)
+    }
+
+    const summary = montures.map((m, i) => `${i+1}. ${m.reference || '—'} → ${m.previewLocation || '—'}`).join('\n')
+    if (!window.confirm(`Emplacements proposés :\n\n${summary}\n\nConfirmer l'envoi ?`)) return
+
+    const recorded: any[] = []
+    for (const m of montures) {
+      try {
+        const body = new FormData()
+        if (m.photoFace) body.append('image', dataURLtoBlob(m.photoFace), 'monture.jpg')
+        if (m.photoBranche) body.append('branche_image', dataURLtoBlob(m.photoBranche), 'branche.jpg')
+        body.append('station_id', stationId)
+        // Determine price: if 'luxe' use prixCustom, else prefer explicit m.prix, else derive from gamme
+        let price = 0
+        if (m.gamme === 'luxe') price = Number(m.prixCustom || 0)
+        else if (m.prix && Number.isFinite(Number(m.prix))) price = Number(m.prix)
+        else price = normalizePriceValue(m.gamme || 0)
+        body.append('price', String(price))
+        if (sessionCode) body.append('reception_command_code', sessionCode)
+        body.append('reference', m.reference || '')
+        body.append('brand', m.marque || '')
+        body.append('gender', m.genre || '')
+        body.append('shape', m.forme || '')
+        body.append('detected_shape', '')
+        body.append('color', m.couleur || '')
+        body.append('material', m.matiere || '')
+        body.append('mount_type', '')
+        const payload = await apiFetch('/inventory/reception', { method: 'POST', body })
+        const data = payload.data || {}
+        // keep returned barcode / emplacement
+        recorded.push(data)
+        m.uploadResult = data
+      } catch (err) {
+        console.error('upload error', err)
+        window.alert('Erreur lors de l\'upload — vérifiez votre connexion et réessayez')
+        return
+      }
+    }
+    // on peut vider les montures après upload
+    const codes = recorded.map((r,i) => String(r.barcode || r.id || r.code || `#${i+1}`)).join('\n')
+    setMontures([])
+    localStorage.removeItem('montures')
+    window.alert(`${recorded.length} monture(s) envoyée(s)\nCodes :\n${codes}`)
+    onClose()
+  }
+
+  const current = montures[currentIndex]
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black/40 flex items-start justify-center p-6 overflow-auto">
+      <div className="w-full max-w-5xl bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold">Gestionnaire de montures (local)</h2>
+          <div className="flex items-center gap-2">
+            <button onClick={() => uploadAllToServer(stationIdOf(JSON.parse(localStorage.getItem('user')||'{}')), sessionCode)} className="bg-green-600 text-white px-3 py-2 rounded">Envoyer le lot</button>
+            <button onClick={onClose} className="px-3 py-2 rounded border">Fermer</button>
+          </div>
+        </div>
+
+        {/* debug banner when opened with batch */}
+        {initialBatchDesired ? (
+          <div className="mb-3 p-2 rounded bg-yellow-100 text-sm text-yellow-800">Ouvert pour capture en lot : {initialBatchDesired} (autoStart: {autoStart ? 'oui' : 'non'})</div>
+        ) : null}
+
+              <div className="mb-4 flex gap-3">
+                <button onClick={() => setViewMode('upload')} className={`px-4 py-2 rounded ${viewMode==='upload'?'bg-indigo-600 text-white':'bg-gray-100'}`}>Upload</button>
+                <button onClick={() => setViewMode('review')} className={`px-4 py-2 rounded ${viewMode==='review'?'bg-indigo-600 text-white':'bg-gray-100'}`}>Revoir ({montures.length})</button>
+                <div className="ml-auto">{montures.length}/{maxItems}</div>
+              </div>
+
+        {viewMode === 'upload' && (
+          <div>
+            {cameraOnLocal && (
+              <div className="mb-4">
+                <div className="flex gap-3 items-start">
+                  <video ref={videoRefLocal} className="w-1/2 bg-black rounded" playsInline muted />
+                  <div className="flex-1">
+                    <div className="mb-2">
+                      <div className="font-medium">Prise en lot: {batchDesired ?? '—'}</div>
+                      <div className="text-sm text-slate-500">Photo actuelle: {captureTargetLocal}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={()=>captureLocal()} className="bg-indigo-600 text-white px-3 py-2 rounded">Prendre photo</button>
+                      <button onClick={()=>{ if (captureTargetLocal==='branche') { setTempBranche(null); setCaptureTargetLocal('face') } else { setTempFace(null) } }} className="px-3 py-2 rounded border">Reprendre</button>
+                      <button onClick={()=>stopCameraLocal()} className="px-3 py-2 rounded border">Arrêter</button>
+                    </div>
+                    <div className="mt-2">
+                      {tempFace && <img src={tempFace} className="w-24 h-24 object-cover rounded mr-2 inline" />}
+                      {tempBranche && <img src={tempBranche} className="w-24 h-24 object-cover rounded inline" />}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {montures.length===0 ? (
+              <div className="p-6 text-center">
+                <p className="text-gray-500">Aucune monture — commencez par ajouter</p>
+                <button onClick={addMonture} className="mt-4 bg-indigo-600 text-white px-4 py-2 rounded">+ Ajouter</button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {montures.map((m, idx) => (
+                  <div key={m.id} className="bg-slate-50 p-3 rounded">
+                    <div className="font-bold mb-2">Monture #{idx+1}</div>
+                    <div className="mb-2">
+                      {m.photoFace ? <img src={m.photoFace} className="w-full h-28 object-cover rounded"/> : <div className="w-full h-28 bg-gray-100 rounded flex items-center justify-center">Pas de photo</div>}
+                      <input type="file" accept="image/*" onChange={e=>handleImageUploadLocal(m.id,'face', e.target.files?.[0]||null)} className="w-full mt-2" />
+                    </div>
+                    <div className="mb-2">
+                      {m.photoBranche ? <img src={m.photoBranche} className="w-full h-20 object-cover rounded"/> : <div className="w-full h-20 bg-gray-100 rounded flex items-center justify-center">Pas de photo</div>}
+                      <input type="file" accept="image/*" onChange={e=>handleImageUploadLocal(m.id,'branche', e.target.files?.[0]||null)} className="w-full mt-2" />
+                    </div>
+                    <button onClick={()=>deleteMontureLocal(m.id)} className="w-full bg-red-100 text-red-600 py-1 rounded">Supprimer</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-4 text-center">
+              {montures.length < maxItems && <button onClick={addMonture} className="bg-indigo-600 text-white px-4 py-2 rounded">+ Ajouter ({montures.length}/{maxItems})</button>}
+            </div>
+          </div>
+        )}
+
+        {viewMode === 'review' && (
+          <div>
+            {!current ? <div className="p-6 text-center">Aucune monture</div> : (
+              <div>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>{current.photoFace ? <img src={current.photoFace} className="w-full h-80 object-cover rounded"/> : <div className="w-full h-80 bg-gray-100 rounded flex items-center justify-center">Pas de photo</div>}</div>
+                  <div>{current.photoBranche ? <img src={current.photoBranche} className="w-full h-80 object-cover rounded"/> : <div className="w-full h-80 bg-gray-100 rounded flex items-center justify-center">Pas de photo</div>}</div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Référence</label>
+                    <input value={current.reference||''} onChange={e=>updateMonture(current.id,'reference',e.target.value)} className="w-full p-2 border rounded" placeholder="Référence" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Marque</label>
+                    <input value={current.marque||''} onChange={e=>updateMonture(current.id,'marque',e.target.value)} className="w-full p-2 border rounded" placeholder="Marque" />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Genre</label>
+                    <select value={current.genre||''} onChange={e=>updateMonture(current.id,'genre',e.target.value)} className="w-full p-2 border rounded">
+                      <option value="">À saisir</option>
+                      {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs text-slate-500">Forme</label>
+                      {current.forme ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Détecté</span> : <span className="text-xs text-slate-400">À saisir</span>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <select value={current.forme||''} onChange={e=>updateMonture(current.id,'forme',e.target.value)} className="flex-1 p-2 border rounded">
+                        <option value="">Sélectionner une forme</option>
+                        {FORMES.map(f => <option key={f} value={f}>{f}</option>)}
+                      </select>
+                      {current.forme ? <ShapeIcon name={current.forme} className="w-12 h-6" /> : null}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs text-slate-500">Couleur</label>
+                      {current.couleur ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Détecté</span> : <span className="text-xs text-slate-400">À saisir</span>}
+                    </div>
+                    <input value={current.couleur||''} onChange={e=>updateMonture(current.id,'couleur',e.target.value)} className="w-full p-2 border rounded" placeholder="Couleur" />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Matière</label>
+                    <select value={current.matiere||''} onChange={e=>updateMonture(current.id,'matiere',e.target.value)} className="w-full p-2 border rounded">
+                      <option value="">Sélectionner une matière</option>
+                      {MATIERES.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Gamme</label>
+                    <select value={current.gamme||''} onChange={e=>updateMonture(current.id,'gamme',e.target.value)} className="w-full p-2 border rounded">
+                      <option value="">Sélectionner une gamme</option>
+                      <option value="classique">Classique</option>
+                      <option value="moyenne gamme">Moyenne gamme</option>
+                      <option value="luxe">Luxe</option>
+                    </select>
+                    {current.gamme === 'luxe' && (
+                      <input value={current.prixCustom||''} onChange={e=>updateMonture(current.id,'prixCustom',e.target.value)} placeholder="Prix (Luxe)" className="mt-2 w-full p-2 border rounded" />
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <button onClick={goPrev} disabled={currentIndex===0} className="px-4 py-2 rounded bg-gray-200">Précédent</button>
+                  <div className="flex gap-2">{montures.map((_,i)=>(<button key={i} onClick={()=>setCurrentIndex(i)} className={`w-3 h-3 rounded-full ${i===currentIndex?'bg-indigo-600':'bg-gray-300'}`}/>))}</div>
+                  <button onClick={goNext} disabled={currentIndex===montures.length-1} className="px-4 py-2 rounded bg-indigo-600 text-white ml-auto">Suivant</button>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button onClick={()=>deleteMontureLocal(current.id)} className="bg-red-100 text-red-600 px-3 py-2 rounded">Supprimer</button>
+                  <button onClick={()=>{ setMontures(prev=>{ const copy=prev.slice(); copy[currentIndex] = {...copy[currentIndex]}; return copy }) }} className="bg-gray-100 px-3 py-2 rounded">Sauvegarder local</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ── Dessins des formes de monture ──────────────────────────────────────────────
@@ -2562,13 +2965,14 @@ function MobileNav({ current, onNavigate, hasSession, newLists }: {
   )
 }
 
-function TopBar({ current, session, dark, onToggleDark, onReset, onBack, historique }: {
+function TopBar({ current, session, dark, onToggleDark, onReset, onBack, historique, onOpenBatch }: {
   current: Screen
   session: ReceptionSession | null
   dark: boolean
   onToggleDark: () => void
   onReset: (() => void) | null
   onBack: (() => void) | null
+  onOpenBatch?: () => void
   /** Recherche + filtres de l'Historique, sur la même ligne que le titre plutôt que dans
    *  leur propre carte plus bas — la Direction a le même genre de bandeau sur Stock général. */
   historique?: {
@@ -2652,6 +3056,10 @@ function TopBar({ current, session, dark, onToggleDark, onReset, onBack, histori
           {ic.refresh()} <span className="hidden sm:inline">Nouveau</span>
         </Btn>
       )}
+      {/* Bouton pour lancer la capture en lot depuis l'en-tête */}
+      <Btn onClick={() => { if (onOpenBatch) onOpenBatch() }} className="flex-shrink-0 px-2.5 md:px-3.5 ml-2">
+        {ic.camera()} <span className="hidden sm:inline">Capturer lot</span>
+      </Btn>
 
       {/* Thème et déconnexion vivent dans la barre latérale ; sur mobile elle n'existe
           pas, ils remontent donc ici. */}
@@ -2677,6 +3085,10 @@ function ScanPage() {
   const [dark, setDark] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [screen, setScreen] = useState<Screen>('loading')
+  const [showMonturesManager, setShowMonturesManager] = useState(false)
+  const [batchForManager, setBatchForManager] = useState<number|undefined>(undefined)
+  const [showBatchModal, setShowBatchModal] = useState(false)
+  const [batchModalValue, setBatchModalValue] = useState('')
 
   // Recherche + filtres de l'écran Historique : portés ici (pas dans HistoriqueScreen) pour
   // que TopBar puisse les afficher sur la même ligne que le titre.
@@ -2975,7 +3387,7 @@ function ScanPage() {
   // ── Étape 3 : enregistrement réel ────────────────────────────────────────────
   async function saveRecord() {
     if (!finalData) return
-    if (!session || session.registered >= session.target) {
+    if (!session || (session.target > 0 && session.registered >= session.target)) {
       window.alert('La session est absente ou son quota est atteint. Activez une nouvelle session avant de continuer.')
       return
     }
@@ -3146,15 +3558,9 @@ function ScanPage() {
         console.warn('Réponse inattendue de /increment, valeurs de secours utilisées :', command)
       }
 
-      setSession(previous => previous ? {
-        ...previous,
-        registered: nextRegistered,
-        target: nextTarget,
-        status: command.status || previous.status,
-      } : previous)
+      setSession({ ...session, registered: nextRegistered, target: nextTarget, status: command.status || session.status })
     } catch (error) {
       console.error('Erreur incrémentation commande', error)
-      throw error
     }
   }
 
@@ -3386,7 +3792,7 @@ function ScanPage() {
     // de terminer et celles qui l'attendent encore, au lieu d'un écran qui ne sait que
     // réclamer une étiquette. `loadCommands` relit l'avancement au passage : la carte doit
     // montrer la monture tout juste enregistrée.
-    if (!session || session.registered >= session.target) {
+    if (!session || (session.target > 0 && session.registered >= session.target)) {
       if (session) showToast(`Réception ${session.code} terminée — ${session.registered}/${session.target}`)
       setSession(null)
       setActivationError(false)
@@ -3490,7 +3896,8 @@ function ScanPage() {
 
   // Le quota est épuisé : plus rien ne peut être enregistré sur cette session, la sortie
   // n'est donc plus une option mais la seule suite possible.
-  const sessionFull = !session || session.registered >= session.target
+  // Note: si `target` vaut 0 ou est absent, on le considère comme inconnu (donc pas plein).
+  const sessionFull = !session || (session.target > 0 && session.registered >= session.target)
 
   // La dernière monture de la réception vient d'être enregistrée : on repart seul vers
   // « Mes sessions ». Le délai laisse le temps de lire le code-barres et de récupérer
@@ -3570,6 +3977,18 @@ function ScanPage() {
               count: histFilteredCount,
               total: movements.length,
             } : undefined}
+            onOpenBatch={() => {
+              if (!session) {
+                window.alert("Aucune session active — ouvrez une session d'enregistrement d'abord.")
+                return
+              }
+              if (session.target > 0 && session.registered >= session.target) {
+                window.alert('La session est pleine — ouvrez une autre session.')
+                return
+              }
+              setBatchModalValue('')
+              setShowBatchModal(true)
+            }}
           />
 
           <main className="flex-1 px-4 md:px-6 py-4 md:py-6 pb-24 md:pb-8 overflow-auto">
@@ -3767,9 +4186,6 @@ function ScanPage() {
                           <option value="classique">Classique</option>
                           <option value="moyenne gamme">Moyenne gamme</option>
                           <option value="luxe">Luxe</option>
-                          <option value="lecture">Lecture</option>
-                          <option value="solaire">Solaire</option>
-                          <option value="securite">Sécurité</option>
                         </select>
                         {form.gamme === 'luxe' && (
                           <input
@@ -3854,18 +4270,27 @@ function ScanPage() {
                         {/* `resetAll` sait déjà distinguer les deux cas : relancer la
                             caméra tant qu'il reste du quota, sortir vers « Mes sessions »
                             quand il est épuisé. Seul le libellé change. */}
-                        <Btn
-                          variant={sessionFull ? 'success' : 'primary'}
-                          className="ml-auto"
-                          onClick={() => resetAll(true)}
-                        >
-                          {sessionFull
-                            ? <>
-                                {ic.check()} Réception terminée → Mes sessions
-                                {autoRetour !== null && <span className="tabular-nums"> ({autoRetour} s)</span>}
-                              </>
-                            : <>{ic.plus()} Enregistrer une autre monture</>}
-                        </Btn>
+                        <div className="ml-auto flex items-center gap-2">
+                          <Btn
+                            variant={sessionFull ? 'success' : 'primary'}
+                            onClick={() => {
+                              if (sessionFull) {
+                                window.alert('Impossible : aucune session active ou session pleine.')
+                                return
+                              }
+                              stopCamera()
+                              setBatchModalValue('')
+                              setShowBatchModal(true)
+                            }}
+                          >
+                            {sessionFull
+                              ? <>
+                                  {ic.check()} Réception terminée → Mes sessions
+                                  {autoRetour !== null && <span className="tabular-nums"> ({autoRetour} s)</span>}
+                                </>
+                              : <>{ic.plus()} Enregistrer une autre monture</>}
+                          </Btn>
+                        </div>
                       </>
                     )}
                   </div>
@@ -3889,6 +4314,43 @@ function ScanPage() {
           hasSession={Boolean(session)}
           newLists={newLists}
         />
+        {showMonturesManager && <MonturesManager initialBatchDesired={batchForManager} autoStart={Boolean(batchForManager)} sessionRemaining={session ? Math.max(0, (session.target || 0) - (session.registered || 0)) : undefined} sessionCode={session?.code} onClose={() => { setShowMonturesManager(false); setBatchForManager(undefined); void loadCommands(); }} />}
+        {/* visible indicator when a batch is pending */}
+        {batchForManager ? <div className="fixed top-24 right-6 z-[10000] rounded-md bg-indigo-600 text-white px-3 py-2 shadow">Batch prévu: {batchForManager}{session ? ` (reste: ${Math.max(0, (session.target || 0) - (session.registered || 0))})` : ''}</div> : null}
+
+        {showBatchModal && (
+          <div className="fixed inset-0 z-[10001] bg-black/50 flex items-center justify-center">
+            <div className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-xl p-6">
+              <h3 className="font-semibold mb-2">Capture en lot</h3>
+              <p className="text-sm text-slate-500 mb-4">Combien de montures allez-vous capturer ? (1–30)</p>
+              <input type="number" min={1} max={30} value={batchModalValue} onChange={e => setBatchModalValue(e.target.value)} className="w-full p-2 border rounded mb-4" />
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowBatchModal(false)} className="px-3 py-2 rounded border">Annuler</button>
+                <button onClick={() => {
+                  const n = Number(batchModalValue)
+                  if (!Number.isFinite(n) || n <= 0 || n > 30) { window.alert('Veuillez entrer un nombre entre 1 et 30'); return }
+                  // If session has a known target, ensure we don't exceed remaining slots
+                  if (session && session.target > 0) {
+                    const remaining = Math.max(0, session.target - session.registered)
+                    if (remaining <= 0) { window.alert('La session est pleine — impossible de démarrer un lot.'); return }
+                    if (n > remaining) {
+                      const ok = window.confirm(`Il ne reste que ${remaining} place(s) dans la session. Démarrer la capture pour ${remaining} monture(s) à la place ?`)
+                      if (!ok) return
+                      setBatchForManager(remaining)
+                    } else {
+                      setBatchForManager(n)
+                    }
+                  } else {
+                    setBatchForManager(n)
+                  }
+                  setShowBatchModal(false)
+                  // ensure state is set before opening manager
+                  window.setTimeout(() => setShowMonturesManager(true), 50)
+                }} className="px-3 py-2 rounded bg-indigo-600 text-white">Démarrer</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
