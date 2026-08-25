@@ -1,27 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
-// Importé plutôt que référencé par URL : sans dossier public/, un chemin littéral ne
-// serait pas copié dans dist/ au build.
 import logoUrl from '../logo.jpeg'
 import { cameraUnavailableReason, createScanner, humanCameraError, openCamera, type Scanner } from './barcodeScanner'
 import { GlassTable, fmtPrix } from './GlassTable'
 import { isFeatureEnabled, isPosteEnabled, FEATURE_FLAGS_EVENT } from './featureFlags'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
-// Aucun sélecteur de station sur cet écran : on réceptionne là où le magasinier est
-// rattaché. Ce repli ne sert que si son compte n'a pas de station — l'identifiant 1 est
-// celui du Stock Général sur une base neuve, mais rien ne le garantit après une remise à
-// zéro : c'est `users.station_id` qui fait foi.
 const DEFAULT_STATION_ID = '1'
 
-/** La station du compte connecté, celle où atterrissent les montures qu'il réceptionne. */
 function stationIdOf(user: any) {
   const id = Number(user?.station_id)
   return Number.isFinite(id) && id > 0 ? String(id) : DEFAULT_STATION_ID
 }
 
-// ── Session ────────────────────────────────────────────────────────────────────
 function getToken() {
   return window.localStorage.getItem('token')
 }
@@ -40,8 +32,6 @@ function logoutToLogin() {
 const ROLE_ID_TO_NAME: Record<number, string> = {
   1: 'SUPER_ADMIN', 2: 'ADMIN', 3: 'MAGASINIER', 4: 'VENDEUR',
   5: 'LABORATOIRE', 6: 'RESPONSABLE_STATION', 7: 'DIRECTION', 8: 'SUPER_DIRECTEUR',
-  // 9 et 10 sont fixés à la main par les migrations 025_caisse et 028_sav : la
-  // séquence aurait fait dépendre leur id de l'ordre d'exécution des migrations.
   9: 'CAISSIER', 10: 'SAV',
 }
 const ROLE_ALIASES: Record<string, string> = { DIRECTION: 'ADMIN', SUPER_DIRECTEUR: 'SUPER_ADMIN' }
@@ -56,11 +46,8 @@ function getRoleName(user: any): string | null {
   return byId ? (ROLE_ALIASES[byId] || byId) : null
 }
 
-/** Les seuls rôles admis ici, comme protectPage(['MAGASINIER','SUPER_ADMIN']) de scan.html. */
 const ALLOWED_ROLES = ['MAGASINIER', 'SUPER_ADMIN']
 
-/** Le statut voyage avec l'erreur : un code de session inconnu (404) doit dire
- *  « ce code est invalide », pas « le serveur est injoignable ». */
 class ApiError extends Error {
   status: number
   constructor(message: string, status: number) {
@@ -69,8 +56,6 @@ class ApiError extends Error {
   }
 }
 
-// Toute réponse 401/403 signifie que le jeton ne vaut plus rien : on ne laisse pas
-// l'écran afficher des listes vides en donnant l'illusion d'un stock à zéro.
 async function apiFetch(path: string, init?: RequestInit) {
   const token = getToken()
   const isForm = init?.body instanceof FormData
@@ -78,8 +63,6 @@ async function apiFetch(path: string, init?: RequestInit) {
     ...init,
     headers: {
       ...(init?.headers || {}),
-      // Surtout pas de Content-Type sur un FormData : le navigateur doit poser
-      // lui-même la frontière multipart, sinon le serveur ne trouve aucun fichier.
       ...(init?.body && !isForm ? { 'Content-Type': 'application/json' } : {}),
       Authorization: `Bearer ${token}`,
     },
@@ -95,12 +78,6 @@ async function apiFetch(path: string, init?: RequestInit) {
   return payload
 }
 
-/** Comme apiFetch, mais rend `null` au lieu de déconnecter sur 401/403.
- *
- *  Réservé aux appels d'agrément. Le journal des expéditions et la liste des commandes
- *  appartiennent à la Direction : rien ne garantit que le magasinier y ait droit, et un
- *  refus doit vider une section, jamais éjecter quelqu'un au milieu d'une réception.
- *  Une vraie expiration de jeton reste attrapée par les appels obligatoires de l'écran. */
 async function apiFetchOptional(path: string) {
   try {
     const response = await fetch(`${API_URL}${path}`, {
@@ -114,7 +91,6 @@ async function apiFetchOptional(path: string) {
   }
 }
 
-// ── Format ─────────────────────────────────────────────────────────────────────
 function fmtFCFA(value: unknown) {
   const n = Number(value)
   if (!value || Number.isNaN(n)) return '—'
@@ -138,8 +114,6 @@ function formatDayLabel(key: string) {
   })
 }
 
-/** `dayKey` rend null sur une date absente ou illisible. Sans ce garde-fou, la date
- *  partirait telle quelle dans `new Date('nullT12:00:00')` et sortirait « Invalid Date ». */
 function dayLabel(value?: string) {
   const key = dayKey(value)
   return key ? formatDayLabel(key) : 'Date inconnue'
@@ -161,7 +135,6 @@ function dataURLtoBlob(dataUrl: string) {
   return new Blob([bytes], { type: mime })
 }
 
-// ── Référentiels ───────────────────────────────────────────────────────────────
 const GENRES = ['Homme', 'Femme', 'Enfant', 'Unisexe']
 const MATIERES = ['Acétate', 'Métal', 'Plastique', 'Titane', 'Bois', 'Composite', 'Inox']
 
@@ -192,8 +165,6 @@ const COULEURS: { value: string; swatch: string }[] = [
   { value: 'Cuivré', swatch: '#c2410c' },
 ]
 
-/** L'IA répond tantôt en anglais, tantôt sans accent : sans ce repli, la couleur
- *  détectée ne correspondrait à aucune pastille et le champ resterait vide. */
 const COLOR_ALIASES: Record<string, string> = {
   noir: 'Noir', black: 'Noir',
   marron: 'Marron', brown: 'Marron', brun: 'Marron',
@@ -222,10 +193,6 @@ function normalizeColorValue(value: unknown) {
   return COLOR_ALIASES[raw.toLowerCase()] || raw
 }
 
-/** Barème repris tel quel de scan.js. ⚠️ Il ne colle pas à getGamme() des autres écrans
- *  (≤ 50 000 = Classique) : une monture saisie « Classique » repart à 70 000 et sera
- *  relue « Moyenne gamme » ailleurs. Écart de la production, à trancher côté métier —
- *  le changer ici modifierait le prix réellement enregistré en base. */
 const GAMME_PRICES: Record<string, number> = {
   classique: 70000,
   'moyenne gamme': 90000,
@@ -239,7 +206,6 @@ function normalizePriceValue(value: unknown) {
   const numeric = Number(trimmed)
   if (Number.isFinite(numeric)) return numeric
   const normalized = trimmed.toLowerCase()
-  // 'luxe' vaut 0 : son prix est saisi à la main dans le champ dédié.
   return GAMME_PRICES[normalized] ?? 0
 }
 
@@ -258,7 +224,6 @@ function normalizeSessionGamme(value: unknown) {
   return ''
 }
 
-// ── Icônes ─────────────────────────────────────────────────────────────────────
 const s = { fill: 'none' as const, stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
 
 const ic = {
@@ -293,10 +258,6 @@ const ic = {
 }
 
 // ── Styles CSS responsives ─────────────────────────────────────────────────────
-// Deux besoins que Tailwind ne couvre pas : l'animation du viseur caméra, et
-// l'étiquette d'impression — celle-ci part dans une fenêtre séparée qui n'a pas
-// la feuille de style de l'app, donc classes maison obligatoires (même raison que
-// PROFORMA_CSS dans vendeuse.tsx).
 const SCAN_CSS = `
 @keyframes scanline { 0%,100% { top: 8%; opacity: .25 } 50% { top: 92%; opacity: 1 } }
 .scan-line { animation: scanline 2.6s ease-in-out infinite; }
@@ -304,7 +265,6 @@ const SCAN_CSS = `
 .scan-pulse { animation: scanpulse 1.4s ease-in-out infinite; }
 
 /* ===== RESPONSIVE FIXES ===== */
-/* Tableaux responsives - scroll horizontal */
 .responsive-table-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -322,7 +282,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Grilles responsives - jours */
 .days-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -345,7 +304,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Sessions grid */
 .sessions-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -362,7 +320,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Champs de formulaire adaptés au tactile */
 .touch-input {
   min-height: 44px;
   font-size: 16px !important;
@@ -374,7 +331,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Boutons tactiles */
 .touch-btn {
   min-height: 44px;
   min-width: 44px;
@@ -389,7 +345,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Colonnes de vérification */
 .verify-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -406,7 +361,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Formes de monture - responsive */
 .shape-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -429,7 +383,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Couleurs - responsive */
 .color-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -446,7 +399,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Top bar responsive */
 .top-bar-wrap {
   display: flex;
   flex-wrap: wrap;
@@ -471,7 +423,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Session badge responsive */
 .session-badge {
   display: inline-flex;
   align-items: center;
@@ -504,7 +455,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Historique filters - responsive */
 .hist-filters {
   display: flex;
   flex-direction: column;
@@ -533,7 +483,6 @@ const SCAN_CSS = `
   font-size: 13px;
 }
 
-/* ===== MODAL RESPONSIVE ===== */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -579,7 +528,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Photo boxes responsives */
 .photo-box-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -600,7 +548,6 @@ const SCAN_CSS = `
   }
 }
 
-/* Video container responsive */
 .video-container {
   aspect-ratio: 16/9;
   min-height: 160px;
@@ -632,12 +579,6 @@ const LABEL_CSS = `
   .lb .meta span:last-child { font-weight: 800; font-size: 9px; }
 `
 
-/** Le gabarit de LABEL_CSS converti en pixels CSS à 96 dpi : l'étiquette réelle ne fait
- *  que 57 × 30 mm (rouleau de l'imprimante) — 56 × ~28,5 mm ici pour garder une marge de
- *  sécurité. Tout est compressé en conséquence : peu de marge intérieure (1,6 mm), peu
- *  d'écart entre les blocs (2 px), polices réduites. `width` compte pour la largeur
- *  totale (padding compris), comme le `box-sizing: border-box` côté CSS : sans ça le
- *  padding s'ajoutait à la largeur déclarée et le rendu papier débordait le rouleau. */
 const LABEL_PX = { width: 212, pad: 6, gap: 2, barcodeMargin: 2 }
 
 const LABEL_FONT = {
@@ -648,12 +589,8 @@ const LABEL_FONT = {
   meta: '8px Inter, system-ui, sans-serif',
 }
 
-/** Interlignes : le canvas ne connaît pas line-height, chaque ligne avance à la main. */
 const LABEL_LINE = { location: 11, shop: 10, marque: 14, ref: 10, meta: 9 }
 
-// ── Code-barres ────────────────────────────────────────────────────────────────
-/** showValue=false : le texte intégré au SVG rétrécit avec les barres et devient
- *  illisible dans une carte étroite. On l'affiche alors séparément en HTML. */
 async function drawBarcode(target: SVGSVGElement, value: string, showValue = true) {
   if (!value) return
   const module = await import('jsbarcode')
@@ -721,8 +658,6 @@ function loadImage(source: string) {
   })
 }
 
-/** Découpe un texte trop large, comme le ferait le flux HTML de l'étiquette : un nom
- *  de marque long doit descendre d'une ligne, pas déborder de l'image. */
 function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
   const raw = String(text || '').trim()
   if (!raw) return ['—']
@@ -907,7 +842,6 @@ async function printLabel(data: PrintableLabel) {
   popup.document.close()
 }
 
-/** L'étiquette d'une monture : celle qui part sur la branche. */
 async function printMontureLabel(data: FinalMonture) {
   let barcodeValue = String(data.id || '').trim()
   if (!barcodeValue) {
@@ -934,7 +868,6 @@ async function printMontureLabel(data: FinalMonture) {
   })
 }
 
-/** L'étiquette du carton d'envoi : celle qu'on colle sur le colis. */
 function printBoxLabel(dispatch: Dispatch) {
   const count = Number(dispatch.sent_count || 0)
   return printLabel({
@@ -947,7 +880,6 @@ function printBoxLabel(dispatch: Dispatch) {
   })
 }
 
-/** Trois notes montantes après un enregistrement */
 function playSuccessChime() {
   try {
     const Ctor = window.AudioContext || (window as any).webkitAudioContext
@@ -967,11 +899,10 @@ function playSuccessChime() {
       }, i * 150)
     })
   } catch {
-    // Audio indisponible : l'enregistrement reste confirmé à l'écran.
+    // Audio indisponible
   }
 }
 
-// ── Types ──────────────────────────────────────────────────────────────────────
 interface ReceptionSession {
   code: string
   registered: number
@@ -1152,7 +1083,6 @@ interface Dispatch {
   skipped?: { reference?: string; reason?: string }[]
 }
 
-// ── Briques d'interface ────────────────────────────────────────────────────────
 const CARD = 'bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700'
 
 function Btn({ variant = 'outline', className = '', children, ...rest }: {
@@ -1326,7 +1256,6 @@ function PhotoBox({ url, label }: { url: string | null; label: string }) {
   )
 }
 
-// ── File d'envoi du lot ──────────────────────────────────────────────────────────
 function UploadStatusIcon({ status }: { status: 'pending' | 'uploading' | 'done' | 'error' }) {
   if (status === 'done') {
     return <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[#16a34a] text-white sm:h-8 sm:w-8">{ic.check('w-3.5 h-3.5 sm:w-4 sm:h-4')}</span>
@@ -1440,11 +1369,7 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
   }
 
   useEffect(() => () => cancelCaptureLocal(), [])
-
-  useEffect(() => {
-    void startCameraLocal()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  useEffect(() => { void startCameraLocal() }, [])
 
   function snapshotLocal() {
     const v = videoRefLocal.current
@@ -1982,7 +1907,6 @@ function ShapeIcon({ name, className = 'w-8 h-4 sm:w-10 sm:h-5' }: { name: strin
   )
 }
 
-// ── Écran d'activation de session ──────────────────────────────────────────────
 function SessionScanCard({ status, isError, onActivate }: {
   status: string
   isError: boolean
@@ -2095,7 +2019,6 @@ function ActivationGate({ status, isError, onActivate, onReturn }: {
   )
 }
 
-/** Une ligne de monture enregistrée */
 function MovementRow({ row }: { row: Movement }) {
   const location = recordLocationCode(row)
   return (
@@ -2359,7 +2282,6 @@ function SessionsGate({ movements, commands, status, isError, onActivate, onPrin
   )
 }
 
-// ── Historique ─────────────────────────────────────────────────────────────────
 function recordField(record: any, key: string): string {
   if (!record) return ''
   const direct = record[key]
@@ -2609,7 +2531,6 @@ function recordToLabel(record: Movement): FinalMonture {
   }
 }
 
-// ── Listes reçues ──────────────────────────────────────────────────────────────
 function listDispatched(list: SendList) {
   return String(list.status || '').toUpperCase() === 'TRAITEE' || Number(list.sent_count || 0) > 0
 }
@@ -3115,7 +3036,6 @@ const SESSION_DONE_SECONDS = 3
 
 type Screen = 'loading' | 'activation' | 'sessions' | 'wizard' | 'historique' | 'listes'
 
-// ── Navigation ─────────────────────────────────────────────────────────────────
 const NAV: {
   id: Screen; label: string; short: string
   icon: (c?: string) => React.ReactElement
@@ -3319,7 +3239,6 @@ function TopBar({ current, session, dark, onToggleDark, onReset, onBack, histori
   )
 }
 
-// ── Page principale ────────────────────────────────────────────────────────────
 function ScanPage() {
   const [dark, setDark] = useState(false)
   const [user, setUser] = useState<any>(null)
