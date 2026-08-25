@@ -321,6 +321,8 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
   const [tempBranche, setTempBranche] = useState<string | null>(null)
 
   const [batchTarget, setBatchTarget] = useState<number | null>(null)
+  const [duplicatingMonture, setDuplicatingMonture] = useState<any | null>(null)
+  const [duplicateQty, setDuplicateQty] = useState(2)
 
   const quotaCap = typeof sessionRemaining === 'number' ? Math.max(0, sessionRemaining) : Infinity
   const maxItems = (typeof batchTarget === 'number' && batchTarget > 0) ? Math.min(batchTarget, quotaCap) : quotaCap
@@ -564,6 +566,28 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
     }
   }
 
+  function duplicateMonture(monture: any) {
+    const count = Math.max(1, Math.min(50, Math.trunc(Number(duplicateQty) || 2)))
+    const remaining = Number.isFinite(maxItems) ? Math.max(0, maxItems - montures.length) : Infinity
+    if (count > remaining) {
+      window.alert(`Il ne reste que ${remaining} place${remaining > 1 ? 's' : ''} dans la session.`)
+      return
+    }
+
+    const copies = Array.from({ length: count }, (_, index) => ({
+      ...monture,
+      id: `${Date.now()}-${index}-${Math.random()}`,
+    }))
+    setMontures(previous => [...previous, ...copies])
+    setDuplicatingMonture(null)
+    setDuplicateQty(2)
+    window.alert(`${count} copie${count > 1 ? 's' : ''} ajoutée${count > 1 ? 's' : ''}.`)
+  }
+
+  function removeMonture(id: string | number) {
+    setMontures(previous => previous.filter(monture => monture.id !== id))
+  }
+
   const runBatchUpload = async (items: any[]) => {
     if (items.length === 0 || uploadingRef.current) return
     uploadingRef.current = true
@@ -698,6 +722,47 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
             </span>
             <button onClick={() => setShowResumedBanner(false)} aria-label="Masquer" className="flex-shrink-0 text-[#2563eb]/70 hover:text-[#2563eb]">✕</button>
           </div>
+        )}
+
+        {montures.length > 0 && (
+          <section className="mx-3 mt-3 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 sm:mx-6 sm:mt-4">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50 sm:px-4 sm:py-2.5">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white sm:text-sm">Montures en attente</h3>
+              <span className="text-[10px] font-semibold text-slate-400 sm:text-xs">{montures.length} dans le lot</span>
+            </div>
+            <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+              {montures.map((monture, index) => (
+                <li key={monture.id} className="flex items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-2.5">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-900 sm:h-12 sm:w-12">
+                    {monture.photoFace
+                      ? <img src={monture.photoFace} alt="" className="h-full w-full object-cover" />
+                      : ic.glasses('w-4 h-4 text-slate-400')}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-slate-900 dark:text-white sm:text-sm">#{index + 1} {monture.reference || 'Monture'}</p>
+                    <p className="truncate text-[10px] text-slate-400 sm:text-xs">{monture.marque || 'Marque inconnue'} · {monture.forme || 'Forme non renseignée'}</p>
+                  </div>
+                  <button
+                    type="button"
+                    title="Dupliquer cette monture"
+                    onClick={() => { setDuplicatingMonture(monture); setDuplicateQty(2) }}
+                    className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-[#2563eb]/30 px-2 py-1.5 text-[10px] font-bold text-[#2563eb] hover:bg-[#2563eb]/10 sm:px-3 sm:text-xs"
+                  >
+                    {ic.plus('w-3 h-3')} Dupliquer
+                  </button>
+                  <button
+                    type="button"
+                    title="Retirer cette monture du lot"
+                    aria-label={`Retirer ${monture.reference || 'la monture'}`}
+                    onClick={() => removeMonture(monture.id)}
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         <div className="p-3 sm:p-6">
@@ -909,6 +974,57 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
             ) : (
               <span className="text-[10px] text-slate-400 sm:text-xs">Ne fermez pas cette fenêtre…</span>
             )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {duplicatingMonture && (
+      <div className="fixed inset-0 z-[10060] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="duplicate-monture-title">
+        <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl dark:bg-slate-800 sm:p-6">
+          <h3 id="duplicate-monture-title" className="text-base font-bold text-slate-900 dark:text-white">Dupliquer la monture</h3>
+          <p className="mt-1 truncate text-sm text-slate-500 dark:text-slate-400">
+            {duplicatingMonture.reference || 'Monture'} · {duplicatingMonture.marque || '—'}
+          </p>
+
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              aria-label="Diminuer le nombre de copies"
+              onClick={() => setDuplicateQty(value => Math.max(1, value - 1))}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-xl font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              −
+            </button>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={duplicateQty}
+              onChange={event => {
+                const value = Number(event.target.value)
+                if (Number.isFinite(value)) setDuplicateQty(Math.max(1, Math.min(50, Math.trunc(value))))
+              }}
+              className={`${INPUT} w-20 text-center text-base font-bold`}
+              aria-label="Nombre de copies"
+            />
+            <button
+              type="button"
+              aria-label="Augmenter le nombre de copies"
+              onClick={() => setDuplicateQty(value => Math.min(50, value + 1))}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-xl font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              +
+            </button>
+          </div>
+
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse">
+            <Btn variant="primary" onClick={() => duplicateMonture(duplicatingMonture)} className="w-full justify-center">
+              {ic.plus()} Dupliquer ({duplicateQty}x)
+            </Btn>
+            <Btn onClick={() => { setDuplicatingMonture(null); setDuplicateQty(2) }} className="w-full justify-center">
+              Annuler
+            </Btn>
           </div>
         </div>
       </div>
