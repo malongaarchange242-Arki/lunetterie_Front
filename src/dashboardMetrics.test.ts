@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeReferenceLocationBreakdown, criticalReferenceRows, summarizeStockSummary } from './dashboardMetrics'
+import { computeReferenceLocationBreakdown, criticalReferenceRows, stockSummaryRowsFromReceptionProgress, summarizeReceptionSessionProgress, summarizeStockSummary } from './dashboardMetrics'
 import { resolveStationCity } from './App'
 
 describe('summarizeStockSummary', () => {
@@ -32,6 +32,39 @@ describe('summarizeStockSummary', () => {
     expect(resolveStationCity({ id: 1, name: 'Station Pointe-Noire', city: 'Pointe-Noire', type: 'SOUS_STATION' })).toBe('Pointe-Noire')
     expect(resolveStationCity({ id: 2, name: 'Présentoir', city: 'Brazzaville', type: 'SOUS_STATION' })).toBe('Brazzaville')
     expect(resolveStationCity({ id: 3, name: 'Laboratoire', city: 'Dolisie', type: 'SOUS_STATION' })).toBe('Dolisie')
+  })
+})
+
+describe('summarizeReceptionSessionProgress', () => {
+  it('uses the tracked reception sessions as dashboard stock source', () => {
+    const progress = summarizeReceptionSessionProgress([
+      { id: 15, target_count: 715, registered_count: 313 },
+      { id: 14, target_count: 936, registered_count: 811 },
+      { id: 6, target_count: 47, registered_count: 47 },
+      { id: 1, target_count: 1135, registered_count: 1135 },
+      { id: 99, target_count: 748, registered_count: 748 },
+    ])
+
+    expect(progress.initialStock).toBe(2833)
+    expect(progress.registeredStock).toBe(2306)
+    expect(progress.remainingStock).toBe(527)
+    expect(progress.matchedSessions).toBe(4)
+    expect(progress.hasData).toBe(true)
+  })
+
+  it('can be converted into a stock-summary row for existing dashboard cards', () => {
+    const rows = stockSummaryRowsFromReceptionProgress({
+      initialStock: 2833,
+      registeredStock: 2306,
+      remainingStock: 527,
+      matchedSessions: 4,
+      hasData: true,
+    })
+
+    const summary = summarizeStockSummary(rows)
+    expect(summary.totalUnits).toBe(2306)
+    expect(summary.generalUnits).toBe(2306)
+    expect(summary.localUnits).toBe(0)
   })
 })
 

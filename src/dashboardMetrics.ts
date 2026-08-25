@@ -24,6 +24,60 @@ export interface DashboardSummary {
   hasData: boolean
 }
 
+export interface ReceptionCommandRow {
+  id?: number | string | null
+  target_count?: number | string | null
+  registered_count?: number | string | null
+}
+
+export interface ReceptionSessionProgress {
+  initialStock: number
+  registeredStock: number
+  remainingStock: number
+  matchedSessions: number
+  hasData: boolean
+}
+
+export const DASHBOARD_RECEPTION_SESSION_IDS = [1, 6, 14, 15] as const
+
+export function summarizeReceptionSessionProgress(
+  commands: ReceptionCommandRow[] = [],
+  sessionIds: readonly number[] = DASHBOARD_RECEPTION_SESSION_IDS
+): ReceptionSessionProgress {
+  const allowedIds = new Set(sessionIds.map(id => Number(id)))
+  const tracked = commands.filter(command => allowedIds.has(Number(command.id)))
+
+  const initialStock = tracked.reduce((sum, command) => sum + Math.max(0, Number(command.target_count) || 0), 0)
+  const registeredStock = tracked.reduce((sum, command) => sum + Math.max(0, Number(command.registered_count) || 0), 0)
+
+  return {
+    initialStock,
+    registeredStock,
+    remainingStock: Math.max(0, initialStock - registeredStock),
+    matchedSessions: tracked.length,
+    hasData: tracked.length > 0,
+  }
+}
+
+export function stockSummaryRowsFromReceptionProgress(progress: ReceptionSessionProgress): StockSummaryRow[] {
+  if (!progress.hasData) return []
+
+  return [{
+    reference: 'SESSIONS_RECEPTION_SUIVIES',
+    brand: 'Reception',
+    qty_general: progress.registeredStock,
+    qty_local: 0,
+    qty_presentoir: 0,
+    qty_labo: 0,
+    qty_reserve: 0,
+    qty_total: progress.registeredStock,
+    is_critical: false,
+  }]
+}
+
+// ==============================================
+// FONCTION PRINCIPALE — FILTRAGE PAR SESSIONS
+// ==============================================
 export function summarizeStockSummary(rows: StockSummaryRow[] = []): DashboardSummary {
   const totalUnits = rows.reduce((sum, row) => sum + (row.qty_total ?? 0), 0)
   const generalUnits = rows.reduce((sum, row) => sum + (row.qty_general ?? 0), 0)
@@ -164,3 +218,4 @@ export function computeReferenceLocationBreakdown(
 
   return byReference
 }
+

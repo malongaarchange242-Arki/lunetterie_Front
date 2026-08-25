@@ -1,6 +1,6 @@
 ﻿import React, { useState, useRef, useEffect, useMemo, type ReactNode } from 'react'
 import { buildAssistantPayload, buildStockDigest, mapChatActionToScreen } from './chatContext'
-import { summarizeStockSummary, computeReferenceLocationBreakdown, criticalReferenceRows } from './dashboardMetrics'
+import { summarizeStockSummary, computeReferenceLocationBreakdown, criticalReferenceRows, summarizeReceptionSessionProgress, stockSummaryRowsFromReceptionProgress } from './dashboardMetrics'
 import { businessBlocKeyOf, businessBlocLabel } from './businessBloc'
 import { isFeatureEnabled, FEATURE_FLAGS_EVENT, isCountryEnabled, isCityEnabled, isSousStationEnabled } from './featureFlags'
 // Importé plutôt que référencé par URL : il n'y a pas de dossier public/ ici, donc un
@@ -9171,6 +9171,13 @@ export default function App() {
         return payload?.data?.orders || []
       })
 
+    const receptionCommandsPromise = fetch(`${API_URL}/inventory/reception-commands`, { headers })
+      .then(async response => {
+        if (!response.ok) throw new Error('reception commands unavailable')
+        const payload = await response.json().catch(() => ({}))
+        return payload?.data?.commands || []
+      })
+
     const stationsPromise = fetch(`${API_URL}/auth/stations`, { headers })
       .then(async response => {
         if (!response.ok) throw new Error('stations unavailable')
@@ -9195,16 +9202,26 @@ export default function App() {
         return payload?.data?.proformas || []
       })
 
-    Promise.allSettled([stockSummaryPromise, stationsPromise, activeGlassesPromise, proformasPromise, supplierOrdersPromise])
-      .then(async ([stockResult, stationsResult, glassesResult, proformasResult, supplierOrdersResult]) => {
-        const summary = stockResult.status === 'fulfilled' ? summarizeStockSummary(stockResult.value) : { totalUnits: 0, hasData: false }
+    Promise.allSettled([stockSummaryPromise, stationsPromise, activeGlassesPromise, proformasPromise, supplierOrdersPromise, receptionCommandsPromise])
+      .then(async ([stockResult, stationsResult, glassesResult, proformasResult, supplierOrdersResult, receptionCommandsResult]) => {
+        const receptionProgress = receptionCommandsResult.status === 'fulfilled'
+          ? summarizeReceptionSessionProgress(receptionCommandsResult.value)
+          : null
+        const dashboardStockSummary = receptionProgress?.hasData
+          ? stockSummaryRowsFromReceptionProgress(receptionProgress)
+          : stockResult.status === 'fulfilled'
+            ? stockResult.value
+            : []
+        const summary = summarizeStockSummary(dashboardStockSummary)
 
-        setInitialStock(supplierOrdersResult.status === 'fulfilled'
-          ? supplierOrdersResult.value.reduce((sum: number, order: any) => sum + Math.max(0, Number(order.quantity) || 0), 0)
-          : 0)
+        setInitialStock(receptionProgress?.hasData
+          ? receptionProgress.initialStock
+          : supplierOrdersResult.status === 'fulfilled'
+            ? supplierOrdersResult.value.reduce((sum: number, order: any) => sum + Math.max(0, Number(order.quantity) || 0), 0)
+            : 0)
 
-        if (stockResult.status === 'fulfilled') {
-          setStockSummary(stockResult.value)
+        if (dashboardStockSummary.length > 0) {
+          setStockSummary(dashboardStockSummary)
         } else {
           setStockSummary([])
         }
