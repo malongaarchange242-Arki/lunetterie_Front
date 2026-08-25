@@ -918,7 +918,7 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
                           en portrait n'atteint) : `repeat(auto-fit, minmax(...))` calcule le
                           nombre de colonnes à partir de la largeur réelle du conteneur, quelle
                           que soit celle du téléphone. */}
-                      <div className="grid grid-cols-[repeat(auto-fit,minmax(80px,1fr))] gap-2 sm:grid-cols-4 lg:grid-cols-5">
+                      <div className="grid grid-cols-[repeat(auto-fit,minmax(80px,1fr))] gap-2">
                         {FORMES.map(forme => {
                           const selected = vForm.forme === forme
                           return (
@@ -945,7 +945,7 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
                     >
                       {/* Même grille fluide que « Forme » : le nombre de colonnes suit la
                           largeur réelle du téléphone au lieu d'un saut fixe à 640px. */}
-                      <div className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-2 sm:grid-cols-4 lg:grid-cols-5">
+                      <div className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-2">
                         {COULEURS.map(({ value, swatch }) => {
                           const selected = vForm.couleur === value
                           return (
@@ -2327,7 +2327,7 @@ function SessionsGate({ movements, commands, status, isError, onActivate, onPrin
 
       <section className="space-y-3">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white">Journées d'enregistrement</h3>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-3">
           {keys.map(key => {
             const isToday = key === today
             const count = counts.get(key) || 0
@@ -4544,7 +4544,7 @@ function ScanPage() {
                           en portrait n'atteint) : `repeat(auto-fit, minmax(...))` calcule le
                           nombre de colonnes à partir de la largeur réelle du conteneur, quelle
                           que soit celle du téléphone. */}
-                      <div className="grid grid-cols-[repeat(auto-fit,minmax(80px,1fr))] gap-2 sm:grid-cols-4 lg:grid-cols-5">
+                      <div className="grid grid-cols-[repeat(auto-fit,minmax(80px,1fr))] gap-2">
                           {FORMES.map(forme => {
                             const selected = form.forme === forme
                             return (
@@ -4574,7 +4574,7 @@ function ScanPage() {
                       >
                         {/* Même grille fluide que « Forme » : le nombre de colonnes suit la
                           largeur réelle du téléphone au lieu d'un saut fixe à 640px. */}
-                      <div className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-2 sm:grid-cols-4 lg:grid-cols-5">
+                      <div className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-2">
                           {COULEURS.map(({ value, swatch }) => {
                             const selected = form.couleur === value
                             return (
@@ -4662,7 +4662,7 @@ function ScanPage() {
                       <span className="mt-1 text-[11px] text-slate-400">Aperçu de l'étiquette</span>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+                    <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-3">
                       {[
                         ['Marque', finalData.marque || '—'],
                         ['Référence', finalData.reference || '—'],
