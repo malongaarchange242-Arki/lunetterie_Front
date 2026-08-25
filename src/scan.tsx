@@ -9,13 +9,8 @@ import { GlassTable, fmtPrix } from './GlassTable'
 import { isFeatureEnabled, isPosteEnabled, FEATURE_FLAGS_EVENT } from './featureFlags'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api-lunetterie.universearch.com/api/v1'
-// Aucun sélecteur de station sur cet écran : on réceptionne là où le magasinier est
-// rattaché. Ce repli ne sert que si son compte n'a pas de station — l'identifiant 1 est
-// celui du Stock Général sur une base neuve, mais rien ne le garantit après une remise à
-// zéro : c'est `users.station_id` qui fait foi.
 const DEFAULT_STATION_ID = '1'
 
-/** La station du compte connecté, celle où atterrissent les montures qu'il réceptionne. */
 function stationIdOf(user: any) {
   const id = Number(user?.station_id)
   return Number.isFinite(id) && id > 0 ? String(id) : DEFAULT_STATION_ID
@@ -40,8 +35,6 @@ function logoutToLogin() {
 const ROLE_ID_TO_NAME: Record<number, string> = {
   1: 'SUPER_ADMIN', 2: 'ADMIN', 3: 'MAGASINIER', 4: 'VENDEUR',
   5: 'LABORATOIRE', 6: 'RESPONSABLE_STATION', 7: 'DIRECTION', 8: 'SUPER_DIRECTEUR',
-  // 9 et 10 sont fixés à la main par les migrations 025_caisse et 028_sav : la
-  // séquence aurait fait dépendre leur id de l'ordre d'exécution des migrations.
   9: 'CAISSIER', 10: 'SAV',
 }
 const ROLE_ALIASES: Record<string, string> = { DIRECTION: 'ADMIN', SUPER_DIRECTEUR: 'SUPER_ADMIN' }
@@ -56,11 +49,8 @@ function getRoleName(user: any): string | null {
   return byId ? (ROLE_ALIASES[byId] || byId) : null
 }
 
-/** Les seuls rôles admis ici, comme protectPage(['MAGASINIER','SUPER_ADMIN']) de scan.html. */
 const ALLOWED_ROLES = ['MAGASINIER', 'SUPER_ADMIN']
 
-/** Le statut voyage avec l'erreur : un code de session inconnu (404) doit dire
- *  « ce code est invalide », pas « le serveur est injoignable ». */
 class ApiError extends Error {
   status: number
   constructor(message: string, status: number) {
@@ -69,8 +59,6 @@ class ApiError extends Error {
   }
 }
 
-// Toute réponse 401/403 signifie que le jeton ne vaut plus rien : on ne laisse pas
-// l'écran afficher des listes vides en donnant l'illusion d'un stock à zéro.
 async function apiFetch(path: string, init?: RequestInit) {
   const token = getToken()
   const isForm = init?.body instanceof FormData
@@ -78,8 +66,6 @@ async function apiFetch(path: string, init?: RequestInit) {
     ...init,
     headers: {
       ...(init?.headers || {}),
-      // Surtout pas de Content-Type sur un FormData : le navigateur doit poser
-      // lui-même la frontière multipart, sinon le serveur ne trouve aucun fichier.
       ...(init?.body && !isForm ? { 'Content-Type': 'application/json' } : {}),
       Authorization: `Bearer ${token}`,
     },
@@ -95,12 +81,6 @@ async function apiFetch(path: string, init?: RequestInit) {
   return payload
 }
 
-/** Comme apiFetch, mais rend `null` au lieu de déconnecter sur 401/403.
- *
- *  Réservé aux appels d'agrément. Le journal des expéditions et la liste des commandes
- *  appartiennent à la Direction : rien ne garantit que le magasinier y ait droit, et un
- *  refus doit vider une section, jamais éjecter quelqu'un au milieu d'une réception.
- *  Une vraie expiration de jeton reste attrapée par les appels obligatoires de l'écran. */
 async function apiFetchOptional(path: string) {
   try {
     const response = await fetch(`${API_URL}${path}`, {
@@ -121,9 +101,6 @@ function fmtFCFA(value: unknown) {
   return `${n.toLocaleString('fr-FR')} FCFA`
 }
 
-// Date locale (Congo, UTC+1), pas `toISOString()` : celle-ci retombe sur la date UTC, en
-// retard d'un jour entre 0h et 1h du matin heure locale — une monture scannée à 0h30 se
-// serait retrouvée rangée sous la veille, et la carte « Aujourd'hui » serait restée à 0.
 function localDayKey(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -148,8 +125,6 @@ function formatDayLabel(key: string) {
   })
 }
 
-/** `dayKey` rend null sur une date absente ou illisible. Sans ce garde-fou, la date
- *  partirait telle quelle dans `new Date('nullT12:00:00')` et sortirait « Invalid Date ». */
 function dayLabel(value?: string) {
   const key = dayKey(value)
   return key ? formatDayLabel(key) : 'Date inconnue'
@@ -202,8 +177,6 @@ const COULEURS: { value: string; swatch: string }[] = [
   { value: 'Cuivré', swatch: '#c2410c' },
 ]
 
-/** L'IA répond tantôt en anglais, tantôt sans accent : sans ce repli, la couleur
- *  détectée ne correspondrait à aucune pastille et le champ resterait vide. */
 const COLOR_ALIASES: Record<string, string> = {
   noir: 'Noir', black: 'Noir',
   marron: 'Marron', brown: 'Marron', brun: 'Marron',
@@ -232,10 +205,6 @@ function normalizeColorValue(value: unknown) {
   return COLOR_ALIASES[raw.toLowerCase()] || raw
 }
 
-/** Barème repris tel quel de scan.js. ⚠️ Il ne colle pas à getGamme() des autres écrans
- *  (≤ 50 000 = Classique) : une monture saisie « Classique » repart à 70 000 et sera
- *  relue « Moyenne gamme » ailleurs. Écart de la production, à trancher côté métier —
- *  le changer ici modifierait le prix réellement enregistré en base. */
 const GAMME_PRICES: Record<string, number> = {
   classique: 70000,
   'moyenne gamme': 90000,
@@ -249,7 +218,6 @@ function normalizePriceValue(value: unknown) {
   const numeric = Number(trimmed)
   if (Number.isFinite(numeric)) return numeric
   const normalized = trimmed.toLowerCase()
-  // 'luxe' vaut 0 : son prix est saisi à la main dans le champ dédié.
   return GAMME_PRICES[normalized] ?? 0
 }
 
@@ -303,10 +271,6 @@ const ic = {
 }
 
 // ── Brouillon du lot en cours ─────────────────────────────────────────────────
-/** Scopée par compte ET par code de session : un lot abandonné ne doit ressortir
- *  qu'à la réouverture de la même réception, jamais sous une autre — c'est
- *  exactement ce qui avait fait retirer la persistance la première fois (le
- *  brouillon rejouait pour une session différente et faussait le compteur). */
 function batchDraftKey(sessionCode: string) {
   try {
     const raw = window.localStorage.getItem('user')
@@ -339,24 +303,16 @@ function saveBatchDraft(sessionCode: string | undefined, items: any[]) {
   }
 }
 
-// ------------------ MonturesManager (capture, vérification par monture) ------
+// ── MonturesManager ───────────────────────────────────────────────────────────
 function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre, sessionGamme, knownBrands, onRecorded }: { onClose: () => void; sessionRemaining?: number; sessionCode?: string; sessionGenre?: string; sessionGamme?: string; knownBrands?: string[]; onRecorded?: () => Promise<void> }) {
-  // Repris depuis le brouillon de CETTE session s'il en existe un (sortie
-  // accidentelle : retour arrière, rechargement, session expirée en cours de
-  // capture) — vide sinon. `resumedCount` fige la taille lue au montage pour le
-  // bandeau ci-dessous, avant que l'envoi ne la fasse redescendre vers 0.
   const [montures, setMontures] = useState<any[]>(() => loadBatchDraft(sessionCode))
   const [resumedCount] = useState(() => loadBatchDraft(sessionCode).length)
   const [showResumedBanner, setShowResumedBanner] = useState(() => loadBatchDraft(sessionCode).length > 0)
 
-  // Réécrit à chaque changement : c'est ce qui protège une sortie non voulue.
-  // Une fermeture volontaire (closeAndReset) et une fin d'envoi réussie
-  // (runBatchUpload) effacent explicitement la clé, sans attendre cet effet.
   useEffect(() => {
     saveBatchDraft(sessionCode, montures)
   }, [montures, sessionCode])
 
-  // Camera batch capture local states
   const [cameraOnLocal, setCameraOnLocal] = useState(false)
   const videoRefLocal = useRef<HTMLVideoElement | null>(null)
   const streamRefLocal = useRef<MediaStream | null>(null)
@@ -364,26 +320,11 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
   const [tempFace, setTempFace] = useState<string | null>(null)
   const [tempBranche, setTempBranche] = useState<string | null>(null)
 
-  // Taille de lot choisie par le magasinier, éditable à tout moment depuis l'écran
-  // (pas de modale bloquante). Sans elle, le lot n'était jamais borné que par le
-  // quota entier de la session — correct, mais imposé : impossible de s'arrêter
-  // à un sous-lot plus petit sans y penser à chaque monture.
   const [batchTarget, setBatchTarget] = useState<number | null>(null)
 
-  // Le quota de la session reste la seule contrainte qu'on ne peut pas dépasser
-  // (impossible d'enregistrer plus de montures que la commande n'en attend). La
-  // taille de lot choisie, elle, ne fait que raccourcir la capture avant ce quota.
-  // sessionRemaining === 0 est une vraie contrainte (session pleine), pas une
-  // absence d'info : seul un sessionRemaining inconnu (undefined) doit lever le
-  // plafond, sinon la pastille « Quota » disparaissait et la capture continuait
-  // sans borne au moment précis où elle ne devait plus avancer du tout.
   const quotaCap = typeof sessionRemaining === 'number' ? Math.max(0, sessionRemaining) : Infinity
   const maxItems = (typeof batchTarget === 'number' && batchTarget > 0) ? Math.min(batchTarget, quotaCap) : quotaCap
 
-  // Étape 2 (vérification) par monture, avant de l'ajouter au lot — mêmes routes et
-  // le même composant Field que l'enregistrement individuel (voir plus bas dans ce fichier).
-  // Genre et gamme sont préremplis depuis la session, exactement comme resetAll() le fait
-  // pour l'enregistrement individuel : la commande reçue prime sur une saisie répétée.
   const emptyVForm = (): VerifyForm => ({ ...EMPTY_FORM, genre: sessionGenre || '', gamme: sessionGamme || '' })
   const [verifying, setVerifying] = useState(false)
   const [vForm, setVForm] = useState<VerifyForm>(emptyVForm)
@@ -392,15 +333,7 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
   const [vInvalid, setVInvalid] = useState<Record<string, boolean>>({})
   const [vAnalyzing, setVAnalyzing] = useState(false)
 
-  // Envoi final du lot, déclenché par « Terminer » — file façon téléchargements,
-  // une monture à la fois.
   const [uploading, setUploading] = useState(false)
-  // Verrou de ré-entrance séparé de `uploading` : ce dernier reste vrai pendant tout
-  // l'état d'erreur (pour garder la modale ouverte sur « Réessayer »), donc s'en servir
-  // pour bloquer un double envoi bloquerait aussi les vraies relances. La ref, elle, est
-  // remise à zéro dès la fin d'une tentative (succès ou échec), et lue de façon
-  // synchrone : un double appui déclenchant deux appels avant tout nouveau rendu voit
-  // quand même le premier appel l'avoir déjà posée.
   const uploadingRef = useRef(false)
   const [uploadItems, setUploadItems] = useState<any[]>([])
   const [uploadStatuses, setUploadStatuses] = useState<('pending' | 'uploading' | 'done' | 'error')[]>([])
@@ -417,7 +350,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
     })))
   }, [sessionGenre, sessionGamme])
 
-  // Local camera helpers
   const startCameraLocal = async () => {
     if (streamRefLocal.current) return
     const blocked = cameraUnavailableReason()
@@ -437,8 +369,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
     }
   }
 
-  // Coupe juste le flux : utilisé en passant à la vérification, où la caméra n'est
-  // plus utile mais où les photos temporaires doivent rester affichées.
   const stopCameraStreamLocal = () => {
     streamRefLocal.current?.getTracks().forEach(t => t.stop())
     streamRefLocal.current = null
@@ -446,14 +376,11 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
     setCameraOnLocal(false)
   }
 
-  // Abandon complet de la capture en cours (bouton « Arrêter », fermeture de l'écran).
   const cancelCaptureLocal = () => {
     stopCameraStreamLocal()
     setCaptureTargetLocal('face')
     setTempFace(null)
     setTempBranche(null)
-    // Sans ça, une détection déjà appliquée (référence, marque…) survivrait à
-    // l'abandon et pollueraient la vérification de la prochaine monture.
     setVForm(emptyVForm())
     setVSources(EMPTY_SOURCES)
     setVCollapsed({})
@@ -462,8 +389,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
 
   useEffect(() => () => cancelCaptureLocal(), [])
 
-  // La caméra démarre dès l'ouverture de l'écran : plus de modale « combien de
-  // montures » à valider avant de pouvoir photographier la première.
   useEffect(() => {
     void startCameraLocal()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -479,10 +404,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
     return c.toDataURL('image/jpeg', 0.92)
   }
 
-  // ── Analyse IA d'une monture du lot ─────────────────────────────────────────
-  // Mêmes routes et la même logique de détection que l'enregistrement individuel
-  // (analyzeMonture / analyzeBranche / applyDetection plus bas dans ce fichier) :
-  // un échec n'interrompt jamais la capture, les champs restent ouverts à la saisie.
   function vApplyDetection(detected: Partial<Record<FieldKey, string>>) {
     const keys = Object.keys(detected) as FieldKey[]
     if (keys.length === 0) return
@@ -512,7 +433,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
       if (a.color) detected.couleur = normalizeColorValue(a.color)
       if (a.material) detected.matiere = a.material
       if (a.brand) detected.marque = a.brand
-      // Le genre de la session décrit la commande reçue et prime sur une estimation IA.
       if (a.gender && !sessionGenre) detected.genre = normalizeSessionGenre(a.gender)
       vApplyDetection(detected)
     } catch (error) {
@@ -564,8 +484,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
       return
     }
     if (!tempBranche) return
-    // Le <video> reste monté (juste masqué) : c'est la vérification qui prend l'écran,
-    // la caméra n'a plus besoin de tourner pendant que le magasinier relit les champs.
     stopCameraStreamLocal()
     setVerifying(true)
   }
@@ -578,8 +496,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
   function setVField(key: keyof VerifyForm, value: string) {
     setVForm(previous => ({ ...previous, [key]: value }))
     setVInvalid(previous => ({ ...previous, [key]: false }))
-    // Un champ détecté que l'on modifie devient « Corrigé » : la correction du
-    // magasinier vaut vérité face à la prédiction du modèle.
     if (key in EMPTY_SOURCES) {
       setVSources(previous => (previous[key as FieldKey] === 'detected'
         ? { ...previous, [key]: 'corrected' }
@@ -599,7 +515,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
 
     if (Object.keys(nextInvalid).length > 0) {
       setVInvalid(nextInvalid)
-      // Un champ replié en erreur resterait invisible : on rouvre ce qui bloque.
       setVCollapsed(previous => {
         const next = { ...previous }
         Object.keys(nextInvalid).forEach(key => { next[key] = false })
@@ -627,9 +542,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
       gamme: vForm.gamme,
       prixCustom: vForm.prixCustom,
     }
-    // Mise à jour fonctionnelle, pas depuis l'instantané `montures` de ce rendu : deux
-    // confirmations rapprochées (double appui tactile) verraient sinon le même état
-    // périmé et la seconde écraserait la monture que la première venait d'ajouter.
     let updated: typeof montures = []
     setMontures(previous => {
       updated = [...previous, newM]
@@ -645,9 +557,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
     setVCollapsed({})
     setVInvalid({})
 
-    // Seule la vraie contrainte — le quota de la session, quand il est connu —
-    // referme le lot toute seule. Sinon la capture continue jusqu'à ce que le
-    // magasinier clique lui-même sur « Terminer le lot ».
     if (Number.isFinite(maxItems) && updated.length >= maxItems) {
       void runBatchUpload(updated)
     } else {
@@ -655,14 +564,7 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
     }
   }
 
-  // ── Envoi du lot ─────────────────────────────────────────────────────────────
-  // Déclenché par « Terminer », le dernier « Confirmer » du lot : une monture à la
-  // fois, dans l'ordre, pour que la liste ci-dessous puisse suivre laquelle part en
-  // premier (comme une file de téléchargements) plutôt qu'un seul envoi groupé opaque.
   const runBatchUpload = async (items: any[]) => {
-    // La ref est posée avant tout point d'attente : un second appel synchrone (double
-    // appui, ou l'auto-déclenchement de confirmBatchMonture qui se chevaucherait avec
-    // un « Terminer » manuel) la voit déjà vraie et repart aussitôt.
     if (items.length === 0 || uploadingRef.current) return
     uploadingRef.current = true
     try {
@@ -681,7 +583,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
           if (m.photoFace) body.append('image', dataURLtoBlob(m.photoFace), 'monture.jpg')
           if (m.photoBranche) body.append('branche_image', dataURLtoBlob(m.photoBranche), 'branche.jpg')
           body.append('station_id', stationId)
-          // Determine price: if 'luxe' use prixCustom, else prefer explicit m.prix, else derive from gamme
           let price = 0
           if (m.gamme === 'luxe') price = Number(m.prixCustom || 0)
           else if (m.prix && Number.isFinite(Number(m.prix))) price = Number(m.prix)
@@ -699,15 +600,9 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
           const payload = await apiFetch('/inventory/reception', { method: 'POST', body })
           const data = payload.data || {}
           if (onRecorded) await onRecorded()
-          // Même geste que l'enregistrement individuel (voir saveRecord plus bas) : sans
-          // lui, « Mes sessions » ne peut pas rattacher cette monture à sa session — le
-          // serveur ne le redit pas toujours sur le mouvement — et le jour retombe sur la
-          // liste plate au lieu des blocs de session.
           if (data.barcode && sessionCode) rememberBarcodeSession(data.barcode, sessionCode)
           setUploadStatuses(previous => previous.map((s, idx) => idx === i ? 'done' : s))
           setUploadResults(previous => ({ ...previous, [m.id]: data }))
-          // Retirée des brouillons dès son enregistrement : un échec plus loin dans le
-          // lot ne la fait pas repartir en double si le magasinier relance l'envoi.
           setMontures(previous => previous.filter(x => x.id !== m.id))
         } catch (err: any) {
           console.error('upload error', err)
@@ -717,29 +612,18 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
         }
       }
       setUploadDone(true)
-      // Chaque envoi réussi retire déjà sa monture de `montures`, donc de l'effet de
-      // persistance — cet appel n'est qu'un filet en cas de dernier envoi trop rapide
-      // pour que l'effet ait eu le temps de repasser.
       saveBatchDraft(sessionCode, [])
     } finally {
-      // Y compris sur l'échec ci-dessus (return dans le try) : sinon « Réessayer »,
-      // qui rappelle cette même fonction, se heurterait pour toujours à sa propre ref.
       uploadingRef.current = false
     }
   }
 
-  // Vrai seulement quand la prochaine monture confirmée épuiserait le quota
-  // connu de la session — sans quota connu, le lot ne se referme jamais tout seul.
   const willReachQuota = Number.isFinite(maxItems) && montures.length + 1 >= maxItems
-  // Une monture en cours de capture ou de vérification n'est pas encore dans
-  // `montures` : sans ce garde-fou, « Terminer » ou « Fermer » la perdrait en silence.
   const hasUnconfirmedCapture = verifying || Boolean(tempFace) || Boolean(tempBranche)
 
   function closeAndReset() {
     if (hasUnconfirmedCapture && !window.confirm('La monture en cours de capture n\'a pas été confirmée et sera perdue. Fermer quand même ?')) return
     if (montures.length > 0 && !window.confirm(`${montures.length} monture(s) non envoyée(s) seront perdues. Fermer quand même ?`)) return
-    // Fermeture volontaire et confirmée : contrairement à une sortie accidentelle
-    // (retour arrière, rechargement, session expirée), il n'y a rien à reprendre.
     setMontures([])
     saveBatchDraft(sessionCode, [])
     onClose()
@@ -747,43 +631,30 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
 
   function finishBatch() {
     if (hasUnconfirmedCapture && !window.confirm('La monture en cours de capture n\'a pas été confirmée et sera perdue. Terminer quand même ?')) return
-    // Un brouillon repris (sortie accidentelle puis retour) peut dépasser le quota si
-    // celui-ci a diminué entre-temps — une autre monture de cette session enregistrée
-    // ailleurs pendant l'absence, par exemple. On bloque plutôt que d'envoyer au-delà :
-    // rien dans ce lot n'est jeté, mais rien ne part tant que ce n'est pas résolu.
     if (Number.isFinite(quotaCap) && montures.length > quotaCap) {
       window.alert(`Le lot contient ${montures.length} monture(s) mais il ne reste que ${quotaCap} place(s) sur la session — impossible d'envoyer. Le quota a dû changer pendant votre absence.`)
       return
     }
     stopCameraStreamLocal()
-    // Le double appui tactile est couvert par la ref de ré-entrance de runBatchUpload
-    // lui-même (uploadingRef), posée avant tout point d'attente.
     void runBatchUpload(montures)
   }
 
   return (
-    <div className="fixed inset-0 z-9999 overflow-y-auto bg-black/50 p-2 sm:p-6">
-      <div className="mx-auto flex min-h-full w-full max-w-5xl items-start justify-center py-2 sm:py-6">
-      <div className="w-full overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-800">
-        {/* Empilé sur mobile (titre, quota et taille de lot sur leur propre ligne, boutons
-            en grille 2 colonnes pleine largeur), rangée unique à partir de sm — mêmes
-            valeurs fixes par palier que le pied de l'écran de vérification plus bas. */}
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3.5 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <div className="fixed inset-0 z-9999 overflow-y-auto bg-black/50 p-1 sm:p-6">
+      <div className="mx-auto flex min-h-full w-full max-w-5xl items-start justify-center py-1 sm:py-6">
+      <div className="w-full overflow-hidden rounded-xl sm:rounded-2xl bg-white shadow-xl dark:bg-slate-800">
+        <div className="flex flex-col gap-2 border-b border-slate-100 px-3 py-3 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Réception</p>
-              <h2 className="mt-1 text-base font-bold text-slate-900 dark:text-white sm:text-lg">Capture en lot</h2>
+              <h2 className="mt-1 text-sm font-bold text-slate-900 dark:text-white sm:text-lg">Capture en lot</h2>
             </div>
             {Number.isFinite(quotaCap) && (
-              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500 dark:bg-slate-900/60 dark:text-slate-400 sm:px-3 sm:py-1.5 sm:text-xs">
+              <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-slate-900/60 dark:text-slate-400 sm:px-3 sm:py-1 sm:text-xs">
                 Quota : {quotaCap}
               </span>
             )}
-            {/* Taille du lot éditable à tout moment, pas une valeur imposée par la
-                session : elle ne fait que raccourcir la capture avant le quota,
-                jamais l'allonger au-delà. Vide = pas de sous-lot, on capture
-                jusqu'au quota (ou sans fin s'il n'y en a pas). */}
-            <label className="flex items-center gap-1.5 rounded-lg bg-[#2563eb]/10 px-2.5 py-1 text-[11px] font-bold text-[#2563eb] sm:px-3 sm:py-1.5 sm:text-xs">
+            <label className="flex items-center gap-1 rounded-lg bg-[#2563eb]/10 px-2 py-0.5 text-[10px] font-bold text-[#2563eb] sm:px-3 sm:py-1 sm:text-xs">
               Taille du lot
               <input
                 type="number"
@@ -798,44 +669,38 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
                   if (Number.isFinite(n) && n > 0) setBatchTarget(Math.trunc(n))
                 }}
                 placeholder={Number.isFinite(quotaCap) ? String(quotaCap) : '∞'}
-                className="w-12 rounded-md border border-[#2563eb]/30 bg-white px-1.5 py-0.5 text-[11px] font-bold text-[#2563eb] outline-none focus:border-[#2563eb] dark:bg-slate-900 sm:w-14 sm:text-xs"
+                className="w-10 rounded-md border border-[#2563eb]/30 bg-white px-1 py-0.5 text-[10px] font-bold text-[#2563eb] outline-none focus:border-[#2563eb] dark:bg-slate-900 sm:w-14 sm:text-xs"
               />
             </label>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-none">
-            {/* Le lot n'a plus de nombre imposé par défaut : c'est ce bouton qui le
-                termine, avec tout ce qui a déjà été confirmé, à n'importe quel moment.
-                Libellé raccourci (pas de « le lot ») pour tenir sur une demi-largeur
-                d'écran de téléphone sans passer à la ligne. */}
+          <div className="grid grid-cols-2 gap-1.5 sm:flex sm:w-auto sm:flex-none">
             <Btn
               variant="success"
               disabled={montures.length === 0}
               onClick={finishBatch}
-              className="w-full sm:w-auto"
+              className="w-full text-xs sm:w-auto sm:text-sm"
             >
               {ic.check()} Terminer{montures.length > 0 ? ` (${montures.length})` : ''}
             </Btn>
-            <Btn onClick={closeAndReset} className="w-full sm:w-auto">Fermer</Btn>
+            <Btn onClick={closeAndReset} className="w-full text-xs sm:w-auto sm:text-sm">Fermer</Btn>
           </div>
         </div>
 
-        <div className="flex items-center justify-end px-4 pt-3 sm:px-6 sm:pt-4">
-          <span className="text-[11px] font-bold text-slate-400 sm:text-xs">{montures.length}/{Number.isFinite(maxItems) ? maxItems : '∞'}</span>
+        <div className="flex items-center justify-end px-3 pt-2 sm:px-6 sm:pt-4">
+          <span className="text-[10px] font-bold text-slate-400 sm:text-xs">{montures.length}/{Number.isFinite(maxItems) ? maxItems : '∞'}</span>
         </div>
 
         {showResumedBanner && (
-          <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#2563eb]/30 bg-[#2563eb]/10 px-3.5 py-2.5 text-xs font-semibold text-[#2563eb] sm:mx-6">
+          <div className="mx-3 mt-2 flex items-center justify-between gap-3 rounded-xl border border-[#2563eb]/30 bg-[#2563eb]/10 px-3 py-2 text-[10px] font-semibold text-[#2563eb] sm:mx-6 sm:mt-3 sm:px-3.5 sm:py-2.5 sm:text-xs">
             <span className="flex items-center gap-2">
-              {ic.refresh('w-3.5 h-3.5 flex-shrink-0')}
+              {ic.refresh('w-3 h-3 flex-shrink-0')}
               Lot précédent repris — {resumedCount} monture{resumedCount > 1 ? 's' : ''} en attente d'envoi.
             </span>
             <button onClick={() => setShowResumedBanner(false)} aria-label="Masquer" className="flex-shrink-0 text-[#2563eb]/70 hover:text-[#2563eb]">✕</button>
           </div>
         )}
 
-        <div className="p-4 sm:p-6">
-            {/* Le <video> ne peut pas être démonté entre les deux photos (le flux serait
-                perdu) : la vue de capture reste montée, juste masquée pendant la vérification. */}
+        <div className="p-3 sm:p-6">
             <div className={verifying ? 'hidden' : ''}>
               <CaptureCard
                 target={captureTargetLocal === 'face' ? 'monture' : 'branche'}
@@ -851,15 +716,14 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
               />
 
               {captureTargetLocal === 'branche' && tempFace && (
-                <div className="mt-4 flex items-center gap-2">
-                  <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                <div className="mt-3 flex items-center gap-2 sm:mt-4">
+                  <div className="relative h-12 w-12 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 sm:h-16 sm:w-16">
                     <img src={tempFace} className="h-full w-full object-cover" alt="Monture" />
-                    <span className="absolute bottom-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#16a34a] text-white">{ic.check('w-2.5 h-2.5')}</span>
+                    <span className="absolute bottom-0.5 right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-[#16a34a] text-white sm:h-4 sm:w-4">{ic.check('w-2 h-2 sm:w-2.5 sm:h-2.5')}</span>
                   </div>
-                  <p className="text-xs text-slate-400">Photo de la monture déjà capturée · photographiez la branche</p>
+                  <p className="text-[10px] text-slate-400 sm:text-xs">Photo de la monture déjà capturée · photographiez la branche</p>
                 </div>
               )}
-
             </div>
 
             {verifying && (
@@ -870,13 +734,13 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
                   pill={<Pill tone={vAnalyzing ? 'blue' : 'slate'}>{vAnalyzing ? 'Analyse IA en cours…' : 'Vérifiez les champs signalés'}</Pill>}
                 />
 
-                <div className="grid gap-4 p-4 lg:grid-cols-[220px_1fr]">
-                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+                <div className="grid gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[220px_1fr]">
+                  <div className="grid grid-cols-2 gap-2 lg:grid-cols-1 sm:gap-3">
                     <PhotoBox url={tempFace} label="Monture" />
                     <PhotoBox url={tempBranche} label="Branche" />
                   </div>
 
-                  <div className="space-y-2.5">
+                  <div className="space-y-2">
                     <Field
                       icon={ic.tag()} label="Référence" source={vSources.reference}
                       collapsed={vCollapsed.reference} summary={vForm.reference} invalid={vInvalid.reference}
@@ -913,12 +777,7 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
                       collapsed={vCollapsed.forme} summary={vForm.forme} invalid={vInvalid.forme}
                       onExpand={() => setVCollapsed(p => ({ ...p, forme: false }))}
                     >
-                      {/* Grille fluide plutôt que des paliers fixes (`sm:`/`lg:` seuls
-                          sautaient de 3 à 4 colonnes à 640px, une largeur qu'aucun téléphone
-                          en portrait n'atteint) : `repeat(auto-fit, minmax(...))` calcule le
-                          nombre de colonnes à partir de la largeur réelle du conteneur, quelle
-                          que soit celle du téléphone. */}
-                      <div className="grid grid-cols-[repeat(auto-fit,minmax(80px,1fr))] gap-2">
+                      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-[repeat(auto-fit,minmax(80px,1fr))] sm:gap-2">
                         {FORMES.map(forme => {
                           const selected = vForm.forme === forme
                           return (
@@ -926,11 +785,11 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
                               key={forme}
                               type="button"
                               onClick={() => setVField('forme', forme)}
-                              className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-[11px] font-semibold transition-all ${selected
+                              className={`flex flex-col items-center gap-0.5 rounded-xl border p-1.5 text-[10px] font-semibold transition-all sm:gap-1 sm:p-2 sm:text-[11px] ${selected
                                 ? 'border-[#2563eb] bg-[#2563eb]/10 text-[#2563eb]'
                                 : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'}`}
                             >
-                              <ShapeIcon name={forme} />
+                              <ShapeIcon name={forme} className="w-8 h-4 sm:w-10 sm:h-5" />
                               <span className="text-center leading-tight">{forme === 'Oeil de chat' ? 'Œil de chat' : forme}</span>
                             </button>
                           )
@@ -943,9 +802,7 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
                       collapsed={vCollapsed.couleur} summary={vForm.couleur} invalid={vInvalid.couleur}
                       onExpand={() => setVCollapsed(p => ({ ...p, couleur: false }))}
                     >
-                      {/* Même grille fluide que « Forme » : le nombre de colonnes suit la
-                          largeur réelle du téléphone au lieu d'un saut fixe à 640px. */}
-                      <div className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-2">
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-[repeat(auto-fit,minmax(100px,1fr))] sm:gap-2">
                         {COULEURS.map(({ value, swatch }) => {
                           const selected = vForm.couleur === value
                           return (
@@ -953,12 +810,12 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
                               key={value}
                               type="button"
                               onClick={() => setVField('couleur', value)}
-                              className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition-all ${selected
+                              className={`flex items-center gap-1 rounded-xl border px-1.5 py-1 text-[10px] font-semibold transition-all sm:gap-1.5 sm:px-2 sm:py-1.5 sm:text-[11px] ${selected
                                 ? 'border-[#2563eb] bg-[#2563eb]/10 text-[#2563eb]'
                                 : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'}`}
                             >
-                              <span className="h-4 w-4 flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-600" style={{ background: swatch }} />
-                              <span className="truncate">{value}</span>
+                              <span className="h-3 w-3 flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-600 sm:h-4 sm:w-4" style={{ background: swatch }} />
+                              <span className="truncate text-[9px] sm:text-[11px]">{value}</span>
                             </button>
                           )
                         })}
@@ -976,7 +833,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
                       </select>
                     </Field>
 
-                    {/* La gamme n'est jamais détectée : toujours ouverte. */}
                     <Field icon={ic.banknote()} label="Gamme" invalid={vInvalid.gamme || vInvalid.prixCustom}>
                       <select value={vForm.gamme} className={INPUT} onChange={e => setVField('gamme', e.target.value)}>
                         <option value="">Sélectionner une gamme</option>
@@ -995,11 +851,9 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700 sm:flex-row sm:flex-wrap sm:items-center">
-                  <Btn onClick={backToCaptureLocal}>{ic.arrowLeft()} Reprendre les photos</Btn>
-                  {/* Sur la dernière monture du lot, ce même bouton termine et enregistre
-                      tout le lot : plus de bouton « Envoyer » séparé. */}
-                  <Btn variant={willReachQuota ? 'success' : 'primary'} className="w-full sm:ml-auto sm:w-auto" onClick={confirmBatchMonture}>
+                <div className="flex flex-col gap-2 border-t border-slate-100 px-3 py-2.5 dark:border-slate-700 sm:flex-row sm:flex-wrap sm:items-center sm:px-4 sm:py-3">
+                  <Btn onClick={backToCaptureLocal} className="text-xs sm:text-sm">{ic.arrowLeft()} Reprendre les photos</Btn>
+                  <Btn variant={willReachQuota ? 'success' : 'primary'} className="w-full text-xs sm:ml-auto sm:w-auto sm:text-sm" onClick={confirmBatchMonture}>
                     {ic.check()} {willReachQuota ? 'Confirmer et terminer le lot →' : 'Confirmer et ajouter au lot →'}
                   </Btn>
                 </div>
@@ -1010,24 +864,24 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
     </div>
 
     {uploading && (
-      <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/70 p-4">
-        <div className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-800" style={{ maxHeight: '85vh' }}>
-          <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-700">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+      <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/70 p-2 sm:p-4">
+        <div className="flex w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-slate-800 sm:rounded-2xl" style={{ maxHeight: '90vh' }}>
+          <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-700 sm:px-5 sm:py-4">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white sm:text-base">
               {uploadDone ? 'Lot enregistré' : uploadError ? "Envoi interrompu" : 'Enregistrement du lot…'}
             </h3>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400 sm:text-xs">
               {uploadStatuses.filter(s => s === 'done').length} / {uploadStatuses.length} monture(s) envoyée(s)
             </p>
           </div>
 
           <ul className="divide-y divide-slate-100 overflow-y-auto dark:divide-slate-700">
             {uploadItems.map((m, i) => (
-              <li key={m.id} className={`flex items-center gap-3 px-5 py-3 transition-colors ${uploadStatuses[i] === 'uploading' ? 'bg-[#2563eb]/5' : ''}`}>
+              <li key={m.id} className={`flex items-center gap-2 px-4 py-2.5 transition-colors sm:gap-3 sm:px-5 sm:py-3 ${uploadStatuses[i] === 'uploading' ? 'bg-[#2563eb]/5' : ''}`}>
                 <UploadStatusIcon status={uploadStatuses[i] || 'pending'} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">#{i + 1} {m.reference || 'Monture'}</p>
-                  <p className="truncate text-xs text-slate-400">
+                  <p className="truncate text-xs font-semibold text-slate-900 dark:text-white sm:text-sm">#{i + 1} {m.reference || 'Monture'}</p>
+                  <p className="truncate text-[10px] text-slate-400 sm:text-xs">
                     {uploadStatuses[i] === 'uploading' ? 'Envoi en cours…'
                       : uploadStatuses[i] === 'done' ? (uploadResults[m.id]?.location_code || uploadResults[m.id]?.location || m.marque || 'Enregistrée')
                       : uploadStatuses[i] === 'error' ? 'Échec'
@@ -1039,21 +893,21 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
           </ul>
 
           {uploadError && (
-            <div className="mx-5 mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-400">
+            <div className="mx-4 mt-2 rounded-xl border border-red-200 bg-red-50 px-2.5 py-1.5 text-[10px] font-semibold text-red-600 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-400 sm:mx-5 sm:mt-3 sm:px-3 sm:py-2 sm:text-xs">
               {uploadError}
             </div>
           )}
 
-          <div className="flex items-center gap-2 border-t border-slate-100 px-5 py-4 dark:border-slate-700">
+          <div className="flex items-center gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700 sm:px-5 sm:py-4">
             {uploadDone ? (
-              <Btn variant="success" className="ml-auto" onClick={closeAndReset}>{ic.check()} Terminé</Btn>
+              <Btn variant="success" className="ml-auto text-xs sm:text-sm" onClick={closeAndReset}>{ic.check()} Terminé</Btn>
             ) : uploadError ? (
               <>
-                <Btn onClick={() => setUploading(false)}>Fermer</Btn>
-                <Btn variant="primary" className="ml-auto" onClick={() => void runBatchUpload(montures)}>{ic.refresh()} Réessayer</Btn>
+                <Btn onClick={() => setUploading(false)} className="text-xs sm:text-sm">Fermer</Btn>
+                <Btn variant="primary" className="ml-auto text-xs sm:text-sm" onClick={() => void runBatchUpload(montures)}>{ic.refresh()} Réessayer</Btn>
               </>
             ) : (
-              <span className="text-xs text-slate-400">Ne fermez pas cette fenêtre…</span>
+              <span className="text-[10px] text-slate-400 sm:text-xs">Ne fermez pas cette fenêtre…</span>
             )}
           </div>
         </div>
@@ -1064,8 +918,6 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
 }
 
 // ── Dessins des formes de monture ──────────────────────────────────────────────
-// Aident à choisir la forme réelle plutôt qu'un mot dans une liste ; la correction
-// sert aussi de donnée d'entraînement au modèle de reconnaissance (detected_shape).
 const SHAPE_PATHS: Record<string, React.ReactNode> = {
   Aviateur: <>
     <path d="M2 7.5C2 4.5 5 2.5 9 2.5s7 2 7 5c0 5-3 10.5-7 10.5S2 12.5 2 7.5z" />
@@ -1107,10 +959,6 @@ function ShapeIcon({ name, className = 'w-10 h-5' }: { name: string; className?:
 }
 
 // ── Styles maison ──────────────────────────────────────────────────────────────
-// Deux besoins que Tailwind ne couvre pas : l'animation du viseur caméra, et
-// l'étiquette d'impression — celle-ci part dans une fenêtre séparée qui n'a pas
-// la feuille de style de l'app, donc classes maison obligatoires (même raison que
-// PROFORMA_CSS dans vendeuse.tsx).
 const SCAN_CSS = `
 @keyframes scanline { 0%,100% { top: 8%; opacity: .25 } 50% { top: 92%; opacity: 1 } }
 .scan-line { animation: scanline 2.6s ease-in-out infinite; }
@@ -1133,12 +981,6 @@ const LABEL_CSS = `
   .lb .meta span:last-child { font-weight: 800; font-size: 9px; }
 `
 
-/** Le gabarit de LABEL_CSS converti en pixels CSS à 96 dpi : l'étiquette réelle ne fait
- *  que 57 × 30 mm (rouleau de l'imprimante) — 56 × ~28,5 mm ici pour garder une marge de
- *  sécurité. Tout est compressé en conséquence : peu de marge intérieure (1,6 mm), peu
- *  d'écart entre les blocs (2 px), polices réduites. `width` compte pour la largeur
- *  totale (padding compris), comme le `box-sizing: border-box` côté CSS : sans ça le
- *  padding s'ajoutait à la largeur déclarée et le rendu papier débordait le rouleau. */
 const LABEL_PX = { width: 212, pad: 6, gap: 2, barcodeMargin: 2 }
 
 const LABEL_FONT = {
@@ -1149,12 +991,8 @@ const LABEL_FONT = {
   meta: '8px Inter, system-ui, sans-serif',
 }
 
-/** Interlignes : le canvas ne connaît pas line-height, chaque ligne avance à la main. */
 const LABEL_LINE = { location: 11, shop: 10, marque: 14, ref: 10, meta: 9 }
 
-// ── Code-barres ────────────────────────────────────────────────────────────────
-/** showValue=false : le texte intégré au SVG rétrécit avec les barres et devient
- *  illisible dans une carte étroite. On l'affiche alors séparément en HTML. */
 async function drawBarcode(target: SVGSVGElement, value: string, showValue = true) {
   if (!value) return
   const module = await import('jsbarcode')
@@ -1168,11 +1006,6 @@ async function drawBarcode(target: SVGSVGElement, value: string, showValue = tru
     format: 'CODE128',
     lineColor: '#0f172a',
     background: '#ffffff',
-    // La largeur rendue est de toute façon retaillée à la largeur de l'étiquette (56mm),
-    // et la hauteur est contrainte par une étiquette physique de seulement 30mm de haut,
-    // texte compris : height/margin ci-dessous sont calés pour tenir sous ce plafond
-    // (~28,5mm de haut au total avec tout le reste), pas pour maximiser la taille du
-    // code-barres dans l'absolu.
     width: 1.15,
     height: 24,
     fontSize: 20,
@@ -1180,10 +1013,6 @@ async function drawBarcode(target: SVGSVGElement, value: string, showValue = tru
     displayValue: showValue,
   })
 
-  // JsBarcode fixe parfois seulement les attributs du SVG sans les dimensions de
-  // la vue, ou bien il les laisse à 0 sur certains navigateurs quand l'élément est
-  // temporaire. Sans un viewBox exploitable, la barre n'a ni largeur ni hauteur à
-  // l'impression / export d'image.
   const explicitWidth = Number.parseFloat(String(target.getAttribute('width') ?? '')) || 0
   const explicitHeight = Number.parseFloat(String(target.getAttribute('height') ?? '')) || 0
   const vb = target.viewBox?.baseVal
@@ -1211,8 +1040,6 @@ function BarcodePreview({ value, className = '' }: { value: string; className?: 
 }
 
 async function downloadDataUrl(dataUrl: string, filename: string) {
-  // Passage par un Blob plutôt que par le data: URL posé directement en href : Safari
-  // ignore l'attribut download sur un href data: et se contente d'ouvrir l'image.
   const blob = await fetch(dataUrl).then(response => response.blob())
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -1221,7 +1048,6 @@ async function downloadDataUrl(dataUrl: string, filename: string) {
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
-  // Révocation différée : révoquer dans la foulée annule le téléchargement en cours.
   window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
@@ -1234,13 +1060,6 @@ function loadImage(source: string) {
   })
 }
 
-/** Découpe un texte trop large, comme le ferait le flux HTML de l'étiquette : un nom
- *  de marque long doit descendre d'une ligne, pas déborder de l'image.
- *
- *  Coupe aussi après chaque tiret, pas seulement sur les espaces : un code d'emplacement
- *  comme « RAYON-A-ETA-01-BAC-A-POS-06 » est un seul « mot » sans espace, et un navigateur
- *  le renverrait déjà à la ligne à ces tirets (point de coupure standard). Sans quoi il ne
- *  se découpait jamais et débordait du canvas. */
 function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
   const raw = String(text || '').trim()
   if (!raw) return ['—']
@@ -1248,8 +1067,6 @@ function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: n
   const words = raw.split(/\s+/)
   const tokens: { text: string; spaceBefore: boolean }[] = []
   words.forEach((word, wordIndex) => {
-    // Lookbehind : coupe juste après chaque tiret, en le laissant collé au fragment
-    // précédent plutôt que de l'isoler sur sa propre ligne.
     const parts = word.split(/(?<=-)/)
     parts.forEach((part, partIndex) => {
       tokens.push({ text: part, spaceBefore: partIndex === 0 && wordIndex > 0 })
@@ -1270,38 +1087,18 @@ function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: n
   return lines
 }
 
-/** Le contenu d'une étiquette, détaché de ce qu'elle décrit.
- *
- *  Deux étiquettes sortent de cet écran — celle d'une monture et celle d'un carton
- *  d'envoi — et elles partagent tout : 56 mm de large, les mêmes polices, le même
- *  code-barres CODE128, la même ligne de pied. Seuls les textes changent. Dupliquer le
- *  tracé pour la seconde condamnerait les deux gabarits à diverger à la première retouche. */
 interface PrintableLabel {
-  /** Ligne principale, en gras : la marque de la monture, ou « Carton d'envoi ». */
   title: string
-  /** Sous-titre en chasse fixe : la référence de la monture, ou celle du colis. */
   reference: string
-  /** La valeur encodée dans le code-barres — et le nom du fichier téléchargé. */
   barcodeValue: string
-  /** Ligne d'en-tête, centrée et en gras : l'emplacement, ou la ville de destination. */
   metaLeft: string
-  /** Prix affiché sous la référence, avant le code-barres. */
   metaRight: string
-  /** Préfixe du PNG déposé sur le disque : `etiquette-…` ou `carton-…`. */
   filePrefix: string
 }
 
-/** Redessine l'étiquette sur un canvas au lieu de photographier le HTML : sans
- *  bibliothèque tierce, aucun navigateur ne convertit du HTML en image de façon
- *  fiable — le détour par <foreignObject> rend de travers sur Safari.
- *
- *  Le tracé rejoue donc LABEL_CSS à la main : **toute retouche du gabarit imprimé
- *  doit être reportée ici**, sinon l'image téléchargée et le papier divergent. */
 async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; width: number; height: number }) {
   const contentWidth = LABEL_PX.width - LABEL_PX.pad * 2
 
-  // Mesurer avant de dimensionner le canvas : la hauteur dépend du nombre de lignes,
-  // qui dépend de la police. Un contexte jetable sert de règle.
   const ruler = document.createElement('canvas').getContext('2d')
   if (!ruler) throw new Error('Canvas non supporté par ce navigateur.')
 
@@ -1318,8 +1115,6 @@ async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; w
   const safeBarcodeWidth = barcode.width > 0 ? barcode.width : 180
   const safeBarcodeHeight = barcode.height > 0 ? barcode.height : 48
   if (barcode.svg) {
-    // data: plutôt que blob: — une <img> qui charge un blob: SVG déclenche selon les
-    // navigateurs un contrôle d'origine qui échoue, et l'image n'arrive jamais.
     barcodeImage = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(barcode.svg)}`)
     const ratio = Math.min(1, contentWidth / safeBarcodeWidth)
     barcodeWidth = safeBarcodeWidth * ratio
@@ -1335,7 +1130,6 @@ async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; w
     + (barcodeHeight ? LABEL_PX.gap + LABEL_PX.barcodeMargin * 2 + barcodeHeight : 0)
     + LABEL_PX.pad
 
-  // ×3 : une étiquette de 56 mm rendue à 96 dpi ressort floue dès qu'on la réimprime.
   const scale = 3
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(LABEL_PX.width * scale)
@@ -1361,8 +1155,6 @@ async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; w
   y += LABEL_PX.gap
 
   ctx.font = LABEL_FONT.shop
-  // letterSpacing manque au contexte 2D des navigateurs anciens : l'affectation passe
-  // par un cast pour qu'ils rendent sans interlettrage plutôt que de casser le tracé.
   ;(ctx as any).letterSpacing = '0.5px'
   ctx.fillText('LA LUNETTERIE', center, y)
   ;(ctx as any).letterSpacing = '0px'
@@ -1397,12 +1189,6 @@ async function labelToPngDataUrl(data: PrintableLabel, barcode: { svg: string; w
   return canvas.toDataURL('image/png')
 }
 
-/** Une copie image part sur le disque en même temps que l'impression : la fenêtre
- *  d'impression ne laisse rien derrière elle, et le magasinier doit pouvoir retrouver
- *  l'étiquette d'une monture sans la réimprimer.
- *
- *  L'échec reste silencieux — une alerte surgirait par-dessus la boîte d'impression
- *  déjà ouverte, et le papier, lui, est parti. */
 async function downloadLabel(data: PrintableLabel, barcode: { svg: string; width: number; height: number }) {
   try {
     const dataUrl = await labelToPngDataUrl(data, barcode)
@@ -1412,12 +1198,7 @@ async function downloadLabel(data: PrintableLabel, barcode: { svg: string; width
   }
 }
 
-/** L'étiquette part dans une fenêtre séparée plutôt qu'en masquant le reste de la
- *  page : le vanilla s'appuyait sur `body > *:not(.print-label)`, impossible ici où
- *  toute l'application vit sous un unique #root. */
 async function printLabel(data: PrintableLabel) {
-  // Le SVG est dessiné attaché au document — JsBarcode mesure le rendu, un nœud
-  // détaché ressort sans dimensions — puis retiré aussitôt.
   const holder = document.createElement('div')
   holder.style.cssText = 'position:absolute;left:-9999px;top:0'
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
@@ -1425,9 +1206,6 @@ async function printLabel(data: PrintableLabel) {
   document.body.appendChild(holder)
 
   let markup = ''
-  // Sérialisé pendant que le SVG est encore attaché, mais converti en image plus tard :
-  // la sérialisation est synchrone et ne retarde pas l'ouverture de la fenêtre, alors
-  // qu'un chargement d'image, lui, ferait passer le clic pour une popup non sollicitée.
   const barcode = { svg: '', width: 0, height: 0 }
   try {
     await drawBarcode(svg, data.barcodeValue, false)
@@ -1444,8 +1222,6 @@ async function printLabel(data: PrintableLabel) {
 
   const popup = window.open('', '_blank', 'width=420,height=560')
 
-  // Téléchargée dans tous les cas, impression bloquée comprise : c'est justement quand
-  // rien ne sort de l'imprimante que la copie image sert le plus.
   void downloadLabel(data, barcode)
 
   if (!popup) {
@@ -1469,10 +1245,6 @@ async function printLabel(data: PrintableLabel) {
   popup.document.close()
 }
 
-/** L'étiquette d'une monture : celle qui part sur la branche.
- *  Le code-barres doit exister avant l'impression : si l'enregistrement vient d'un
- *  flux qui n'a pas réservé de numéro, on le demande au serveur pour éviter une
- *  étiquette vide. */
 async function printMontureLabel(data: FinalMonture) {
   let barcodeValue = String(data.id || '').trim()
   if (!barcodeValue) {
@@ -1499,12 +1271,6 @@ async function printMontureLabel(data: FinalMonture) {
   })
 }
 
-/** L'étiquette du carton d'envoi : celle qu'on colle sur le colis.
- *
- *  Le code-barres porte `box_code` — c'est lui que la station destinataire scannera à la
- *  réception — et `box_reference` reste lisible en clair dessous. Le pied rappelle où va
- *  le colis et ce qu'il contient, les deux informations qu'on cherche sur un carton
- *  empilé parmi d'autres. */
 function printBoxLabel(dispatch: Dispatch) {
   const count = Number(dispatch.sent_count || 0)
   return printLabel({
@@ -1517,8 +1283,6 @@ function printBoxLabel(dispatch: Dispatch) {
   })
 }
 
-/** Trois notes montantes après un enregistrement : le magasinier a les mains
- *  occupées, il valide à l'oreille sans quitter la monture des yeux. */
 function playSuccessChime() {
   try {
     const Ctor = window.AudioContext || (window as any).webkitAudioContext
@@ -1552,14 +1316,6 @@ interface ReceptionSession {
   gamme: string
 }
 
-/** Une ligne de « Commandes à réceptionner ».
- *
- *  Le corps vient de l'expédition (`/inventory/expeditions`, ouvert à tout compte) : numéro,
- *  date, pays, quantité commandée. C'est ce qui s'affiche dès que la Direction a envoyé la
- *  commande, grisé, avant tout scan.
- *
- *  Les champs de session — code, quota, avancement — n'arrivent qu'une fois l'étiquette
- *  scannée sur ce poste. Tant qu'ils manquent, la ligne n'est pas reprenable. */
 interface ReceptionEntry {
   key: string
   orderId: number
@@ -1571,36 +1327,14 @@ interface ReceptionEntry {
   targetCount?: number
   registeredCount?: number
   status?: string
-  /** Horodatage du scan de l'étiquette, quand le serveur sait le poser. Toutes les
-   *  versions déployées ne le renvoient pas : `scanned` et `registeredCount` prennent le
-   *  relais, jamais l'inverse. */
   activatedAt?: string | null
-  /** Cette session a été scannée par ce compte. Connaître son code ne suffit pas : c'est
-   *  le scan de l'étiquette qui ouvre une réception, et lui seul débloque la reprise. */
   scanned?: boolean
   genre?: string
   gamme?: string
 }
 
-/** Les codes de session scannés sur ce poste.
- *
- *  `GET /inventory/reception-commands` est réservé à la direction
- *  (backend/cmd/api/main.go:454) : impossible de demander au serveur « lesquelles ai-je
- *  ouvertes ». On retient donc les codes ici, et chacun se relit ensuite un par un sur
- *  `/reception-commands/:code`, qui lui est ouvert à tout compte authentifié.
- *
- *  C'est ce qui permet de quitter la page et d'y revenir sans rescanner. La contrepartie :
- *  la mémoire est celle du navigateur, pas celle du compte — changer de poste ou vider le
- *  cache oblige à rescanner l'étiquette, ce qui reste le geste normal. */
-/** Au-delà, ce sont de vieilles réceptions : autant de requêtes inutiles au chargement. */
 const SCANNED_CODES_MAX = 20
 
-/** La clé est celle du compte, pas du poste : deux magasiniers se relaient souvent sur la
- *  même tablette, et chacun ne doit retrouver que les sessions qu'il a lui-même scannées.
- *
- *  L'identité se relit dans localStorage plutôt que dans l'état React : la garde y écrit le
- *  compte avant tout, et les fonctions ci-dessous sont appelées depuis des callbacks
- *  mémoïsés qui, eux, garderaient l'utilisateur du premier rendu — c'est-à-dire aucun. */
 function scannedCodesKey() {
   try {
     const raw = window.localStorage.getItem('user')
@@ -1635,13 +1369,6 @@ function rememberScannedCode(code: string) {
   saveScannedCodes([clean, ...loadScannedCodes().filter(item => item !== clean)])
 }
 
-/** Filet pour `activated_at` : le commentaire sur `ReceptionEntry.activatedAt` le dit déjà,
- *  toutes les versions déployées du backend ne le renvoient pas à la relecture — seulement
- *  au moment du POST /activate. Or « Journées d'enregistrement » (SessionsGate) range
- *  chaque session sur le jour que cette date désigne : sans elle, la session ne rejoint
- *  aucun jour et disparaît purement et simplement de la grille, alors même qu'elle reste
- *  active et reprenable ailleurs (rescan de l'étiquette). On note donc l'heure de CE scan
- *  ici, localement, dès l'activation — en repli seulement, jamais préféré à la date serveur. */
 function activatedAtKey() {
   try {
     const raw = window.localStorage.getItem('user')
@@ -1681,13 +1408,6 @@ function loadActivatedAt(code: string): string | null {
   return clean ? loadActivatedAtMap()[clean] || null : null
 }
 
-/** Le serveur ne renvoie pas de façon fiable, sur un mouvement relu (GET /inventory/movements),
- *  le code de la session qui l'a créé — le nom du champ varie selon la version déployée, sans
- *  qu'on puisse le deviner depuis le front (cf. SessionsGate, qui essaie plusieurs noms en
- *  repli). On le retient donc nous-mêmes, ici, au moment où on le connaît avec certitude :
- *  juste après l'enregistrement (saveRecord). Même portée que scannedCodesKey (par compte, ce
- *  navigateur) — les enregistrements faits ailleurs ne bénéficient pas de ce raccourci, mais
- *  retombent sur le même repli que avant. */
 const BARCODE_SESSIONS_MAX = 500
 
 function barcodeSessionsKey() {
@@ -1718,7 +1438,6 @@ function rememberBarcodeSession(barcode: string, sessionCode: string) {
     const map = loadBarcodeSessions()
     map[cleanBarcode] = cleanCode
     const entries = Object.entries(map)
-    // Garde les plus récents si le plafond est dépassé, plutôt que de grossir indéfiniment.
     const trimmed = entries.length > BARCODE_SESSIONS_MAX ? entries.slice(entries.length - BARCODE_SESSIONS_MAX) : entries
     window.localStorage.setItem(barcodeSessionsKey(), JSON.stringify(Object.fromEntries(trimmed)))
   } catch {
@@ -1776,12 +1495,12 @@ interface FinalMonture {
 }
 
 // ── Briques d'interface ────────────────────────────────────────────────────────
-const CARD = 'bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700'
+const CARD = 'bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl border border-slate-100 dark:border-slate-700'
 
 function Btn({ variant = 'outline', className = '', children, ...rest }: {
   variant?: 'primary' | 'outline' | 'success' | 'danger'
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const base = 'inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none'
+  const base = 'inline-flex items-center justify-center gap-1.5 md:gap-2 rounded-xl px-3 md:px-3.5 py-2.5 text-xs md:text-sm font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none min-h-[44px] min-w-[44px]'
   const variants = {
     primary: 'bg-[#2563eb] text-white hover:bg-[#1d4ed8]',
     success: 'bg-[#16a34a] text-white hover:bg-[#15803d]',
@@ -1798,13 +1517,13 @@ function Pill({ children, tone = 'slate' }: { children: React.ReactNode; tone?: 
     green: 'bg-[#16a34a]/10 text-[#16a34a]',
     red: 'bg-red-500/10 text-red-600 dark:text-red-400',
   }
-  return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${tones[tone]}`}>{children}</span>
+  return <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold sm:px-2.5 sm:py-1 sm:text-[11px] ${tones[tone]}`}>{children}</span>
 }
 
 function CardHead({ icon, title, pill }: { icon: React.ReactNode; title: React.ReactNode; pill?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700 px-4 py-3">
-      <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+    <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
+      <h3 className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white sm:gap-2 sm:text-sm">
         <span className="text-[#2563eb]">{icon}</span>
         {title}
       </h3>
@@ -1813,9 +1532,6 @@ function CardHead({ icon, title, pill }: { icon: React.ReactNode; title: React.R
   )
 }
 
-// ── Étape 1 : photos ───────────────────────────────────────────────────────────
-// Le <video> ne peut pas être démonté entre les deux photos (le flux serait perdu) :
-// la vue de capture est donc rendue d'un bloc, avec la balise vidéo toujours présente.
 function CaptureCard({ target, photo, cameraOn, videoRef, onStart, onStop, onCapture, onRetake, onNext, analyzing }: {
   target: 'monture' | 'branche'
   photo: string | null
@@ -1837,13 +1553,8 @@ function CaptureCard({ target, photo, cameraOn, videoRef, onStart, onStop, onCap
         pill={<Pill tone="blue">{isMonture ? 'Photo 1/2 · Monture' : 'Photo 2/2 · Branche'}</Pill>}
       />
 
-      {/* La marge vit sur ce conteneur, pas sur la carte à ratio fixe elle-même : un
-          bloc avec à la fois `aspect-video` et `min-h-[220px]` mais sans largeur
-          explicite se voit sinon attribuer par Chromium une largeur dérivée du
-          ratio et du plancher de hauteur (≈391px) au lieu de la largeur
-          disponible — la carte débordait alors du conteneur sur mobile. */}
-      <div className="m-4">
-        <div className="relative w-full aspect-video min-h-[220px] overflow-hidden rounded-xl bg-slate-900">
+      <div className="m-2 sm:m-4">
+        <div className="relative w-full aspect-video min-h-[180px] sm:min-h-[220px] overflow-hidden rounded-xl bg-slate-900">
           <video
             ref={videoRef}
             autoPlay
@@ -1855,47 +1566,46 @@ function CaptureCard({ target, photo, cameraOn, videoRef, onStart, onStop, onCap
           {photo && <img src={photo} alt="Photo capturée" className="absolute inset-0 h-full w-full object-cover" />}
 
           {!cameraOn && !photo && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800">{ic.camera('w-6 h-6')}</div>
-              <p className="text-sm font-bold text-slate-300">Caméra en attente</p>
-              <p className="text-xs">Appuyez sur « Démarrer »</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-slate-400 sm:gap-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-800 sm:h-12 sm:w-12">{ic.camera('w-5 h-5 sm:w-6 sm:h-6')}</div>
+              <p className="text-xs font-bold text-slate-300 sm:text-sm">Caméra en attente</p>
+              <p className="text-[10px] sm:text-xs">Appuyez sur « Démarrer »</p>
             </div>
           )}
 
-          {/* Viseur : purement décoratif, il cadre le geste. La détection est faite par le serveur. */}
           {cameraOn && !photo && (
             <div className="pointer-events-none absolute inset-0">
               <div className="absolute inset-[12%] rounded-lg">
                 {['left-0 top-0 border-l-2 border-t-2', 'right-0 top-0 border-r-2 border-t-2', 'bottom-0 left-0 border-b-2 border-l-2', 'bottom-0 right-0 border-b-2 border-r-2'].map(pos => (
-                  <span key={pos} className={`absolute h-6 w-6 rounded-sm border-[#2563eb] ${pos}`} />
+                  <span key={pos} className={`absolute h-4 w-4 rounded-sm border-[#2563eb] sm:h-6 sm:w-6 ${pos}`} />
                 ))}
                 <span className="scan-line absolute left-[6%] right-[6%] h-0.5 rounded-full bg-[#2563eb]" />
               </div>
-              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm">
-                <span className="scan-pulse h-1.5 w-1.5 rounded-full bg-[#16a34a]" />
+              <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/60 px-2 py-1 text-[9px] font-semibold text-white backdrop-blur-sm sm:bottom-3 sm:gap-2 sm:px-3 sm:py-1.5 sm:text-[11px]">
+                <span className="scan-pulse h-1 w-1 rounded-full bg-[#16a34a] sm:h-1.5 sm:w-1.5" />
                 Caméra prête
               </div>
             </div>
           )}
 
           {analyzing && (
-            <div className="absolute inset-x-0 bottom-0 bg-black/70 px-3 py-2 text-center text-[11px] font-semibold text-white">
+            <div className="absolute inset-x-0 bottom-0 bg-black/70 px-2 py-1.5 text-center text-[9px] font-semibold text-white sm:px-3 sm:py-2 sm:text-[11px]">
               Analyse IA en cours…
             </div>
           )}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 px-4 pb-4">
+      <div className="flex flex-wrap items-center gap-1.5 px-2 pb-2 sm:gap-2 sm:px-4 sm:pb-4">
         {!cameraOn
-          ? <Btn variant="primary" onClick={onStart}>{ic.play()} Démarrer</Btn>
-          : <Btn variant="danger" onClick={onStop}>{ic.stop()} Arrêter</Btn>}
+          ? <Btn variant="primary" onClick={onStart} className="text-xs sm:text-sm">{ic.play()} Démarrer</Btn>
+          : <Btn variant="danger" onClick={onStop} className="text-xs sm:text-sm">{ic.stop()} Arrêter</Btn>}
 
         {!photo
-          ? <Btn variant="success" onClick={onCapture} disabled={!cameraOn}>{ic.camera()} Capturer</Btn>
-          : <Btn onClick={onRetake}>{ic.refresh()} Reprendre</Btn>}
+          ? <Btn variant="success" onClick={onCapture} disabled={!cameraOn} className="text-xs sm:text-sm">{ic.camera()} Capturer</Btn>
+          : <Btn onClick={onRetake} className="text-xs sm:text-sm">{ic.refresh()} Reprendre</Btn>}
 
-        <Btn variant="primary" className="ml-auto" onClick={onNext} disabled={!photo}>
+        <Btn variant="primary" className="ml-auto text-xs sm:text-sm" onClick={onNext} disabled={!photo}>
           {ic.check()} {isMonture ? 'Photo suivante →' : 'Valider →'}
         </Btn>
       </div>
@@ -1903,14 +1613,11 @@ function CaptureCard({ target, photo, cameraOn, videoRef, onStart, onStop, onCap
   )
 }
 
-// ── Étape 2 : vérification ─────────────────────────────────────────────────────
 function SrcTag({ source }: { source: FieldSource }) {
-  if (source === 'detected') return <Pill tone="green">{ic.check('w-3 h-3')} Détecté</Pill>
+  if (source === 'detected') return <Pill tone="green">{ic.check('w-2.5 h-2.5')} Détecté</Pill>
   return <Pill tone="slate">{source === 'corrected' ? 'Corrigé' : 'À saisir'}</Pill>
 }
 
-/** Un champ que l'IA a rempli se replie en résumé : le magasinier ne relit que ce
- *  qui manque. Le crayon le rouvre pour corriger. */
 function Field({ icon, label, source, collapsed, summary, invalid, onExpand, children }: {
   icon: React.ReactNode
   label: string
@@ -1923,70 +1630,62 @@ function Field({ icon, label, source, collapsed, summary, invalid, onExpand, chi
 }) {
   return (
     <div
-      className={`rounded-xl border p-3 transition-colors ${invalid ? 'border-red-500' : 'border-slate-200 dark:border-slate-700'} ${collapsed ? 'bg-slate-50 dark:bg-slate-800/60' : 'bg-white dark:bg-slate-800'}`}
+      className={`rounded-xl border p-2 transition-colors sm:p-3 ${invalid ? 'border-red-500' : 'border-slate-200 dark:border-slate-700'} ${collapsed ? 'bg-slate-50 dark:bg-slate-800/60' : 'bg-white dark:bg-slate-800'}`}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <span className="text-slate-400 dark:text-slate-500 flex-shrink-0">{icon}</span>
-        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span>
-        {collapsed && <span className="truncate text-sm font-bold text-slate-900 dark:text-white">{summary || '—'}</span>}
-        <span className="ml-auto flex items-center gap-2 flex-shrink-0">
+        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 sm:text-xs">{label}</span>
+        {collapsed && <span className="truncate text-xs font-bold text-slate-900 dark:text-white sm:text-sm">{summary || '—'}</span>}
+        <span className="ml-auto flex items-center gap-1 flex-shrink-0 sm:gap-2">
           {source && <SrcTag source={source} />}
           {collapsed && (
             <button
               type="button"
               onClick={onExpand}
               title="Modifier"
-              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200 sm:p-1.5"
             >
-              {ic.pencil('w-3.5 h-3.5')}
+              {ic.pencil('w-3 h-3 sm:w-3.5 sm:h-3.5')}
             </button>
           )}
         </span>
       </div>
-      {!collapsed && <div className="mt-2">{children}</div>}
+      {!collapsed && <div className="mt-1.5 sm:mt-2">{children}</div>}
     </div>
   )
 }
 
-const INPUT = 'w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-[#2563eb]'
+const INPUT = 'w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-[#2563eb] sm:px-3 sm:py-2 sm:text-sm'
 
 function PhotoBox({ url, label }: { url: string | null; label: string }) {
   return (
-    <div className={`relative flex min-h-[120px] items-center justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 ${url ? '' : 'bg-slate-50 dark:bg-slate-900/50'}`}>
+    <div className={`relative flex min-h-[80px] items-center justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 sm:min-h-[120px] ${url ? '' : 'bg-slate-50 dark:bg-slate-900/50'}`}>
       {url
         ? <img src={url} alt={label} className="h-full w-full object-cover" />
-        : <div className="flex flex-col items-center gap-1 text-slate-300 dark:text-slate-600">{ic.image('w-6 h-6')}<p className="text-xs">Photo {label.toLowerCase()}</p></div>}
-      <span className="absolute left-2 top-2 rounded-lg bg-black/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">{label}</span>
+        : <div className="flex flex-col items-center gap-0.5 text-slate-300 dark:text-slate-600 sm:gap-1">{ic.image('w-4 h-4 sm:w-6 sm:h-6')}<p className="text-[9px] sm:text-xs">Photo {label.toLowerCase()}</p></div>}
+      <span className="absolute left-1.5 top-1.5 rounded-lg bg-black/60 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white sm:left-2 sm:top-2 sm:px-2 sm:py-0.5 sm:text-[10px]">{label}</span>
     </div>
   )
 }
 
-// ── File d'envoi du lot ──────────────────────────────────────────────────────────
-// Un rond par monture : vide en attente, anneau qui tourne pendant son envoi, coche
-// verte une fois enregistrée — comme une file de téléchargements.
 function UploadStatusIcon({ status }: { status: 'pending' | 'uploading' | 'done' | 'error' }) {
   if (status === 'done') {
-    return <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#16a34a] text-white">{ic.check('w-4 h-4')}</span>
+    return <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[#16a34a] text-white sm:h-8 sm:w-8">{ic.check('w-3.5 h-3.5 sm:w-4 sm:h-4')}</span>
   }
   if (status === 'error') {
-    return <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400">{ic.alert('w-4 h-4')}</span>
+    return <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 dark:text-red-400 sm:h-8 sm:w-8">{ic.alert('w-3.5 h-3.5 sm:w-4 sm:h-4')}</span>
   }
   if (status === 'uploading') {
     return (
-      <span className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center">
+      <span className="relative flex h-7 w-7 flex-shrink-0 items-center justify-center sm:h-8 sm:w-8">
         <span className="absolute inset-0 rounded-full border-2 border-[#2563eb]/20" />
         <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-[#2563eb]" />
       </span>
     )
   }
-  return <span className="h-8 w-8 flex-shrink-0 rounded-full border-2 border-dashed border-slate-200 dark:border-slate-700" />
+  return <span className="h-7 w-7 flex-shrink-0 rounded-full border-2 border-dashed border-slate-200 dark:border-slate-700 sm:h-8 sm:w-8" />
 }
 
-// ── Écran d'activation de session ──────────────────────────────────────────────
-// Caméra + saisie manuelle du code de session — partagé par l'écran d'activation (atteint
-// sur erreur de reprise, cf. activateOrResume) et « Mes sessions », qui l'affiche directement
-// en tête plutôt qu'une liste de cartes : scanner ou taper n'importe quel code, nouveau ou
-// déjà entamé, rouvre la bonne session (onActivate fait foi dans les deux cas).
 function SessionScanCard({ status, isError, onActivate }: {
   status: string
   isError: boolean
@@ -1999,22 +1698,15 @@ function SessionScanCard({ status, isError, onActivate }: {
   const [busy, setBusy] = useState(false)
   const [scanStatus, setScanStatus] = useState('')
 
-  // Le lecteur détient une caméra : quitter l'écran sans l'arrêter laisserait la
-  // diode allumée et le flux ouvert pour tout le reste de la session.
   useEffect(() => () => { scannerRef.current?.stop() }, [])
 
   async function startScanner() {
-    // Un clic sur la case déjà en train de filmer relancerait un flux caméra par-dessus
-    // l'autre — plusieurs Android refusent le second (NotReadableError).
     if (scanning || !videoRef.current) return
     scannerRef.current?.stop()
     const scanner = createScanner({
       video: videoRef.current,
       formats: ['code_128'],
       onStatus: (message, error) => setScanStatus(error ? `⚠ ${message}` : message),
-      // onActivate est asynchrone : on attend son vrai résultat avant de décider
-      // d'arrêter la lecture. Renvoyer false garde la caméra active, sinon un code
-      // voisin mal cadré figerait l'écran sur un refus sans nouvelle tentative.
       onDetect: code => onActivate(code),
     })
     scannerRef.current = scanner
@@ -2034,10 +1726,8 @@ function SessionScanCard({ status, isError, onActivate }: {
 
   return (
     <div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* Le bouton « Activer la caméra » est explicite plutôt qu'un clic sur la case
-            entière : tout le monde ne devine pas qu'une zone silencieuse est cliquable. */}
-        <div className="relative flex min-h-[200px] flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border-2 border-[#2563eb] bg-white p-6 text-center dark:bg-slate-800">
+      <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+        <div className="relative flex min-h-[160px] flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border-2 border-[#2563eb] bg-white p-4 text-center dark:bg-slate-800 sm:min-h-[200px] sm:p-6 sm:gap-3">
           <video
             ref={videoRef}
             playsInline
@@ -2046,17 +1736,17 @@ function SessionScanCard({ status, isError, onActivate }: {
           />
           {!scanning && (
             <>
-              <span className="text-[#2563eb]">{ic.camera('w-7 h-7')}</span>
-              <span className="text-base font-bold text-[#2563eb]">Scanner le code-barres de session</span>
-              <Btn variant="primary" onClick={() => void startScanner()}>
-                {ic.camera('w-4 h-4')} Activer la caméra
+              <span className="text-[#2563eb]">{ic.camera('w-6 h-6 sm:w-7 sm:h-7')}</span>
+              <span className="text-sm font-bold text-[#2563eb] sm:text-base">Scanner le code-barres de session</span>
+              <Btn variant="primary" onClick={() => void startScanner()} className="text-xs sm:text-sm">
+                {ic.camera('w-3.5 h-3.5 sm:w-4 sm:h-4')} Activer la caméra
               </Btn>
             </>
           )}
         </div>
 
         <div className="flex flex-col justify-center text-left">
-          <label htmlFor="sessionCode" className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+          <label htmlFor="sessionCode" className="mb-1 block text-[10px] font-semibold text-slate-500 dark:text-slate-400 sm:text-xs">
             Code de session
           </label>
           <form className="flex flex-col gap-2" onSubmit={e => { e.preventDefault(); void submitCode() }}>
@@ -2069,14 +1759,14 @@ function SessionScanCard({ status, isError, onActivate }: {
               placeholder="SESSION-…"
               className={INPUT}
             />
-            <Btn type="submit" variant="primary" disabled={busy || !code.trim()}>
+            <Btn type="submit" variant="primary" disabled={busy || !code.trim()} className="text-xs sm:text-sm">
               {busy ? 'Vérification…' : 'Activer'}
             </Btn>
           </form>
         </div>
       </div>
 
-      <p className={`mt-3 text-center text-sm ${isError && status ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
+      <p className={`mt-2 text-center text-[11px] sm:mt-3 sm:text-sm ${isError && status ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
         {status || scanStatus || 'La caméra peut détecter automatiquement le code. Vous pouvez aussi le saisir manuellement.'}
       </p>
     </div>
@@ -2090,15 +1780,15 @@ function ActivationGate({ status, isError, onActivate, onReturn }: {
   onReturn?: () => void
 }) {
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto max-w-xl px-1 sm:px-0">
       {onReturn && (
-        <div className="mb-4 flex justify-start">
-          <Btn variant="outline" onClick={onReturn}>{ic.arrowLeft()} Retour</Btn>
+        <div className="mb-3 flex justify-start sm:mb-4">
+          <Btn variant="outline" onClick={onReturn} className="text-xs sm:text-sm">{ic.arrowLeft()} Retour</Btn>
         </div>
       )}
-      <div className="mb-5 text-center">
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Activer une session d'enregistrement</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+      <div className="mb-4 text-center sm:mb-5">
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white sm:text-xl">Activer une session d'enregistrement</h2>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 sm:mt-1 sm:text-sm">
           Scannez l'étiquette générée par l'administrateur avant d'enregistrer des montures.
         </p>
       </div>
@@ -2108,11 +1798,6 @@ function ActivationGate({ status, isError, onActivate, onReturn }: {
   )
 }
 
-// ── Écran des sessions ─────────────────────────────────────────────────────────
-/** Le scan ou la saisie du code de session (SessionScanCard) est la porte d'entrée, en
- *  tête d'écran : nouvelle session ou déjà entamée, le même geste rouvre la bonne — onActivate
- *  fait foi dans les deux cas. En dessous, les journées passées restent consultables au
- *  détail (l'avancement d'aujourd'hui, lui, vient du serveur via `session`). */
 function SessionsGate({ movements, commands, status, isError, onActivate, onPrint }: {
   movements: Movement[]
   commands: ReceptionEntry[]
@@ -2122,8 +1807,6 @@ function SessionsGate({ movements, commands, status, isError, onActivate, onPrin
   onPrint: (record: Movement) => void
 }) {
   const [detailDate, setDetailDate] = useState<string | null>(null)
-  // Session ouverte au sein du détail d'un jour passé : un second niveau, pas un état à
-  // part — remis à zéro à chaque changement de jour (cf. openDay/closeDay ci-dessous).
   const [openSessionCode, setOpenSessionCode] = useState<string | null>(null)
 
   function openDay(key: string) {
@@ -2143,12 +1826,6 @@ function SessionsGate({ movements, commands, status, isError, onActivate, onPrin
   })
   if (!counts.has(today)) counts.set(today, 0)
 
-  // `commands` liste TOUTES les commandes encore actives côté serveur, réparties ici
-  // par jour d'activation — pas seulement celles d'aujourd'hui : une commande ouverte
-  // hier et jamais terminée doit rester repérable sur SON jour, pas sur celui-ci.
-  // Une commande à peine scannée, sans encore aucune monture, n'a pas de mouvement
-  // pour dater son jour : sans cette ligne son jour n'aurait même pas de carte, et
-  // la session resterait invisible avant la toute première monture.
   const openCommandsByDay = new Map<string, ReceptionEntry[]>()
   commands.forEach(entry => {
     if (!entry.code || !entry.activatedAt) return
@@ -2168,12 +1845,6 @@ function SessionsGate({ movements, commands, status, isError, onActivate, onPrin
       .filter(m => dayKey(m.created_at) === detailDate)
       .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
 
-    // D'abord notre propre mémoire (rememberBarcodeSession, posée à l'enregistrement même :
-    // fiable, mais seulement pour ce qui a été enregistré sur ce compte depuis ce correctif).
-    // À défaut, le mouvement porte peut-être lui-même le code de sa session — le serveur ne
-    // le renvoie pas toujours (cf. le commentaire sur rememberBarcodeSession) : on essaie
-    // plusieurs noms de champ possibles avant d'abandonner, plutôt que d'inventer un
-    // regroupement faux.
     const barcodeSessions = loadBarcodeSessions()
     const groupedByCode = new Map<string, Movement[]>()
     dayRows.forEach(row => {
@@ -2183,50 +1854,32 @@ function SessionsGate({ movements, commands, status, isError, onActivate, onPrin
       if (!groupedByCode.has(key)) groupedByCode.set(key, [])
       groupedByCode.get(key)!.push(row)
     })
-    // Filtrée sur CE jour (activatedAt, ou déjà une monture qui s'y regroupe) plutôt
-    // que sur toute commande active quel que soit son jour d'ouverture : sans ce
-    // filtre, une commande ouverte hier polluerait aussi le bloc d'aujourd'hui.
-    //
-    // Le filtre s'applique désormais à N'IMPORTE QUEL jour, pas seulement aujourd'hui
-    // (avant : cf. git blame). Une session ouverte hier et jamais finie restait sinon
-    // invisible partout — ni sur aujourd'hui (mauvais jour), ni sur son propre jour
-    // (chaque jour passé était présumé forcément clos) — sans aucun moyen de la reprendre.
+
     const openCommands = commands
       .filter(entry => Boolean(entry.code))
       .filter(entry => {
-        // activatedAt connu fait foi pour SON jour, et seulement lui — sinon une
-        // session activée hier avec une monture ajoutée aujourd'hui apparaîtrait « En
-        // cours » sur les deux jours à la fois. Le repli sur groupedByCode ne joue que
-        // lorsque le serveur ne renvoie pas activatedAt (pas toutes les versions
-        // déployées ne le font), pour ne pas perdre la session faute de mieux.
         if (entry.activatedAt) return dayKey(entry.activatedAt) === detailDate
         return groupedByCode.has(entry.code as string)
       })
       .sort((a, b) => Number(a.registeredCount || 0) / Math.max(1, Number(a.targetCount || 1))
         - Number(b.registeredCount || 0) / Math.max(1, Number(b.targetCount || 1)))
 
-    // Une session déjà traitée a quitté `commands` (le serveur n'y garde que les
-    // sessions encore actives) : on la retrouve par ses mouvements plutôt que de la perdre.
     const activeCodesForDay = new Set(openCommands.map(entry => entry.code))
     const closedSessionsForDay = Array.from(groupedByCode.entries()).filter(([code]) => code !== 'Sans session' && !activeCodesForDay.has(code))
     const unresolvedRows = groupedByCode.get('Sans session') || []
 
-    // Cliquer une session déjà traitée — aujourd'hui ou un jour passé — ouvre sa liste de
-    // montures, jamais l'assistant : il n'y a plus rien à y reprendre.
     if (openSessionCode) {
       const sessionRows = groupedByCode.get(openSessionCode) || []
       return (
-        <div className="mx-auto max-w-4xl space-y-6">
-          <div className="flex items-center gap-3">
-            <Btn onClick={() => setOpenSessionCode(null)}>{ic.arrowLeft()} {isToday ? 'Sessions en cours' : 'Sessions'}</Btn>
-            <span className="text-sm font-bold text-slate-900 dark:text-white">{openSessionCode === 'Sans session' ? 'Montures sans session' : openSessionCode}</span>
+        <div className="mx-auto max-w-4xl space-y-4 sm:space-y-6">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Btn onClick={() => setOpenSessionCode(null)} className="text-xs sm:text-sm">{ic.arrowLeft()} {isToday ? 'Sessions en cours' : 'Sessions'}</Btn>
+            <span className="text-xs font-bold text-slate-900 dark:text-white sm:text-sm">{openSessionCode === 'Sans session' ? 'Montures sans session' : openSessionCode}</span>
           </div>
-          {/* Même tableau que « Stock total » (RecordsTable) — photo, forme, genre,
-              emplacement, aperçu avec impression — plutôt que la ligne compacte d'avant. */}
           {sessionRows.length === 0 ? (
-            <div className={`${CARD} flex flex-col items-center gap-2 p-10 text-center text-slate-400`}>
-              {ic.glasses('w-7 h-7')}
-              <p className="text-sm">Aucune monture trouvée pour cette session.</p>
+            <div className={`${CARD} flex flex-col items-center gap-1.5 p-6 text-center text-slate-400 sm:gap-2 sm:p-10`}>
+              {ic.glasses('w-6 h-6 sm:w-7 sm:h-7')}
+              <p className="text-[11px] sm:text-sm">Aucune monture trouvée pour cette session.</p>
             </div>
           ) : (
             <RecordsTable records={sessionRows} onPrint={onPrint} />
@@ -2236,27 +1889,23 @@ function SessionsGate({ movements, commands, status, isError, onActivate, onPrin
     }
 
     return (
-      <div className="mx-auto max-w-3xl space-y-6">
-        <div className="flex items-center gap-3">
-          <Btn onClick={closeDay}>{ic.arrowLeft()} Sessions</Btn>
-          <span className="text-sm font-bold text-slate-900 dark:text-white">{formatDayLabel(detailDate)}</span>
+      <div className="mx-auto max-w-3xl space-y-4 sm:space-y-6">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Btn onClick={closeDay} className="text-xs sm:text-sm">{ic.arrowLeft()} Sessions</Btn>
+          <span className="text-xs font-bold text-slate-900 dark:text-white sm:text-sm">{formatDayLabel(detailDate)}</span>
         </div>
 
-        <section className="space-y-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">{isToday ? 'Sessions en cours' : 'Sessions de ce jour'}</h3>
+        <section className="space-y-2.5 sm:space-y-3">
+          <h3 className="text-xs font-bold text-slate-900 dark:text-white sm:text-sm">{isToday ? 'Sessions en cours' : 'Sessions de ce jour'}</h3>
           {openCommands.length === 0 && closedSessionsForDay.length === 0 && unresolvedRows.length === 0 ? (
-            <div className={`${CARD} flex flex-col items-center gap-2 p-8 text-center`}>
-              <span className="text-slate-300 dark:text-slate-600">{ic.glasses('w-8 h-8')}</span>
-              <p className="text-sm text-slate-400">
+            <div className={`${CARD} flex flex-col items-center gap-1.5 p-6 text-center sm:gap-2 sm:p-8`}>
+              <span className="text-slate-300 dark:text-slate-600">{ic.glasses('w-6 h-6 sm:w-8 sm:h-8')}</span>
+              <p className="text-[11px] text-slate-400 sm:text-sm">
                 {isToday ? 'Aucune session ouverte pour le moment — scannez une étiquette pour en démarrer une.' : 'Aucun enregistrement pour cette date.'}
               </p>
             </div>
           ) : (
-            // Même grille de blocs que « Listes reçues » (ListesScreen). En cours : un clic
-            // rouvre directement la session (activateOrResume la retrouve par son code, sans
-            // repasser par le scan de l'étiquette) — vrai quel que soit le jour où elle a été
-            // ouverte. Traitée : un clic ouvre sa liste de montures, elle n'a plus rien à reprendre.
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2.5 sm:gap-3 grid-cols-1 sm:grid-cols-2">
               {openCommands.map(entry => {
                 const target = Number(entry.targetCount || 0)
                 const registered = Number(entry.registeredCount || 0)
@@ -2266,13 +1915,13 @@ function SessionsGate({ movements, commands, status, isError, onActivate, onPrin
                     key={entry.key}
                     type="button"
                     onClick={() => void onActivate(entry.code as string)}
-                    className={`bg-white dark:bg-slate-800 rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 border-2 ${done ? 'border-[#16a34a]' : 'border-[#2563eb]'}`}
+                    className={`bg-white dark:bg-slate-800 rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 border-2 sm:p-4 ${done ? 'border-[#16a34a]' : 'border-[#2563eb]'}`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{entry.code}</p>
+                      <p className="truncate text-xs font-bold text-slate-900 dark:text-white sm:text-sm">{entry.code}</p>
                       <Pill tone={done ? 'green' : 'blue'}>{done ? 'Traitée' : 'En cours'}</Pill>
                     </div>
-                    <p className="mt-1 truncate text-xs text-slate-400">
+                    <p className="mt-0.5 truncate text-[10px] text-slate-400 sm:mt-1 sm:text-xs">
                       {entry.supplier ? `${entry.supplier} · ` : ''}{registered}/{target || '?'} monture{target > 1 ? 's' : ''} enregistrée{registered > 1 ? 's' : ''}
                     </p>
                   </button>
@@ -2283,33 +1932,28 @@ function SessionsGate({ movements, commands, status, isError, onActivate, onPrin
                   key={code}
                   type="button"
                   onClick={() => setOpenSessionCode(code)}
-                  className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 border-2 border-[#16a34a]"
+                  className="bg-white dark:bg-slate-800 rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 border-2 border-[#16a34a] sm:p-4"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{code}</p>
+                    <p className="truncate text-xs font-bold text-slate-900 dark:text-white sm:text-sm">{code}</p>
                     <Pill tone="green">Traitée</Pill>
                   </div>
-                  <p className="mt-1 truncate text-xs text-slate-400">
+                  <p className="mt-0.5 truncate text-[10px] text-slate-400 sm:mt-1 sm:text-xs">
                     {sessionRows.length} monture{sessionRows.length > 1 ? 's' : ''} enregistrée{sessionRows.length > 1 ? 's' : ''}
                   </p>
                 </button>
               ))}
-              {/* Pas une session en cours : ces montures SONT déjà enregistrées, le
-                  serveur n'a juste pas renvoyé de façon fiable le code qui les rattache
-                  à une session précise (cf. le commentaire sur ReceptionEntry plus haut).
-                  Un bloc gris à côté de blocs verts « Traitée » aurait laissé croire à un
-                  reste à faire — il n'y en a pas, elles sont donc vertes comme les autres. */}
               {unresolvedRows.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setOpenSessionCode('Sans session')}
-                  className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 border-2 border-[#16a34a]"
+                  className="bg-white dark:bg-slate-800 rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 border-2 border-[#16a34a] sm:p-4"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="truncate text-sm font-bold text-slate-900 dark:text-white">Montures sans session</p>
+                    <p className="truncate text-xs font-bold text-slate-900 dark:text-white sm:text-sm">Montures sans session</p>
                     <Pill tone="green">Traitée</Pill>
                   </div>
-                  <p className="mt-1 truncate text-xs text-slate-400">
+                  <p className="mt-0.5 truncate text-[10px] text-slate-400 sm:mt-1 sm:text-xs">
                     {unresolvedRows.length} monture{unresolvedRows.length > 1 ? 's' : ''} enregistrée{unresolvedRows.length > 1 ? 's' : ''}
                   </p>
                 </button>
@@ -2322,44 +1966,34 @@ function SessionsGate({ movements, commands, status, isError, onActivate, onPrin
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-4 sm:space-y-6">
       <SessionScanCard status={status} isError={isError} onActivate={onActivate} />
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Journées d'enregistrement</h3>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-3">
+      <section className="space-y-2.5 sm:space-y-3">
+        <h3 className="text-xs font-bold text-slate-900 dark:text-white sm:text-sm">Journées d'enregistrement</h3>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fit,minmax(130px,1fr))] sm:gap-3">
           {keys.map(key => {
             const isToday = key === today
             const count = counts.get(key) || 0
             const dayOpenCommands = openCommandsByDay.get(key) || []
-            // Traitée : verte, comme une session ou une liste déjà traitée ailleurs dans
-            // l'app. Un jour — passé ou aujourd'hui — ne l'est que si plus aucune
-            // commande activée ce jour-là n'est encore en cours ; « aujourd'hui » n'a
-            // donc plus de statut à part, seul son libellé le distingue toujours.
             const isTreated = dayOpenCommands.length === 0
             return (
-              // Toujours le détail du jour, même aujourd'hui avec une session déjà ouverte :
-              // c'est là qu'on choisit entre PLUSIEURS sessions scannées le même jour
-              // (« Sessions de ce jour » ci-dessous), pas seulement celle en cours. Reprendre
-              // la session déjà ouverte reste un simple clic sur son bloc, sans confirmation
-              // (activateOrResume la reconnaît). Un raccourci direct vers l'assistant la
-              // masquait entièrement dès qu'une session tournait.
               <button
                 key={key}
                 type="button"
                 onClick={() => openDay(key)}
-                className={`bg-white dark:bg-slate-800 rounded-2xl border-2 flex flex-col items-center gap-1 p-4 text-center transition-all hover:-translate-y-0.5 ${
+                className={`bg-white dark:bg-slate-800 rounded-2xl border-2 flex flex-col items-center gap-0.5 p-2.5 text-center transition-all hover:-translate-y-0.5 sm:gap-1 sm:p-4 ${
                   isTreated ? 'border-[#16a34a]' : 'border-[#2563eb] ring-2 ring-[#2563eb]'
                 }`}
               >
-                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${isTreated ? 'bg-[#16a34a]/10 text-[#16a34a]' : 'bg-[#2563eb]/10 text-[#2563eb]'}`}>
-                  {ic.calendar('w-5 h-5')}
+                <span className={`flex h-8 w-8 items-center justify-center rounded-xl sm:h-10 sm:w-10 ${isTreated ? 'bg-[#16a34a]/10 text-[#16a34a]' : 'bg-[#2563eb]/10 text-[#2563eb]'}`}>
+                  {ic.calendar('w-4 h-4 sm:w-5 sm:h-5')}
                 </span>
-                <span className="text-3xl font-black tabular-nums text-slate-900 dark:text-white">{count}</span>
-                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <span className="text-2xl font-black tabular-nums text-slate-900 dark:text-white sm:text-3xl">{count}</span>
+                <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 sm:text-xs">
                   {isToday ? `Aujourd'hui · ${formatDayLabel(key)}` : formatDayLabel(key)}
                 </span>
-                <span className="text-[11px] font-semibold text-slate-400">
+                <span className="text-[9px] font-semibold text-slate-400 sm:text-[11px]">
                   {dayOpenCommands.length > 0
                     ? `${dayOpenCommands.length} session${dayOpenCommands.length > 1 ? 's' : ''} en cours`
                     : count > 1 ? 'montures' : 'monture'}
@@ -2373,10 +2007,6 @@ function SessionsGate({ movements, commands, status, isError, onActivate, onPrin
   )
 }
 
-// ── Page ───────────────────────────────────────────────────────────────────────
-// ── Historique ─────────────────────────────────────────────────────────────────
-/** Une monture en stock porte ses champs à plat ; un mouvement en garde parfois une
- *  copie dans un sous-objet `monture`. Même prudence que `recordField()` de scan.js. */
 function recordField(record: any, key: string): string {
   if (!record) return ''
   const direct = record[key]
@@ -2396,15 +2026,12 @@ function recordLocationCode(record: any): string {
   )
 }
 
-/** Le nom du champ photo change selon l'écran qui a créé la monture : il faut essayer
- *  toute la cascade. C'est celle de scan.js, reprise dans l'AGENTS.md. */
 function recordPhoto(record: any): string {
   return recordField(record, 'photo_monture_url') || recordField(record, 'image_url')
     || recordField(record, 'photo_url') || recordField(record, 'image')
     || recordField(record, 'monture_image') || recordField(record, 'frame_image')
 }
 
-/** Récupère la photo de la branche avec les variantes de noms de champs. */
 function recordPhotoBranche(record: any): string {
   return recordField(record, 'photo_branche_url') || recordField(record, 'PhotoBrancheURL')
     || recordField(record, 'branche_image') || recordField(record, 'branch_image')
@@ -2421,14 +2048,8 @@ function isUndeterminedShape(value: unknown) {
     || normalized === 'non déterminée' || normalized === 'non determine'
 }
 
-const SELECT = 'rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-[#2563eb]'
+const SELECT = 'rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-900 dark:text-white outline-none focus:border-[#2563eb] sm:px-3 sm:py-2 sm:text-sm'
 
-/** Tableau vert (même gabarit que Stock général côté Direction) directement — plus de
- *  blocs par jour à ouvrir : Forme/Genre/recherche filtrent tout le parc d'un coup, comme
- *  Stock général. Un clic sur une ligne ouvre l'aperçu (photos, détail, impression). */
-// Recherche + Forme/Genre + compteur vivent désormais dans TopBar (sur la même ligne que
-// le titre), pas ici : query/forme/genre/page sont donc reçus en props, portés par ScanPage,
-// plutôt qu'un état local que TopBar n'aurait pas pu atteindre.
 function HistoriqueScreen({ movements, onPrint, query, forme, genre, page, onPageChange }: {
   movements: Movement[]
   onPrint: (record: Movement) => void
@@ -2450,16 +2071,15 @@ function HistoriqueScreen({ movements, onPrint, query, forme, genre, page, onPag
   }, [movements, query, forme, genre])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / HISTORIQUE_PAGE_SIZE))
-  // Un filtre qui raccourcit la liste laisserait sinon la page courante dans le vide.
   const current = Math.min(page, totalPages)
   const rows = filtered.slice((current - 1) * HISTORIQUE_PAGE_SIZE, current * HISTORIQUE_PAGE_SIZE)
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="mx-auto max-w-4xl space-y-3 sm:space-y-4">
       {rows.length === 0 ? (
-        <div className={`${CARD} flex flex-col items-center gap-2 p-8 text-center`}>
-          <span className="text-slate-300 dark:text-slate-600">{ic.glasses('w-8 h-8')}</span>
-          <p className="text-sm text-slate-400">
+        <div className={`${CARD} flex flex-col items-center gap-1.5 p-6 text-center sm:gap-2 sm:p-8`}>
+          <span className="text-slate-300 dark:text-slate-600">{ic.glasses('w-6 h-6 sm:w-8 sm:h-8')}</span>
+          <p className="text-[11px] text-slate-400 sm:text-sm">
             {movements.length === 0 ? 'Aucun enregistrement pour l’instant.' : 'Aucun enregistrement ne correspond à ces filtres.'}
           </p>
         </div>
@@ -2468,37 +2088,33 @@ function HistoriqueScreen({ movements, onPrint, query, forme, genre, page, onPag
       )}
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3">
-          <Btn onClick={() => onPageChange(current - 1)} disabled={current <= 1}>{ic.arrowLeft()} Précédent</Btn>
-          <span className="text-xs tabular-nums text-slate-400">Page {current} / {totalPages}</span>
-          <Btn onClick={() => onPageChange(current + 1)} disabled={current >= totalPages}>Suivant</Btn>
+        <div className="flex items-center justify-center gap-2 sm:gap-3">
+          <Btn onClick={() => onPageChange(current - 1)} disabled={current <= 1} className="text-xs sm:text-sm">{ic.arrowLeft()} Précédent</Btn>
+          <span className="text-[10px] tabular-nums text-slate-400 sm:text-xs">Page {current} / {totalPages}</span>
+          <Btn onClick={() => onPageChange(current + 1)} disabled={current >= totalPages} className="text-xs sm:text-sm">Suivant</Btn>
         </div>
       )}
     </div>
   )
 }
 
-/** Tableau + aperçu (photos, détail, impression) de « Stock total », réutilisé partout
- *  où une liste de montures mérite plus qu'une ligne compacte — notamment une session déjà
- *  traitée, dans « Mes sessions ». Ne gère ni recherche ni pagination : l'appelant décide
- *  quels enregistrements passer. */
 function RecordsTable({ records, onPrint }: { records: Movement[]; onPrint: (record: Movement) => void }) {
   const [selectedRecord, setSelectedRecord] = useState<Movement | null>(null)
 
   return (
     <>
-      <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
-        <div className="min-w-[720px]">
-          <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
+      <div className="overflow-x-auto -mx-2 sm:mx-0 rounded-xl sm:rounded-2xl border border-green-200 dark:border-green-700">
+        <div className="min-w-[600px] sm:min-w-[720px]">
+          <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-[10px] sm:text-xs">
             <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
               <tr>
-                <th className="px-2 py-2 text-left font-semibold">Photo</th>
-                <th className="px-2 py-2 text-left font-semibold">Réf</th>
-                <th className="px-2 py-2 text-left font-semibold">Marque</th>
-                <th className="px-2 py-2 text-left font-semibold">Forme</th>
-                <th className="px-2 py-2 text-left font-semibold">Genre</th>
-                <th className="px-2 py-2 text-left font-semibold">Date</th>
-                <th className="px-2 py-2 text-left font-semibold">Emplacement</th>
+                <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Photo</th>
+                <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Réf</th>
+                <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Marque</th>
+                <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Forme</th>
+                <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Genre</th>
+                <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Date</th>
+                <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Emplacement</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-green-200 dark:divide-green-700 bg-white dark:bg-slate-900">
@@ -2510,23 +2126,23 @@ function RecordsTable({ records, onPrint }: { records: Movement[]; onPrint: (rec
                     onClick={() => setSelectedRecord(record)}
                     className="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
                   >
-                    <td className="px-2 py-2">
+                    <td className="px-1.5 py-1.5 sm:px-2 sm:py-2">
                       {photo ? (
-                        <img src={photo} alt="" loading="lazy" className="h-12 w-12 rounded-md object-cover" />
+                        <img src={photo} alt="" loading="lazy" className="h-8 w-8 rounded-md object-cover sm:h-12 sm:w-12" />
                       ) : (
-                        <span className="inline-block rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-500 dark:bg-slate-800">—</span>
+                        <span className="inline-block rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] text-slate-500 dark:bg-slate-800 sm:px-2 sm:py-1 sm:text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-2 py-2 font-mono text-slate-900 dark:text-white">
+                    <td className="px-1.5 py-1.5 font-mono text-[10px] text-slate-900 dark:text-white sm:px-2 sm:py-2 sm:text-xs">
                       {recordField(record, 'reference') || recordField(record, 'barcode') || '—'}
                     </td>
-                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{recordField(record, 'brand') || '—'}</td>
-                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{recordField(record, 'shape') || '—'}</td>
-                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{recordField(record, 'gender') || '—'}</td>
-                    <td className="px-2 py-2 text-slate-700 dark:text-slate-200">
+                    <td className="px-1.5 py-1.5 text-[10px] text-slate-700 dark:text-slate-200 sm:px-2 sm:py-2 sm:text-xs">{recordField(record, 'brand') || '—'}</td>
+                    <td className="px-1.5 py-1.5 text-[10px] text-slate-700 dark:text-slate-200 sm:px-2 sm:py-2 sm:text-xs">{recordField(record, 'shape') || '—'}</td>
+                    <td className="px-1.5 py-1.5 text-[10px] text-slate-700 dark:text-slate-200 sm:px-2 sm:py-2 sm:text-xs">{recordField(record, 'gender') || '—'}</td>
+                    <td className="px-1.5 py-1.5 text-[10px] text-slate-700 dark:text-slate-200 sm:px-2 sm:py-2 sm:text-xs">
                       {dayLabel(recordField(record, 'created_at'))} · {formatRecordTime(recordField(record, 'created_at'))}
                     </td>
-                    <td className="px-2 py-2 font-mono text-[11px] text-slate-700 dark:text-slate-200">
+                    <td className="px-1.5 py-1.5 font-mono text-[9px] text-slate-700 dark:text-slate-200 sm:px-2 sm:py-2 sm:text-[11px]">
                       {recordLocationCode(record) || '—'}
                     </td>
                   </tr>
@@ -2538,48 +2154,48 @@ function RecordsTable({ records, onPrint }: { records: Movement[]; onPrint: (rec
       </div>
 
       {selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedRecord(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4" onClick={() => setSelectedRecord(null)}>
           <div
-            className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800"
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800 sm:rounded-2xl"
             onClick={event => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3.5 dark:border-slate-700">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 dark:border-slate-700 sm:gap-3 sm:px-4 sm:py-3.5">
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Aperçu</p>
-                <p className="mt-1 truncate text-lg font-bold text-slate-900 dark:text-white">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 sm:text-[10px]">Aperçu</p>
+                <p className="mt-0.5 truncate text-sm font-bold text-slate-900 dark:text-white sm:mt-1 sm:text-lg">
                   {recordField(selectedRecord, 'reference') || recordField(selectedRecord, 'brand') || 'Monture'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedRecord(null)}
-                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+                className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 sm:px-2.5 sm:py-1.5 sm:text-xs"
               >
                 Fermer
               </button>
             </div>
 
-            <div className="p-4 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="h-44 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+            <div className="p-3 space-y-3 sm:p-4 sm:space-y-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <div className="h-32 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900 sm:h-44">
                   {recordPhoto(selectedRecord)
                     ? <img src={recordPhoto(selectedRecord)} alt={recordField(selectedRecord, 'reference') || 'Monture'} className="h-full w-full object-cover" />
-                    : <div className="flex h-full items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo de monture</div>}
+                    : <div className="flex h-full items-center justify-center text-[10px] text-slate-500 dark:text-slate-400 sm:text-xs">Pas de photo de monture</div>}
                 </div>
-                <div className="h-44 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                <div className="h-32 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900 sm:h-44">
                   {recordPhotoBranche(selectedRecord)
                     ? <img src={recordPhotoBranche(selectedRecord)} alt={recordField(selectedRecord, 'reference') || 'Branche'} className="h-full w-full object-cover" />
-                    : <div className="flex h-full items-center justify-center text-xs text-slate-500 dark:text-slate-400">Pas de photo de branche</div>}
+                    : <div className="flex h-full items-center justify-center text-[10px] text-slate-500 dark:text-slate-400 sm:text-xs">Pas de photo de branche</div>}
                 </div>
               </div>
 
-              <div className="grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Marque</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'brand') || '—'}</span></div>
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Référence</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'reference') || '—'}</span></div>
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Forme</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'shape') || '—'}</span></div>
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Genre</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'gender') || '—'}</span></div>
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Couleur</span><span className="mt-1 block font-semibold">{recordField(selectedRecord, 'color') || '—'}</span></div>
-                <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900/60"><span className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Emplacement</span><span className="mt-1 block font-semibold">{recordLocationCode(selectedRecord) || '—'}</span></div>
+              <div className="grid gap-1.5 text-[10px] text-slate-700 dark:text-slate-200 sm:grid-cols-2 sm:gap-2 sm:text-sm">
+                <div className="rounded-xl bg-slate-50 p-2 dark:bg-slate-900/60 sm:p-2.5"><span className="block text-[8px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 sm:text-[10px]">Marque</span><span className="mt-0.5 block font-semibold sm:mt-1">{recordField(selectedRecord, 'brand') || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2 dark:bg-slate-900/60 sm:p-2.5"><span className="block text-[8px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 sm:text-[10px]">Référence</span><span className="mt-0.5 block font-semibold sm:mt-1">{recordField(selectedRecord, 'reference') || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2 dark:bg-slate-900/60 sm:p-2.5"><span className="block text-[8px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 sm:text-[10px]">Forme</span><span className="mt-0.5 block font-semibold sm:mt-1">{recordField(selectedRecord, 'shape') || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2 dark:bg-slate-900/60 sm:p-2.5"><span className="block text-[8px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 sm:text-[10px]">Genre</span><span className="mt-0.5 block font-semibold sm:mt-1">{recordField(selectedRecord, 'gender') || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2 dark:bg-slate-900/60 sm:p-2.5"><span className="block text-[8px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 sm:text-[10px]">Couleur</span><span className="mt-0.5 block font-semibold sm:mt-1">{recordField(selectedRecord, 'color') || '—'}</span></div>
+                <div className="rounded-xl bg-slate-50 p-2 dark:bg-slate-900/60 sm:p-2.5"><span className="block text-[8px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 sm:text-[10px]">Emplacement</span><span className="mt-0.5 block font-semibold sm:mt-1">{recordLocationCode(selectedRecord) || '—'}</span></div>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -2589,7 +2205,7 @@ function RecordsTable({ records, onPrint }: { records: Movement[]; onPrint: (rec
                     setSelectedRecord(null)
                     onPrint(selectedRecord)
                   }}
-                  className="flex-1 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                  className="flex-1 rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-semibold text-white hover:bg-blue-700 sm:px-4 sm:py-2.5 sm:text-sm"
                 >
                   Imprimer l&apos;étiquette
                 </button>
@@ -2607,8 +2223,6 @@ function distinctValues(records: Movement[], key: string) {
     .sort((a, b) => a.localeCompare(b, 'fr'))
 }
 
-/** L'étiquette attend une FinalMonture ; un enregistrement d'historique n'en est pas
- *  une. On ne remplit que ce que l'étiquette imprime — le reste ne serait jamais lu. */
 function recordToLabel(record: Movement): FinalMonture {
   return {
     id: recordField(record, 'barcode') || recordField(record, 'id') || '',
@@ -2626,7 +2240,6 @@ function recordToLabel(record: Movement): FinalMonture {
   }
 }
 
-// ── Listes reçues ──────────────────────────────────────────────────────────────
 interface SendList {
   id: number
   created_at?: string
@@ -2644,8 +2257,6 @@ interface SendListItem {
   reference?: string
   brand?: string
   status?: string
-  /** Où la monture est rangée dans ce stock : la case à ouvrir pour la sortir. Vient de la
-   *  fiche que `openListe` vient chercher, pas de la ligne de liste. */
   location_code?: string
   [key: string]: any
 }
@@ -2669,8 +2280,6 @@ function listCancelled(list: SendList) {
   return String(list.status || '').toUpperCase() === 'ANNULEE'
 }
 
-/** La vérification survit au rechargement : le magasinier scanne un carton de trente
- *  montures, il ne doit pas tout reprendre parce que la page a bougé. */
 function verifiedStorageKey(listId: number | string) {
   return `lunetterie.sendlist.verified.${listId}`
 }
@@ -2706,17 +2315,12 @@ function dispatchMessage(dispatch: Dispatch) {
 
 const LISTE_PAGE_SIZE = 10
 
-/** Les listes que la Direction adresse à ce magasin : le magasinier les ouvre, pointe
- *  chaque monture au code-barres, puis déclenche l'envoi du colis. Rien à voir avec les
- *  commandes fournisseur, qui vivent sur l'écran Réceptions. */
 function ListesScreen({
   lists, loading, hidden, stationId, onReload, onReturn, hasSession,
 }: {
   lists: SendList[]
   loading: boolean
-  /** Nombre de listes écartées parce qu'elles visent un autre magasin. */
   hidden: number
-  /** La station du compte, d'où part le colis. */
   stationId: string
   onReload: () => void
   onReturn: () => void
@@ -2734,8 +2338,6 @@ function ListesScreen({
   const [cancelledWarning, setCancelledWarning] = useState(false)
   const [page, setPage] = useState(1)
   const codeRef = useRef<HTMLInputElement>(null)
-  /** Verrou de la recherche directe : la vérification passe par le réseau, et sans lui un
-   *  second déclenchement sur le même code pointerait la monture deux fois. */
   const verifyingRef = useRef(false)
 
   async function openListe(list: SendList) {
@@ -2752,27 +2354,12 @@ function ListesScreen({
       const payload = await apiFetch(`/inventory/send-lists/${list.id}/items`)
       const raw: SendListItem[] = Array.isArray(payload.data?.items) ? payload.data.items : []
 
-      // Chaque ligne est complétée par la fiche de sa monture : photo, forme, couleur.
-      // Sans station_id — le passer déclencherait PlaceOnDisplay côté serveur, qui
-      // réceptionne les montures EN_TRANSIT. Ouvrir une liste doit rester une lecture.
       const detailed = await Promise.all(raw.map(async item => {
         if (!item.barcode) return item
         try {
           const glassPayload = await apiFetch(`/inventory/glasses/${encodeURIComponent(item.barcode)}`)
           const glass = glassPayload?.data?.glass
-          // `glass` porte son propre `id` : sans le rétablir il écraserait celui de la
-          // ligne, or c'est sur ce dernier que porte la vérification.
           const merged = glass ? { ...item, ...glass, id: item.id, glass_id: glass.id } : item
-          if (item.barcode === 'HA14-00759') {
-            console.log('Debug item HA14-00759:', merged)
-            console.log('Photo fields:', {
-              photo_monture_url: merged.photo_monture_url,
-              photo_branche_url: merged.photo_branche_url,
-              image_url: merged.image_url,
-              branche_image: merged.branche_image,
-              all_keys: Object.keys(merged).filter(k => k.includes('photo') || k.includes('image') || k.includes('branche'))
-            })
-          }
           return merged
         } catch {
           return item
@@ -2789,8 +2376,6 @@ function ListesScreen({
     }
   }
 
-  /** `raw` laisse la recherche directe passer la valeur qu'elle vient de reconnaître :
-   *  entre le déclenchement de l'effet et l'exécution, le champ a pu être vidé. */
   async function verify(raw?: string) {
     const value = String(raw ?? code).trim()
     if (!value || !open || verifyingRef.current) return
@@ -2818,11 +2403,8 @@ function ListesScreen({
       return
     }
 
-    // Verrou posé avant l'aller-retour réseau seulement : les refus ci-dessus sont
-    // synchrones et n'ont rien à protéger.
     verifyingRef.current = true
     try {
-      // Sans station_id, pour ne rien déplacer : on confirme seulement l'existence.
       await apiFetch(`/inventory/glasses/${encodeURIComponent(match.barcode || value)}`)
     } catch {
       setMessage(`« ${value} » est introuvable en base de données.`)
@@ -2838,8 +2420,6 @@ function ListesScreen({
     setVerified(next)
     saveVerifiedIds(open.id, next)
 
-    // La validée remonte en tête et la pagination revient au début : elle doit rester
-    // sous les yeux du magasinier.
     setItems(list => [match, ...list.filter(item => item.id !== match.id)])
     setPage(1)
 
@@ -2852,19 +2432,6 @@ function ListesScreen({
     codeRef.current?.focus()
   }
 
-  /** Recherche directe : la saisie se vérifie d'elle-même, sans bouton.
-   *
-   *  Un lecteur de code-barres se comporte comme un clavier — il écrit la trame d'un coup.
-   *  Dès qu'elle désigne exactement une monture de la liste, la vérification part : le
-   *  magasinier a une monture dans une main et le lecteur dans l'autre, lui réclamer un
-   *  appui de plus à chaque pièce n'apporte rien.
-   *
-   *  L'égalité est stricte, jamais un « commence par » : `LUN-CNG-0002` ne doit pas être
-   *  validée en passant devant `LUN-CNG-00021`. Une saisie partielle ne déclenche donc
-   *  rien tant qu'elle est incomplète.
-   *
-   *  Le code inconnu, lui, attend la fin de la frappe avant d'être signalé — annoncer
-   *  l'échec à chaque caractère ferait clignoter une erreur sous chaque lettre tapée. */
   useEffect(() => {
     const value = code.trim()
     if (!value || !open || loadingItems || listDispatched(open)) return
@@ -2884,12 +2451,9 @@ function ListesScreen({
       setTone('error')
     }, 800)
     return () => window.clearTimeout(timer)
-    // `verify` est recréée à chaque rendu : la lister relancerait l'effet en boucle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, items, open, loadingItems])
 
-  /** Envoie le colis. Le serveur déduit la station de destination de la ville de la
-   *  liste — aucun choix manuel ici — déplace les montures et clôt la liste. */
   async function send() {
     if (!open || sending) return
     if (listCancelled(open)) {
@@ -2907,15 +2471,11 @@ function ListesScreen({
       })
       const result: Dispatch = payload?.data?.dispatch || {}
       setDispatch(result)
-      // La vérification a rempli son office : on libère le stockage local de cette liste.
       try { window.localStorage.removeItem(verifiedStorageKey(open.id)) } catch { /* sans conséquence */ }
       setMessage(dispatchMessage(result))
       setTone('ok')
       onReload()
     } catch (error) {
-      // Le serveur refuse l'envoi entier quand il ne sait pas où livrer (aucune station
-      // pour la ville, ou plusieurs). Son message dit quoi corriger : on le remonte tel
-      // quel plutôt qu'un « erreur réseau » qui n'aiderait personne.
       setMessage(error instanceof Error ? error.message : "Impossible d'envoyer la liste.")
       setTone('error')
     } finally {
@@ -2929,7 +2489,6 @@ function ListesScreen({
     : tone === 'ok' ? 'text-green-700 dark:text-green-400'
     : 'text-slate-400'
 
-  // ── Une liste ouverte ────────────────────────────────────────────────────────
   if (open) {
     const dispatched = listDispatched(open)
     const cancelled = listCancelled(open)
@@ -2939,43 +2498,36 @@ function ListesScreen({
     const current = Math.min(page, totalPages)
     const rows = items.slice((current - 1) * LISTE_PAGE_SIZE, current * LISTE_PAGE_SIZE)
 
-    // Une liste déjà partie n'a plus rien à vérifier ni à envoyer : la carte de scan et le
-    // bouton d'envoi n'ont plus d'objet. Le tableau, lui, garde exactement les colonnes
-    // d'origine (Photo/Réf/Marque/Genre/Forme/Emplacement/Entrée/Statut/Prix) — même
-    // GlassTable qu'avant, juste sans la carte de scan ni le bouton d'envoi autour.
     if (dispatched) {
       return (
-        <div className="mx-auto max-w-4xl space-y-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <Btn onClick={() => { setOpen(null); setDispatch(null) }}>{ic.arrowLeft()} Listes</Btn>
+        <div className="mx-auto max-w-4xl space-y-3 sm:space-y-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <Btn onClick={() => { setOpen(null); setDispatch(null) }} className="text-xs sm:text-sm">{ic.arrowLeft()} Listes</Btn>
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{dayLabel(open.created_at)}</p>
-              <p className="truncate text-xs text-slate-400">{open.session_code || '—'}</p>
+              <p className="truncate text-xs font-bold text-slate-900 dark:text-white sm:text-sm">{dayLabel(open.created_at)}</p>
+              <p className="truncate text-[10px] text-slate-400 sm:text-xs">{open.session_code || '—'}</p>
             </div>
           </div>
 
           {loadingItems ? (
-            <div className={`${CARD} p-8 text-center text-sm text-slate-400`}>Chargement du contenu…</div>
+            <div className={`${CARD} p-6 text-center text-[11px] text-slate-400 sm:p-8 sm:text-sm`}>Chargement du contenu…</div>
           ) : items.length === 0 ? (
-            <div className={`${CARD} p-8 text-center text-sm text-slate-400`}>Cette liste est vide.</div>
+            <div className={`${CARD} p-6 text-center text-[11px] text-slate-400 sm:p-8 sm:text-sm`}>Cette liste est vide.</div>
           ) : (
-            // Même habillage que Stock total (en-tête vert, photos 48px) — mêmes colonnes
-            // que GlassTable ci-dessous (Photo/Réf/Marque/Genre/Forme/Emplacement/Entrée/
-            // Statut/Prix, dans le même ordre), juste pas le même composant partagé.
-            <div className="overflow-x-auto rounded-2xl border border-green-200 dark:border-green-700">
-              <div className="min-w-[880px]">
-                <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-xs sm:text-sm">
+            <div className="overflow-x-auto -mx-2 sm:mx-0 rounded-xl sm:rounded-2xl border border-green-200 dark:border-green-700">
+              <div className="min-w-[680px] sm:min-w-[880px]">
+                <table className="w-full min-w-full divide-y divide-green-200 dark:divide-green-700 text-[10px] sm:text-xs">
                   <thead className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-200">
                     <tr>
-                      <th className="px-2 py-2 text-left font-semibold">Photo</th>
-                      <th className="px-2 py-2 text-left font-semibold">Réf</th>
-                      <th className="px-2 py-2 text-left font-semibold">Marque</th>
-                      <th className="px-2 py-2 text-left font-semibold">Genre</th>
-                      <th className="px-2 py-2 text-left font-semibold">Forme</th>
-                      <th className="px-2 py-2 text-left font-semibold">Emplacement</th>
-                      <th className="px-2 py-2 text-left font-semibold">Entrée</th>
-                      <th className="px-2 py-2 text-left font-semibold">Statut</th>
-                      <th className="px-2 py-2 text-right font-semibold">Prix</th>
+                      <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Photo</th>
+                      <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Réf</th>
+                      <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Marque</th>
+                      <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Genre</th>
+                      <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Forme</th>
+                      <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Emplacement</th>
+                      <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Entrée</th>
+                      <th className="px-1.5 py-1.5 text-left font-semibold sm:px-2 sm:py-2">Statut</th>
+                      <th className="px-1.5 py-1.5 text-right font-semibold sm:px-2 sm:py-2">Prix</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-green-200 dark:divide-green-700 bg-white dark:bg-slate-900">
@@ -2983,27 +2535,27 @@ function ListesScreen({
                       const photo = recordPhoto(item)
                       return (
                         <tr key={item.id}>
-                          <td className="px-2 py-2">
+                          <td className="px-1.5 py-1.5 sm:px-2 sm:py-2">
                             {photo ? (
-                              <img src={photo} alt="" className="h-12 w-12 rounded-md object-cover" />
+                              <img src={photo} alt="" className="h-8 w-8 rounded-md object-cover sm:h-12 sm:w-12" />
                             ) : (
-                              <span className="inline-block rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-500 dark:bg-slate-800">—</span>
+                              <span className="inline-block rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] text-slate-500 dark:bg-slate-800 sm:px-2 sm:py-1 sm:text-xs">—</span>
                             )}
                           </td>
-                          <td className="px-2 py-2 font-mono text-slate-900 dark:text-white">{item.reference || item.barcode || '—'}</td>
-                          <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{item.brand || '—'}</td>
-                          <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{item.gender || '—'}</td>
-                          <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{item.shape || '—'}</td>
-                          <td className="px-2 py-2 font-mono text-[11px] text-slate-700 dark:text-slate-200">{item.location_code || '—'}</td>
-                          <td className="px-2 py-2 text-slate-700 dark:text-slate-200">
+                          <td className="px-1.5 py-1.5 font-mono text-[10px] text-slate-900 dark:text-white sm:px-2 sm:py-2 sm:text-xs">{item.reference || item.barcode || '—'}</td>
+                          <td className="px-1.5 py-1.5 text-[10px] text-slate-700 dark:text-slate-200 sm:px-2 sm:py-2 sm:text-xs">{item.brand || '—'}</td>
+                          <td className="px-1.5 py-1.5 text-[10px] text-slate-700 dark:text-slate-200 sm:px-2 sm:py-2 sm:text-xs">{item.gender || '—'}</td>
+                          <td className="px-1.5 py-1.5 text-[10px] text-slate-700 dark:text-slate-200 sm:px-2 sm:py-2 sm:text-xs">{item.shape || '—'}</td>
+                          <td className="px-1.5 py-1.5 font-mono text-[9px] text-slate-700 dark:text-slate-200 sm:px-2 sm:py-2 sm:text-[11px]">{item.location_code || '—'}</td>
+                          <td className="px-1.5 py-1.5 text-[10px] text-slate-700 dark:text-slate-200 sm:px-2 sm:py-2 sm:text-xs">
                             {dayLabel(item.created_at)} · {formatRecordTime(item.created_at)}
                           </td>
-                          <td className="px-2 py-2">
-                            <span className="inline-block rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                          <td className="px-1.5 py-1.5 sm:px-2 sm:py-2">
+                            <span className="inline-block rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300 sm:px-2 sm:py-0.5 sm:text-[11px]">
                               En transit
                             </span>
                           </td>
-                          <td className="px-2 py-2 text-right text-slate-700 dark:text-slate-200">{fmtPrix(item.price)}</td>
+                          <td className="px-1.5 py-1.5 text-right text-[10px] text-slate-700 dark:text-slate-200 sm:px-2 sm:py-2 sm:text-xs">{fmtPrix(item.price)}</td>
                         </tr>
                       )
                     })}
@@ -3014,10 +2566,10 @@ function ListesScreen({
           )}
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-3">
-              <Btn onClick={() => setPage(current - 1)} disabled={current <= 1}>{ic.arrowLeft()} Précédent</Btn>
-              <span className="text-xs tabular-nums text-slate-400">Page {current} / {totalPages}</span>
-              <Btn onClick={() => setPage(current + 1)} disabled={current >= totalPages}>Suivant</Btn>
+            <div className="flex items-center justify-center gap-2 sm:gap-3">
+              <Btn onClick={() => setPage(current - 1)} disabled={current <= 1} className="text-xs sm:text-sm">{ic.arrowLeft()} Précédent</Btn>
+              <span className="text-[10px] tabular-nums text-slate-400 sm:text-xs">Page {current} / {totalPages}</span>
+              <Btn onClick={() => setPage(current + 1)} disabled={current >= totalPages} className="text-xs sm:text-sm">Suivant</Btn>
             </div>
           )}
         </div>
@@ -3025,30 +2577,27 @@ function ListesScreen({
     }
 
     return (
-      <div className="mx-auto max-w-4xl space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <Btn onClick={() => { setOpen(null); setDispatch(null) }}>{ic.arrowLeft()} Listes</Btn>
+      <div className="mx-auto max-w-4xl space-y-3 sm:space-y-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <Btn onClick={() => { setOpen(null); setDispatch(null) }} className="text-xs sm:text-sm">{ic.arrowLeft()} Listes</Btn>
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+            <p className="truncate text-xs font-bold text-slate-900 dark:text-white sm:text-sm">
               {dayLabel(open.created_at)}
             </p>
-            <p className="truncate text-xs text-slate-400">{open.session_code || '—'}</p>
+            <p className="truncate text-[10px] text-slate-400 sm:text-xs">{open.session_code || '—'}</p>
           </div>
         </div>
 
-        <div className={`${CARD} p-4`}>
-          <div className="flex items-baseline justify-between gap-3">
-            <strong className="text-sm font-bold text-slate-900 dark:text-white">Confirmation des montures</strong>
-            <span className="flex-shrink-0 text-xs tabular-nums text-slate-400">{done} / {items.length} vérifiée{done > 1 ? 's' : ''}</span>
+        <div className={`${CARD} p-3 sm:p-4`}>
+          <div className="flex items-baseline justify-between gap-2 sm:gap-3">
+            <strong className="text-xs font-bold text-slate-900 dark:text-white sm:text-sm">Confirmation des montures</strong>
+            <span className="flex-shrink-0 text-[10px] tabular-nums text-slate-400 sm:text-xs">{done} / {items.length} vérifiée{done > 1 ? 's' : ''}</span>
           </div>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-0.5 text-[10px] text-slate-400 sm:mt-1 sm:text-xs">
             Scannez le code-barres de chaque monture : la validation est automatique.
           </p>
 
-          {/* Plus de bouton : la vérification part dès que la saisie désigne une monture.
-              Le <form> ne sert plus qu'à absorber l'Entrée que la plupart des lecteurs
-              envoient en fin de trame — sans lui, elle rechargerait la page. */}
-          <form onSubmit={e => { e.preventDefault(); void verify() }} className="mt-3">
+          <form onSubmit={e => { e.preventDefault(); void verify() }} className="mt-2 sm:mt-3">
             <input
               ref={codeRef}
               type="text"
@@ -3061,18 +2610,15 @@ function ListesScreen({
             />
           </form>
 
-          {message && <p className={`mt-2 text-xs ${toneClass}`}>{message}</p>}
+          {message && <p className={`mt-1.5 text-[10px] sm:mt-2 sm:text-xs ${toneClass}`}>{message}</p>}
         </div>
 
         {loadingItems ? (
-          <div className={`${CARD} p-8 text-center text-sm text-slate-400`}>Chargement du contenu…</div>
+          <div className={`${CARD} p-6 text-center text-[11px] text-slate-400 sm:p-8 sm:text-sm`}>Chargement du contenu…</div>
         ) : items.length === 0 ? (
-          <div className={`${CARD} p-8 text-center text-sm text-slate-400`}>Cette liste est vide.</div>
+          <div className={`${CARD} p-6 text-center text-[11px] text-slate-400 sm:p-8 sm:text-sm`}>Cette liste est vide.</div>
         ) : (
-          // Tableau plutôt qu'une pile de cartes : le magasinier pointe une liste, il compare
-          // des lignes entre elles. Même gabarit que le contenu d'un carton côté Responsable
-          // et que le présentoir côté Vendeuse — un seul tableau à apprendre pour tout le monde.
-          <div className={`${CARD} p-0`}>
+          <div className={`${CARD} p-0 overflow-hidden`}>
             <GlassTable
               title={`liste-${open.session_code || open.id}`}
               after={[{ header: 'Prix', align: 'right' }]}
@@ -3086,15 +2632,10 @@ function ListesScreen({
                   brand: item.brand,
                   gender: item.gender,
                   shape: item.shape,
-                  // Ici, l'emplacement est celui d'où il faut SORTIR la monture.
                   location: item.location_code,
                   entry: item.created_at,
                   after: [fmtPrix(item.price)],
                   done: dispatched || ok,
-                  // Une fois la liste partie, « à vérifier » n'a plus de sens — la coche
-                  // vérifiée est locale au navigateur (cf. loadVerifiedIds) et peut avoir
-                  // été perdue sans que l'envoi lui-même ait échoué. En transit reflète ce
-                  // qui est vraiment vrai : la monture a bien quitté ce magasin.
                   status: dispatched
                     ? { label: 'En transit', tone: 'blue' as const }
                     : ok
@@ -3107,17 +2648,15 @@ function ListesScreen({
         )}
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-3">
-            <Btn onClick={() => setPage(current - 1)} disabled={current <= 1}>{ic.arrowLeft()} Précédent</Btn>
-            <span className="text-xs tabular-nums text-slate-400">Page {current} / {totalPages}</span>
-            <Btn onClick={() => setPage(current + 1)} disabled={current >= totalPages}>Suivant</Btn>
+          <div className="flex items-center justify-center gap-2 sm:gap-3">
+            <Btn onClick={() => setPage(current - 1)} disabled={current <= 1} className="text-xs sm:text-sm">{ic.arrowLeft()} Précédent</Btn>
+            <span className="text-[10px] tabular-nums text-slate-400 sm:text-xs">Page {current} / {totalPages}</span>
+            <Btn onClick={() => setPage(current + 1)} disabled={current >= totalPages} className="text-xs sm:text-sm">Suivant</Btn>
           </div>
         )}
 
         <div className="flex justify-end">
-          {/* Une liste déjà partie ne se renvoie pas : le serveur la refuserait, autant
-              ne pas réarmer le bouton en la rouvrant. */}
-          <Btn variant="primary" onClick={() => void send()} disabled={dispatched || cancelled || !complete || sending}>
+          <Btn variant="primary" onClick={() => void send()} disabled={dispatched || cancelled || !complete || sending} className="text-xs sm:text-sm">
             {ic.send()}
             {dispatched
               ? `En transit vers le stock magasin${(open.destination_station_name || open.city) ? ` (${open.destination_station_name || open.city})` : ''}`
@@ -3128,45 +2667,41 @@ function ListesScreen({
         </div>
 
         {cancelledWarning && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-labelledby="cancelled-list-title">
-            <div className={`${CARD} w-full max-w-md p-6 text-center`}>
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                {ic.alert('w-6 h-6')}
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="cancelled-list-title">
+            <div className={`${CARD} w-full max-w-md p-5 text-center sm:p-6`}>
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300 sm:h-12 sm:w-12">
+                {ic.alert('w-5 h-5 sm:w-6 sm:h-6')}
               </div>
-              <h3 id="cancelled-list-title" className="mt-4 text-base font-bold text-slate-900 dark:text-white">Liste annulée</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              <h3 id="cancelled-list-title" className="mt-3 text-sm font-bold text-slate-900 dark:text-white sm:mt-4 sm:text-base">Liste annulée</h3>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400 sm:mt-2 sm:text-sm">
                 Cette liste a été annulée par la Direction et attend une nouvelle destination. La vérification et l'envoi sont temporairement bloqués.
               </p>
-              <Btn className="mt-5 w-full justify-center" onClick={() => setCancelledWarning(false)}>Compris</Btn>
+              <Btn className="mt-4 w-full justify-center sm:mt-5" onClick={() => setCancelledWarning(false)}>Compris</Btn>
             </div>
           </div>
         )}
 
         {dispatch && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-            <div className={`${CARD} w-full max-w-sm p-5 text-center`}>
-              <p className="text-sm font-bold text-slate-900 dark:text-white">Carton d'envoi</p>
-              <p className="mt-1 text-xs text-slate-400">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-4">
+            <div className={`${CARD} w-full max-w-sm p-4 text-center sm:p-5`}>
+              <p className="text-xs font-bold text-slate-900 dark:text-white sm:text-sm">Carton d'envoi</p>
+              <p className="mt-0.5 text-[10px] text-slate-400 sm:mt-1 sm:text-xs">
                 {dispatch.city || ''} · {dispatch.sent_count || 0} monture{Number(dispatch.sent_count || 0) > 1 ? 's' : ''}
               </p>
 
-              <div className="mt-4 flex flex-col items-center rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700">
+              <div className="mt-3 flex flex-col items-center rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 sm:mt-4 sm:p-4">
                 <BarcodePreview value={dispatch.box_code || dispatch.box_reference || dispatch.code || ''} />
-                <div className="mt-1 font-mono text-sm font-bold tabular-nums text-slate-900">
+                <div className="mt-0.5 font-mono text-xs font-bold tabular-nums text-slate-900 sm:mt-1 sm:text-sm">
                   {dispatch.box_code || dispatch.box_reference || dispatch.code || '—'}
                 </div>
-                <span className="mt-1 text-[11px] text-slate-400">{dispatch.box_reference || dispatch.reference || 'Colis d’expédition'}</span>
+                <span className="mt-0.5 text-[9px] text-slate-400 sm:mt-1 sm:text-[11px]">{dispatch.box_reference || dispatch.reference || 'Colis d’expédition'}</span>
               </div>
 
-              {/* Imprimer d'abord, fermer ensuite : la boîte disparaît avec la liste, et
-                  le code du carton n'est réaffiché nulle part. L'impression dépose aussi
-                  le PNG dans les téléchargements — même filet que l'étiquette de monture,
-                  pour le cas où l'imprimante est absente ou la fenêtre bloquée. */}
-              <div className="mt-4 flex flex-col gap-2">
-                <Btn variant="primary" className="w-full justify-center" onClick={() => void printBoxLabel(dispatch)}>
+              <div className="mt-3 flex flex-col gap-1.5 sm:mt-4 sm:gap-2">
+                <Btn variant="primary" className="w-full justify-center text-xs sm:text-sm" onClick={() => void printBoxLabel(dispatch)}>
                   {ic.printer()} Imprimer l'étiquette du carton
                 </Btn>
-                <Btn className="w-full justify-center" onClick={() => { setDispatch(null); setOpen(null) }}>
+                <Btn className="w-full justify-center text-xs sm:text-sm" onClick={() => { setDispatch(null); setOpen(null) }}>
                   Fermer
                 </Btn>
               </div>
@@ -3177,37 +2712,34 @@ function ListesScreen({
     )
   }
 
-  // ── Choix de la liste ────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="mx-auto max-w-4xl space-y-3 sm:space-y-4">
       {!hasSession && (
         <div className="flex justify-start">
-          <Btn variant="outline" onClick={onReturn}>{ic.arrowLeft()} Retour</Btn>
+          <Btn variant="outline" onClick={onReturn} className="text-xs sm:text-sm">{ic.arrowLeft()} Retour</Btn>
         </div>
       )}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-2 sm:gap-3">
         <div>
-          <p className="text-sm text-slate-400">
+          <p className="text-[11px] text-slate-400 sm:text-sm">
             {loading ? 'Chargement…' : `${lists.length} liste${lists.length > 1 ? 's' : ''} reçue${lists.length > 1 ? 's' : ''}`}
           </p>
-          {/* Rien ne disparaît en silence : si le tri par magasin a écarté des lignes, on
-              le dit, sinon un colis manquant resterait inexplicable. */}
           {hidden > 0 && (
-            <p className="text-xs text-slate-400">
+            <p className="text-[10px] text-slate-400 sm:text-xs">
               {hidden} liste{hidden > 1 ? 's' : ''} destinée{hidden > 1 ? 's' : ''} à un autre magasin, masquée{hidden > 1 ? 's' : ''}.
             </p>
           )}
         </div>
-        <Btn onClick={onReload} disabled={loading}>{ic.refresh()} Actualiser</Btn>
+        <Btn onClick={onReload} disabled={loading} className="text-xs sm:text-sm">{ic.refresh()} Actualiser</Btn>
       </div>
 
       {lists.length === 0 && !loading ? (
-        <div className={`${CARD} flex flex-col items-center gap-2 p-8 text-center`}>
-          <span className="text-slate-300 dark:text-slate-600">{ic.glasses('w-8 h-8')}</span>
-          <p className="text-sm text-slate-400">Aucune liste reçue.</p>
+        <div className={`${CARD} flex flex-col items-center gap-1.5 p-6 text-center sm:gap-2 sm:p-8`}>
+          <span className="text-slate-300 dark:text-slate-600">{ic.glasses('w-6 h-6 sm:w-8 sm:h-8')}</span>
+          <p className="text-[11px] text-slate-400 sm:text-sm">Aucune liste reçue.</p>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-2.5 sm:gap-3 grid-cols-1 sm:grid-cols-2">
           {[...lists]
             .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
             .map(list => {
@@ -3221,15 +2753,15 @@ function ListesScreen({
                 <button
                   key={list.id}
                   onClick={() => void openListe(list)}
-                  className={`bg-white dark:bg-slate-800 rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 border-2 ${sent ? 'border-[#16a34a]' : 'border-[#2563eb]'}`}
+                  className={`bg-white dark:bg-slate-800 rounded-2xl p-3 text-left transition-all hover:-translate-y-0.5 border-2 sm:p-4 ${sent ? 'border-[#16a34a]' : 'border-[#2563eb]'}`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+                    <p className="truncate text-xs font-bold text-slate-900 dark:text-white sm:text-sm">
                       {isToday ? 'Aujourd’hui · ' : ''}{dayLabel(list.created_at)}
                     </p>
                     <Pill tone={sent ? 'green' : 'blue'}>{sent ? 'Envoyée' : 'À traiter'}</Pill>
                   </div>
-                  <p className="mt-1 truncate text-xs text-slate-400">
+                  <p className="mt-0.5 truncate text-[10px] text-slate-400 sm:mt-1 sm:text-xs">
                     {list.session_code || '—'} · {sent
                       ? `${count} lunettes envoyées${destination ? ` vers ${destination}` : ''}`
                       : `${total} lunettes`}
@@ -3243,24 +2775,13 @@ function ListesScreen({
   )
 }
 
-/** Le délai avant que la fin d'une réception ramène seule à « Mes sessions ». Assez long
- *  pour lire le code-barres et prendre l'étiquette, assez court pour ne pas faire attendre
- *  devant un écran qui n'attend plus rien. */
 const SESSION_DONE_SECONDS = 3
 
 type Screen = 'loading' | 'activation' | 'sessions' | 'wizard' | 'historique' | 'listes'
 
-// ── Coquille Direction ─────────────────────────────────────────────────────────
-/** Barre latérale, barre haute et navigation mobile reprises de la Direction
- *  (`src/App.tsx`, déjà rejouées dans `vendeuse.tsx`) : mêmes largeurs, mêmes rayons,
- *  mêmes couleurs. Le magasinier n'a que deux destinations, mais il les porte dans le
- *  même cadre que le reste de l'application. */
 const NAV: {
   id: Screen; label: string; short: string
   icon: (c?: string) => React.ReactElement
-  /** Seul l'assistant exige une session ouverte : on ne photographie pas une monture
-   *  sans réception pour l'accueillir. « Mes sessions » est au contraire l'écran par
-   *  lequel on en ouvre ou en reprend une — le verrouiller fermerait la seule porte. */
   needsSession?: boolean
 }[] = [
   { id: 'wizard', label: 'Enregistrement', short: 'Scan', icon: ic.camera, needsSession: true },
@@ -3281,7 +2802,6 @@ function Sidebar({ current, onNavigate, dark, onToggleDark, user, hasSession, ne
     <aside className="hidden md:flex flex-col w-56 lg:w-60 bg-slate-900 dark:bg-slate-950 h-screen sticky top-0 flex-shrink-0">
       <div className="px-4 py-5 border-b border-slate-800 flex-shrink-0">
         <div className="flex flex-col items-center gap-2.5 text-center">
-          {/* Fond blanc nécessaire : le JPEG n'a pas de transparence. */}
           <div className="w-full max-w-[180px] rounded-xl bg-white px-3 py-2">
             <img src={logoUrl} alt="La Lunetterie" className="w-full h-auto object-contain" />
           </div>
@@ -3295,8 +2815,6 @@ function Sidebar({ current, onNavigate, dark, onToggleDark, user, hasSession, ne
             key={item.id}
             onClick={() => onNavigate(item.id)}
             disabled={Boolean(item.needsSession) && !hasSession}
-            // Les entrées qui exigent une session restent visibles mais inertes : les
-            // faire disparaître ferait sauter la barre entière à l'activation.
             className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
               current === item.id
                 ? 'bg-blue-600 text-white'
@@ -3340,7 +2858,7 @@ function MobileNav({ current, onNavigate, hasSession, newLists }: {
   hasSession: boolean; newLists: number
 }) {
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-40">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-40 pb-safe">
       <div className="flex">
         {NAV.filter(item => isFeatureEnabled('magasinier', item.id)).map(item => (
           <button
@@ -3373,8 +2891,6 @@ function TopBar({ current, session, dark, onToggleDark, onReset, onBack, histori
   onReset: (() => void) | null
   onBack: (() => void) | null
   onOpenBatch?: () => void
-  /** Recherche + filtres de l'Historique, sur la même ligne que le titre plutôt que dans
-   *  leur propre carte plus bas — la Direction a le même genre de bandeau sur Stock général. */
   historique?: {
     query: string; onQuery: (v: string) => void
     forme: string; onForme: (v: string) => void; formes: string[]
@@ -3387,95 +2903,81 @@ function TopBar({ current, session, dark, onToggleDark, onReset, onBack, histori
     : NAV.find(item => item.id === current)?.label || 'Enregistrement monture'
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-100 dark:border-slate-800 px-4 md:px-6 min-h-14 py-2 flex flex-wrap items-center gap-3 flex-shrink-0">
-      {/* Le retour est en tête, avant le titre : c'est la place qu'il occupe partout
-          ailleurs, et sur mobile la barre latérale n'existe pas — sans lui, quitter
-          l'assistant demandait de passer par la navigation du bas. */}
+    <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-100 dark:border-slate-800 px-2 md:px-6 min-h-12 sm:min-h-14 py-1.5 sm:py-2 flex flex-wrap items-center gap-1.5 sm:gap-3 flex-shrink-0">
       {onBack && (
         <button
           onClick={onBack}
-          className="flex-shrink-0 -ml-1 flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          className="flex-shrink-0 -ml-0.5 flex items-center gap-1 rounded-xl px-1.5 py-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors sm:-ml-1 sm:px-2 sm:py-1.5 sm:text-xs"
           aria-label="Retour à mes sessions"
         >
-          {ic.arrowLeft('w-4 h-4')}
+          {ic.arrowLeft('w-3.5 h-3.5 sm:w-4 sm:h-4')}
           <span className="hidden sm:inline">Retour</span>
         </button>
       )}
 
       <div className={historique ? 'flex-shrink-0' : 'flex-1 min-w-0'}>
-        <h1 className="font-bold text-slate-900 dark:text-white text-sm md:text-base truncate leading-tight">{label}</h1>
+        <h1 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm md:text-base truncate leading-tight">{label}</h1>
       </div>
 
       {historique && (
-        <div className="flex flex-1 min-w-[220px] flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[160px]">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{ic.search()}</span>
+        <div className="flex flex-1 min-w-[180px] flex-wrap items-center gap-1.5 sm:gap-2">
+          <div className="relative flex-1 min-w-[120px] sm:min-w-[160px]">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">{ic.search('w-3 h-3 sm:w-3.5 sm:h-3.5')}</span>
             <input
               type="search"
               value={historique.query}
               onChange={e => historique.onQuery(e.target.value)}
-              placeholder="Référence, marque, code-barres, couleur…"
-              className={`${INPUT} py-1.5 pl-9 text-xs`}
+              placeholder="Réf, marque, code…"
+              className={`${INPUT} py-1 pl-7 text-[10px] sm:pl-9 sm:text-xs`}
             />
           </div>
-          <select value={historique.forme} onChange={e => historique.onForme(e.target.value)} className={`${SELECT} py-1.5 text-xs`}>
-            <option value="">Toutes les formes</option>
-            {historique.formes.map(value => <option key={value} value={value}>{value === UNDETERMINED_SHAPE ? 'Forme non déterminée' : value}</option>)}
+          <select value={historique.forme} onChange={e => historique.onForme(e.target.value)} className={`${SELECT} py-1 text-[10px] sm:py-1.5 sm:text-xs`}>
+            <option value="">Formes</option>
+            {historique.formes.slice(0, 5).map(value => <option key={value} value={value}>{value === UNDETERMINED_SHAPE ? 'Non déf.' : value}</option>)}
+            {historique.formes.length > 5 && <option value="">+</option>}
           </select>
-          <select value={historique.genre} onChange={e => historique.onGenre(e.target.value)} className={`${SELECT} py-1.5 text-xs`}>
-            <option value="">Tous les genres</option>
+          <select value={historique.genre} onChange={e => historique.onGenre(e.target.value)} className={`${SELECT} py-1 text-[10px] sm:py-1.5 sm:text-xs`}>
+            <option value="">Genres</option>
             {historique.genres.map(value => <option key={value} value={value}>{value}</option>)}
           </select>
-          <span className="whitespace-nowrap text-xs text-slate-400">
-            {historique.count} monture{historique.count > 1 ? 's' : ''} enregistrée{historique.count > 1 ? 's' : ''}
-            {historique.count !== historique.total ? ` sur ${historique.total}` : ''}
+          <span className="whitespace-nowrap text-[9px] text-slate-400 sm:text-xs">
+            {historique.count}
           </span>
         </div>
       )}
 
-      {/* Le quota suit le magasinier d'un écran à l'autre : c'est lui qui dit s'il peut
-          encore enregistrer, il n'a donc pas sa place dans le seul assistant.
-
-          L'avancement est le chiffre clé de l'écran : il passe en gras, au format des
-          chiffres clés du reste de l'application, et reste affiché sur téléphone — il
-          disparaissait entièrement sous `sm`, là où la barre latérale n'existe pas et où
-          rien d'autre ne le rappelait. Seul le code de session cède la place, c'est la
-          partie qu'on relit le moins. */}
       {session && (
-        <span className="inline-flex items-center gap-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-4 py-2 flex-shrink-0">
-          <span className="text-blue-600 dark:text-blue-400 flex-shrink-0">{ic.tag('w-5 h-5')}</span>
-          <span className="hidden sm:inline text-sm font-semibold text-slate-500 dark:text-slate-400">{session.code}</span>
-          <span className="text-xl font-black tabular-nums text-slate-900 dark:text-white leading-none">
+        <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 flex-shrink-0 sm:gap-2.5 sm:px-4 sm:py-2">
+          <span className="text-blue-600 dark:text-blue-400 flex-shrink-0">{ic.tag('w-4 h-4 sm:w-5 sm:h-5')}</span>
+          <span className="hidden sm:inline text-xs font-semibold text-slate-500 dark:text-slate-400 sm:text-sm">{session.code}</span>
+          <span className="text-base font-black tabular-nums text-slate-900 dark:text-white leading-none sm:text-xl">
             {session.registered}/{session.target}
           </span>
         </span>
       )}
 
       {onReset && (
-        <Btn variant="primary" onClick={onReset} className="flex-shrink-0 px-2.5 md:px-3.5">
-          {ic.refresh()} <span className="hidden sm:inline">Nouveau</span>
+        <Btn variant="primary" onClick={onReset} className="flex-shrink-0 px-2 py-1.5 text-[10px] sm:px-2.5 md:px-3.5 sm:text-xs md:text-sm min-h-[36px] sm:min-h-[44px]">
+          {ic.refresh('w-3 h-3 sm:w-4 sm:h-4')} <span className="hidden sm:inline">Nouveau</span>
         </Btn>
       )}
-      {/* Bouton pour lancer la capture en lot depuis l'en-tête */}
-      <Btn onClick={() => { if (onOpenBatch) onOpenBatch() }} className="flex-shrink-0 px-2.5 md:px-3.5 ml-2">
-        {ic.camera()} <span className="hidden sm:inline">Capturer lot</span>
+      <Btn onClick={() => { if (onOpenBatch) onOpenBatch() }} className="flex-shrink-0 px-2 py-1.5 text-[10px] sm:px-2.5 md:px-3.5 sm:text-xs md:text-sm min-h-[36px] sm:min-h-[44px]">
+        {ic.camera('w-3 h-3 sm:w-4 sm:h-4')} <span className="hidden sm:inline">Capturer lot</span>
       </Btn>
 
-      {/* Thème et déconnexion vivent dans la barre latérale ; sur mobile elle n'existe
-          pas, ils remontent donc ici. */}
       <button
         onClick={onToggleDark}
-        className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors flex-shrink-0"
+        className="md:hidden p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors flex-shrink-0 sm:p-2"
         aria-label="Changer de thème"
       >
-        {dark ? ic.sun('w-4 h-4') : ic.moon('w-4 h-4')}
+        {dark ? ic.sun('w-3.5 h-3.5 sm:w-4 sm:h-4') : ic.moon('w-3.5 h-3.5 sm:w-4 sm:h-4')}
       </button>
       <button
         onClick={logoutToLogin}
-        className="md:hidden p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors flex-shrink-0"
+        className="md:hidden p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors flex-shrink-0 sm:p-2"
         aria-label="Se déconnecter"
       >
-        {ic.signOut('w-4 h-4')}
+        {ic.signOut('w-3.5 h-3.5 sm:w-4 sm:h-4')}
       </button>
     </header>
   )
@@ -3487,18 +2989,13 @@ function ScanPage() {
   const [screen, setScreen] = useState<Screen>('loading')
   const [showMonturesManager, setShowMonturesManager] = useState(false)
 
-  // Recherche + filtres de l'écran Historique : portés ici (pas dans HistoriqueScreen) pour
-  // que TopBar puisse les afficher sur la même ligne que le titre.
   const [histQuery, setHistQuery] = useState('')
   const [histForme, setHistForme] = useState('')
   const [histGenre, setHistGenre] = useState('')
   const [histPage, setHistPage] = useState(1)
 
-  // Secondes restantes avant le retour automatique à « Mes sessions ». Null tant que la
-  // réception n'est pas terminée.
   const [autoRetour, setAutoRetour] = useState<number | null>(null)
 
-  // Session de réception
   const [session, setSession] = useState<ReceptionSession | null>(null)
   const [activationStatus, setActivationStatus] = useState('')
   const [activationError, setActivationError] = useState(false)
@@ -3507,11 +3004,8 @@ function ScanPage() {
   const [loadingLists, setLoadingLists] = useState(false)
   const [commands, setCommands] = useState<ReceptionEntry[]>([])
   const [loadingCommands, setLoadingCommands] = useState(false)
-  // Si les expéditions sont refusées, on le dit plutôt que d'afficher un « aucune
-  // commande » qui ferait croire à un entrepôt vide.
   const [commandsDenied, setCommandsDenied] = useState(false)
 
-  // Assistant
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [captureTarget, setCaptureTarget] = useState<'monture' | 'branche'>('monture')
   const [photoMonture, setPhotoMonture] = useState<string | null>(null)
@@ -3523,8 +3017,6 @@ function ScanPage() {
   const [sources, setSources] = useState<Record<FieldKey, FieldSource>>(EMPTY_SOURCES)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [invalid, setInvalid] = useState<Record<string, boolean>>({})
-  /** Forme détectée par l'IA, renvoyée telle quelle au serveur (detected_shape) :
-   *  c'est l'écart avec la correction du magasinier qui fait progresser le modèle. */
   const [detectedShape, setDetectedShape] = useState('')
   const [aiMountType, setAiMountType] = useState('')
 
@@ -3537,7 +3029,6 @@ function ScanPage() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
-  // ── Caméra de capture ────────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(track => track.stop())
     streamRef.current = null
@@ -3546,8 +3037,6 @@ function ScanPage() {
   }, [])
 
   const startCamera = useCallback(async () => {
-    // Sans cette garde, un second appel (retour à l'étape 1, double clic) ouvrirait
-    // un deuxième flux et laisserait le premier allumé jusqu'au rechargement.
     if (streamRef.current) return
     const blocked = cameraUnavailableReason()
     if (blocked) { window.alert(blocked); return }
@@ -3566,19 +3055,8 @@ function ScanPage() {
     }
   }, [])
 
-  // Le flux survit aux changements d'étape mais pas au démontage de la page.
   useEffect(() => () => stopCamera(), [stopCamera])
 
-  /** Ouvre la caméra en arrivant sur la prise de vue.
-   *
-   *  Un effet plutôt qu'un appel direct dans `activateSession` : React démonte l'écran
-   *  d'activation — et avec lui le lecteur de code-barres, qui relâche le capteur — avant
-   *  d'exécuter les effets du nouvel écran. Réclamer la caméra plus tôt la demanderait
-   *  pendant qu'elle est encore prise.
-   *
-   *  `cameraOn` est délibérément absent des dépendances : l'inclure relancerait le flux
-   *  aussitôt que le magasinier appuie sur « Arrêter ». `startCamera` se garde lui-même
-   *  des appels redondants. */
   useEffect(() => {
     if (screen === 'wizard' && step === 1) void startCamera()
   }, [screen, step, startCamera])
@@ -3593,9 +3071,6 @@ function ScanPage() {
     return canvas.toDataURL('image/jpeg', 0.92)
   }
 
-  // ── Analyse IA ───────────────────────────────────────────────────────────────
-  // Un échec n'interrompt jamais l'enregistrement : les champs restent simplement
-  // ouverts à la saisie manuelle.
   async function analyzeMonture(dataUrl: string) {
     setAnalyzing(true)
     try {
@@ -3613,8 +3088,6 @@ function ScanPage() {
       if (a.color) detected.couleur = normalizeColorValue(a.color)
       if (a.material) detected.matiere = a.material
       if (a.brand) detected.marque = a.brand
-      // Le genre de la session décrit la commande reçue et prime sur une estimation IA
-      // de chaque photo. Sans ce garde-fou, l'analyse remplaçait le genre prérempli.
       if (a.gender && !session?.genre) detected.genre = a.gender
 
       applyDetection(detected)
@@ -3664,8 +3137,6 @@ function ScanPage() {
   function setField(key: keyof VerifyForm, value: string) {
     setForm(previous => ({ ...previous, [key]: value }))
     setInvalid(previous => ({ ...previous, [key]: false }))
-    // Un champ détecté que l'on modifie devient « Corrigé » : c'est cette
-    // correction qui vaut vérité face à la prédiction du modèle.
     if (key in EMPTY_SOURCES) {
       setSources(previous => (previous[key as FieldKey] === 'detected'
         ? { ...previous, [key]: 'corrected' }
@@ -3673,7 +3144,6 @@ function ScanPage() {
     }
   }
 
-  // ── Capture ──────────────────────────────────────────────────────────────────
   const photo = captureTarget === 'monture' ? photoMonture : photoBranche
 
   function capture() {
@@ -3697,8 +3167,6 @@ function ScanPage() {
     if (captureTarget === 'monture') {
       if (!photoMonture) return
       setCaptureTarget('branche')
-      // La caméra reste ouverte entre les deux photos : la relancer coûterait une
-      // seconde de noir et, sur mobile, un nouveau geste utilisateur.
       return
     }
     if (!photoBranche) return
@@ -3706,7 +3174,6 @@ function ScanPage() {
     setStep(2)
   }
 
-  // ── Étape 2 → 3 ──────────────────────────────────────────────────────────────
   function gammePrice() {
     if (form.gamme === 'luxe' && form.prixCustom.trim()) {
       const numeric = Number(form.prixCustom.trim())
@@ -3727,7 +3194,6 @@ function ScanPage() {
 
     if (Object.keys(nextInvalid).length > 0) {
       setInvalid(nextInvalid)
-      // Un champ replié en erreur resterait invisible : on rouvre ce qui bloque.
       setCollapsed(previous => {
         const next = { ...previous }
         Object.keys(nextInvalid).forEach(key => { next[key] = false })
@@ -3741,8 +3207,6 @@ function ScanPage() {
     let locationCode: string
     let barcode = ''
     try {
-      // Aperçu seulement : l'emplacement n'est pas réservé, celui réellement attribué
-      // peut différer si un autre poste le prend entre-temps. Le serveur tranche.
       const payload = await apiFetch(`/inventory/storage/next-free?station_id=${stationIdOf(user)}&zone=STOCK`)
       locationCode = payload.data?.code || '—'
     } catch (error: any) {
@@ -3752,14 +3216,9 @@ function ScanPage() {
     }
 
     try {
-      // Le vrai numéro, réservé pour cette monture. L'aperçu affichait auparavant un
-      // `MNT-2026-…` tiré au hasard : il ressemblait à un identifiant sans en être un, et
-      // ne correspondait jamais au code que la monture allait porter.
       const payload = await apiFetch('/inventory/barcodes/next')
       barcode = String(payload.data?.barcode || '')
     } catch (error) {
-      // Sans blocage : le serveur en attribuera un à l'enregistrement, comme avant cette
-      // réservation. Seul l'aperçu est en retrait, et il le dit plutôt que d'inventer.
       console.warn('Code-barres non réservé, il sera attribué à l\'enregistrement', error)
     } finally {
       setConfirming(false)
@@ -3782,7 +3241,6 @@ function ScanPage() {
     setStep(3)
   }
 
-  // ── Étape 3 : enregistrement réel ────────────────────────────────────────────
   async function saveRecord() {
     if (!finalData) return
     if (!session || (session.target > 0 && session.registered >= session.target)) {
@@ -3798,8 +3256,6 @@ function ScanPage() {
       body.append('station_id', stationIdOf(user))
       body.append('price', String(finalData.prix))
       body.append('reception_command_code', session.code)
-      // Le numéro réservé pour l'aperçu, pour que l'étiquette imprimée porte bien celui que
-      // le magasinier a vu. Absent si la réservation a échoué : le serveur en génère un.
       if (finalData.id) body.append('barcode', finalData.id)
       body.append('reference', finalData.reference)
       body.append('brand', finalData.marque)
@@ -3813,8 +3269,6 @@ function ScanPage() {
       const payload = await apiFetch('/inventory/reception', { method: 'POST', body })
       const data = payload.data || {}
 
-      // Les valeurs prévisualisées étaient fictives : le code-barres, l'ID et
-      // l'emplacement qui comptent sont ceux que le serveur vient d'attribuer.
       const recorded: FinalMonture = {
         ...finalData,
         id: data.barcode || finalData.id,
@@ -3822,8 +3276,6 @@ function ScanPage() {
         emplacement: data.location_code || data.location || finalData.emplacement,
       }
       setFinalData(recorded)
-      // Pour que « Mes sessions » puisse regrouper cette monture par session plus tard,
-      // même si le serveur ne le redit pas lui-même sur le mouvement (cf. SessionsGate).
       rememberBarcodeSession(recorded.id, session.code)
 
       await incrementSession()
@@ -3831,8 +3283,6 @@ function ScanPage() {
       setSaved(true)
       playSuccessChime()
       showToast(`Monture enregistrée — ${recorded.id}`)
-      // Pas de retour automatique à la caméra : la boîte d'impression est modale et
-      // surgirait par-dessus un flux déjà relancé.
       void printMontureLabel(recorded)
     } catch (error: any) {
       console.error('Erreur enregistrement monture', error)
@@ -3847,7 +3297,6 @@ function ScanPage() {
     window.setTimeout(() => setToast(''), 3200)
   }
 
-  // ── Session de réception ─────────────────────────────────────────────────────
   const activateSession = useCallback(async (rawCode: string) => {
     const code = String(rawCode || '').trim().toUpperCase()
     if (!code) {
@@ -3870,9 +3319,6 @@ function ScanPage() {
         return false
       }
 
-      // Le suivi des réceptions coche « Reçu » sur ce scan, pas sur la première
-      // monture : on horodate donc l'activation dès la lecture du code. Un échec
-      // ici ne doit pas bloquer le magasinier — seul l'affichage du suivi attendra.
       try {
         await apiFetch(`/inventory/reception-commands/${encodeURIComponent(code)}/activate`, { method: 'POST' })
       } catch (error) {
@@ -3887,9 +3333,6 @@ function ScanPage() {
         genre: normalizeSessionGenre(command.gender),
         gamme: normalizeSessionGamme(command.gamme),
       }
-      // Ce scan est la seule trace qu'on gardera de la session : l'état React ne survit pas
-      // au rechargement, et le serveur refuse de lister ses commandes au magasinier. Sans
-      // cette ligne, revenir sur la page obligerait à rescanner l'étiquette.
       rememberScannedCode(active.code)
       rememberActivatedAt(active.code)
       setSession(active)
@@ -3906,24 +3349,12 @@ function ScanPage() {
       setActivationError(false)
       setActivationStatus('')
 
-      // Scanner l'étiquette EST le geste qui ouvre la réception : on enchaîne sur
-      // l'assistant. Repasser par « Mes sessions » renverrait le magasinier sur la liste
-      // qu'il vient de quitter, une monture déjà en main.
-      //
-      // La caméra n'est volontairement pas démarrée ici : le lecteur de code-barres tient
-      // encore le capteur — `createScanner` n'appelle `stop()` qu'après le retour de
-      // `onDetect`, donc après cette ligne — et plusieurs Android refusent le second flux
-      // (NotReadableError). C'est l'effet d'entrée dans l'assistant qui s'en charge, une
-      // fois l'écran d'activation démonté.
       const restant = Math.max(0, active.target - active.registered)
       showToast(`Session ${active.code} ouverte — ${restant} monture${restant > 1 ? 's' : ''} à enregistrer`)
       setStep(1)
       setScreen('wizard')
       return true
     } catch (error) {
-      // 404 / 400 : c'est le code qui ne vaut rien, pas le serveur. Le magasinier
-      // doit lire « ce code est invalide », sinon il attend un rétablissement réseau
-      // qui n'arrivera jamais.
       const status = error instanceof ApiError ? error.status : 0
       if (status === 404 || status === 400) {
         setActivationStatus('Ce code est invalide ou la session est fermée.')
@@ -3945,10 +3376,6 @@ function ScanPage() {
       )
       const command = payload.data?.command || payload.data || {}
 
-      // Défensif : si /increment ne renvoie pas registered_count / target_count sous
-      // la forme attendue, `target` ne doit surtout pas tomber à 0 — la vérification
-      // « registered >= target » croirait la session terminée après une seule monture
-      // et fermerait le flux d'enregistrement à tort.
       const parsedRegistered = Number(command.registered_count)
       const parsedTarget = Number(command.target_count)
       const nextRegistered = Number.isFinite(parsedRegistered) ? parsedRegistered : session.registered + 1
@@ -3982,8 +3409,6 @@ function ScanPage() {
       const payload = await apiFetch('/inventory/send-lists')
       setLists(Array.isArray(payload.data?.lists) ? payload.data.lists : [])
     } catch (error) {
-      // Une liste indisponible ne doit pas empêcher d'enregistrer : c'est un écran de
-      // consultation, le poste reste utilisable sans lui.
       console.error('Erreur chargement des listes reçues', error)
       setLists([])
     } finally {
@@ -3991,13 +3416,6 @@ function ScanPage() {
     }
   }, [])
 
-  /** Les commandes que la Direction a préparées, et l'avancement de celles déjà scannées.
-   *
-   *  Deux sources, parce que le magasinier n'a pas les mêmes droits sur les deux :
-   *  `/inventory/expeditions` est ouvert à tout compte et donne la commande telle que la
-   *  Direction l'a envoyée ; la session, elle, ne se relit que code par code, ceux qu'on a
-   *  retenus au scan. Croiser les deux sur `supplier_order_id` rattache l'avancement à sa
-   *  commande. */
   const loadCommands = useCallback(async (silent = false) => {
     if (!silent) setLoadingCommands(true)
     try {
@@ -4009,9 +3427,6 @@ function ScanPage() {
         apiFetchOptional('/inventory/reception-commands'),
       ])
 
-      // Les sessions ouvertes, indexées par la commande qu'elles servent. `actives` les
-      // garde aussi à plat : c'est lui qui fait foi pour « Mes sessions », l'index par
-      // commande ne sert qu'à rattacher une session à sa ligne d'expédition.
       const parCommande = new Map<number, any>()
       const actives: any[] = []
       const retenir = (command: any) => {
@@ -4024,18 +3439,12 @@ function ScanPage() {
       if (listPayload) {
         const listCommands: any[] = listPayload.data?.commands || []
         for (const command of listCommands) retenir(command)
-        // Un code n'est oublié que si la liste le connaît explicitement et le dit
-        // close — son absence pure et simple ne le prouve pas (liste éventuellement
-        // partielle pour ce rôle). Le confondre avec une clôture a déjà effacé des
-        // sessions actives sans recours : aucune route ne permet de les retrouver.
         const vivants = codes.filter(code => {
           const found = listCommands.find((c: any) => c.code === code)
           return !found || found.status === 'active'
         })
         if (vivants.length !== codes.length) saveScannedCodes(vivants)
       } else {
-        // Serveur pas encore redéployé, ou compte sans droit de lecture : on retombe sur le
-        // seul chemin qui reste ouvert, code par code, pour ce que ce poste a scanné.
         const payloads = await Promise.all(
           codes.map(code => apiFetchOptional(`/inventory/reception-commands/${encodeURIComponent(code)}`)),
         )
@@ -4043,20 +3452,13 @@ function ScanPage() {
         payloads.forEach((payload, index) => {
           const command = payload?.data?.command || payload?.data
           const status = command?.status ? String(command.status) : null
-          // Pas de statut exploitable — appel en échec (réseau, 401/403/500…),
-          // compte sans droit, ou réponse vide : on ignore, jamais on ne conclut
-          // « close ». Un blip réseau sur ce chemin (rejoué toutes les 15 s en
-          // fond) ne doit plus jamais effacer un code qu'on ne pourra plus rescanner.
           if (status === null) { vivants.push(codes[index]); return }
           if (status === 'active') { vivants.push(codes[index]); retenir(command) }
-          // Statut connu et différent de 'active' : la session est réellement close.
         })
         if (vivants.length !== codes.length) saveScannedCodes(vivants)
       }
 
       const orders = ordersPayload?.data?.orders || []
-      // Les expéditions sont refusées : sans elles il reste les sessions scannées, mais on
-      // ne peut plus annoncer les commandes que la Direction vient d'envoyer.
       setCommandsDenied(!ordersPayload)
 
       const entries: ReceptionEntry[] = orders.map((order: any): ReceptionEntry => {
@@ -4080,10 +3482,6 @@ function ScanPage() {
         }
       })
 
-      // Toute session ouverte que le croisement n'a pas placée garde sa ligne : celles
-      // sans expédition rattachée, mais aussi celles dont la commande manque au journal
-      // des expéditions. Elles sont ouvertes, donc reprenables, et les perdre ici
-      // bloquerait une réception en cours — c'est exactement ce que cet écran répare.
       const rattachees = new Set(entries.map(entry => entry.code).filter(Boolean))
       for (const command of actives) {
         const code = String(command.code)
@@ -4110,7 +3508,6 @@ function ScanPage() {
     }
   }, [])
 
-  // ── Garde ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!getToken()) {
       window.location.replace('/magasin.html')
@@ -4121,24 +3518,17 @@ function ScanPage() {
         const payload = await apiFetch('/auth/me')
         const account = payload?.data?.user
         if (!account) throw new Error('session invalide')
-        // Le rôle est relu auprès du serveur, jamais cru sur parole depuis localStorage.
         const role = String(getRoleName(account))
         if (!ALLOWED_ROLES.includes(role)) {
           window.location.replace('/magasin.html')
           return
         }
-        // Poste désactivé depuis la page Fonctionnalités : SUPER_ADMIN excepté, comme les
-        // autres verrous de ce garde — il entre par la Direction, pas par le poste Magasinier.
         if (role !== 'SUPER_ADMIN' && !isPosteEnabled('magasinier')) {
           window.location.replace('/magasin.html')
           return
         }
         window.localStorage.setItem('user', JSON.stringify(account))
         setUser(account)
-        // On atterrit sur « Mes sessions », pas sur l'activation : au rechargement comme
-        // le lendemain, le magasinier doit voir ses réceptions en cours et choisir
-        // laquelle reprendre. Rouvrir une session d'office serait pire que l'activation —
-        // avec plusieurs réceptions ouvertes, ce serait la mauvaise une fois sur deux.
         setScreen('sessions')
         void loadMovements(account.id)
         void loadLists()
@@ -4149,10 +3539,6 @@ function ScanPage() {
     })()
   }, [loadMovements, loadLists, loadCommands])
 
-  // Rafraîchissement silencieux de « Mes sessions » / « Listes reçues » — seulement sur ces
-  // deux écrans de consultation, jamais pendant l'assistant : un magasinier au milieu d'une
-  // capture caméra ou d'une vérification ne doit pas voir ses données bouger sous lui.
-  // Même cadence que la Direction (App.tsx) : 15 s, uniquement onglet visible.
   useEffect(() => {
     if (screen !== 'sessions' && screen !== 'listes') return
 
@@ -4176,7 +3562,6 @@ function ScanPage() {
     }
   }, [screen, loadCommands, loadLists])
 
-  // ── Réinitialisation ─────────────────────────────────────────────────────────
   function resetAll(skipConfirm = false) {
     if (!skipConfirm && step > 1 && !window.confirm('Voulez-vous vraiment recommencer ?')) return
 
@@ -4197,11 +3582,6 @@ function ScanPage() {
     setFinalData(null)
     setSaved(false)
 
-    // Quota atteint : la session ne peut plus rien recevoir. On renvoie à « Mes sessions »
-    // plutôt qu'à l'activation — c'est là que le magasinier voit la réception qu'il vient
-    // de terminer et celles qui l'attendent encore, au lieu d'un écran qui ne sait que
-    // réclamer une étiquette. `loadCommands` relit l'avancement au passage : la carte doit
-    // montrer la monture tout juste enregistrée.
     if (!session || (session.target > 0 && session.registered >= session.target)) {
       if (session) showToast(`Réception ${session.code} terminée — ${session.registered}/${session.target}`)
       setSession(null)
@@ -4217,11 +3597,6 @@ function ScanPage() {
     void startCamera()
   }
 
-  /** Quitter l'assistant pour « Mes sessions » sans refermer la réception en cours.
-   *
-   *  La caméra s'arrête — la carte de capture est démontée, sa piste resterait ouverte —
-   *  et l'avancement se relit, sinon la carte de la session afficherait un compteur
-   *  d'avant la dernière monture. */
   function goToSessions() {
     stopCamera()
     setScreen('sessions')
@@ -4231,18 +3606,9 @@ function ScanPage() {
   function enterSession() {
     setScreen('wizard')
     setStep(1)
-    // Ce clic est le geste utilisateur qui autorise l'accès caméra sur mobile ; un
-    // démarrage silencieux au chargement de la page serait souvent bloqué.
     if (!cameraOn) void startCamera()
   }
 
-  /** Scanner ou taper un code de session, nouvelle ou déjà entamée : les deux passent par
-   *  activateSession, qui la (ré)ouvre dans les deux cas (elle refait juste le point sur
-   *  le serveur à chaque fois). Cette enveloppe n'ajoute que les deux garde-fous qui
-   *  protégeaient autrefois « Continuer l'enregistrement » depuis la liste des commandes :
-   *  rouvrir l'assistant sans rien relire si c'est déjà la session en cours sur ce poste, et
-   *  confirmer avant d'en fermer une autre — personne ne doit perdre une réception entamée
-   *  sur un scan mal cadré. */
   async function activateOrResume(rawCode: string) {
     const code = String(rawCode || '').trim().toUpperCase()
     if (session && code && session.code === code) {
@@ -4260,10 +3626,6 @@ function ScanPage() {
     return activateSession(code)
   }
 
-  /** Navigation de la barre latérale. Quitter l'assistant démonte la carte de capture,
-   *  donc le <video> : sans arrêt explicite, la piste caméra resterait ouverte et la
-   *  diode du téléphone allumée sur un écran qui ne filme plus. `enterSession` la
-   *  rallume au retour. */
   function navigate(next: Screen) {
     if (next === screen) return
     if (screen === 'wizard') stopCamera()
@@ -4271,17 +3633,10 @@ function ScanPage() {
       enterSession()
       return
     }
-    // Les compteurs de réception bougent à chaque monture enregistrée, ici comme sur les
-    // autres postes : la liste se relit à l'ouverture plutôt qu'au seul chargement de la
-    // page, sinon elle affiche l'avancement d'il y a une heure.
     if (next === 'listes' || next === 'sessions') void loadCommands()
     setScreen(next)
   }
 
-  // Un écran désactivé depuis la page Fonctionnalités (Direction) ne doit pas rester
-  // ouvert juste parce qu'on l'avait déjà sous les yeux — on retombe sur le premier
-  // écran encore actif du menu. 'loading'/'activation' ne sont pas des écrans du menu,
-  // ce garde-fou ne les concerne pas.
   const [, forceFlagsRerender] = useState(0)
   useEffect(() => {
     const handler = () => forceFlagsRerender(n => n + 1)
@@ -4299,22 +3654,10 @@ function ScanPage() {
     if (fallback) navigate(fallback.id)
   })
 
-  // ── Rendu ────────────────────────────────────────────────────────────────────
-  // Le compteur ne retient que ce qui reste à traiter : une liste déjà partie n'appelle
-  // plus aucun geste.
   const newLists = lists.filter(list => !listDispatched(list)).length
 
-  // Le quota est épuisé : plus rien ne peut être enregistré sur cette session, la sortie
-  // n'est donc plus une option mais la seule suite possible.
-  // Note: si `target` vaut 0 ou est absent, on le considère comme inconnu (donc pas plein).
   const sessionFull = !session || (session.target > 0 && session.registered >= session.target)
 
-  // La dernière monture de la réception vient d'être enregistrée : on repart seul vers
-  // « Mes sessions ». Le délai laisse le temps de lire le code-barres et de récupérer
-  // l'étiquette qui sort de l'imprimante ; le bouton reste actif pour partir avant.
-  //
-  // Le décompte est affiché plutôt que silencieux : un écran qui change tout seul sans
-  // prévenir se lit comme une perte de saisie.
   useEffect(() => {
     if (!saved || !sessionFull || screen !== 'wizard') {
       setAutoRetour(null)
@@ -4340,9 +3683,6 @@ function ScanPage() {
       : values
   }, [movements])
   const histGenres = useMemo(() => distinctValues(movements, 'gender'), [movements])
-  // Marques déjà enregistrées par ce compte (dans la fenêtre des 300 derniers mouvements
-  // de réception) : le champ Marque les propose au lieu de forcer une resaisie complète
-  // à chaque fois qu'on retombe sur une marque déjà vue.
   const knownBrands = useMemo(() => distinctValues(movements, 'brand'), [movements])
   const histFilteredCount = useMemo(() => {
     const needle = histQuery.trim().toLowerCase()
@@ -4376,13 +3716,6 @@ function ScanPage() {
             dark={dark}
             onToggleDark={() => setDark(d => !d)}
             onReset={screen === 'wizard' ? () => resetAll() : null}
-            // Seulement depuis l'assistant : « Mes sessions » est l'écran d'où l'on vient,
-            // et les autres onglets sont à un clic dans la navigation.
-            //
-            // goToSessions et non setScreen : il arrête la caméra — la carte de capture est
-            // démontée, sa piste resterait ouverte, diode allumée — et relit l'avancement,
-            // sinon la carte de la session afficherait un compteur d'avant la dernière
-            // monture enregistrée.
             onBack={screen === 'wizard' ? () => goToSessions() : null}
             historique={screen === 'historique' ? {
               query: histQuery,
@@ -4405,14 +3738,12 @@ function ScanPage() {
                 window.alert('La session est pleine — ouvrez une autre session.')
                 return
               }
-              // Le bouton lot ne doit jamais laisser le flux de l'enregistrement individuel
-              // actif derrière la fenêtre : certains mobiles refusent alors le second flux.
               stopCamera()
               setShowMonturesManager(true)
             }}
           />
 
-          <main className="flex-1 px-4 md:px-6 py-4 md:py-6 pb-24 md:pb-8 overflow-auto">
+          <main className="flex-1 px-2 sm:px-4 md:px-6 py-2 sm:py-4 md:py-6 pb-20 sm:pb-24 md:pb-8 overflow-auto">
           {screen === 'loading' && null}
 
           {screen === 'activation' && (
@@ -4451,8 +3782,6 @@ function ScanPage() {
             <ListesScreen
               lists={lists}
               loading={loadingLists}
-              // Le serveur ne renvoie que les listes de ce magasin : rien n'est écarté
-              // ici. La reprise des réceptions, elle, vit désormais dans « Mes sessions ».
               hidden={0}
               stationId={stationIdOf(user)}
               onReload={() => { void loadLists(); void loadCommands() }}
@@ -4463,8 +3792,6 @@ function ScanPage() {
 
           {screen === 'wizard' && (
             <div className="mx-auto max-w-4xl">
-              {/* Le <video> vit dans cette carte : la démonter entre les deux photos
-                  couperait le flux, d'où une seule vue de capture réutilisée. */}
               <div className={step === 1 ? '' : 'hidden'}>
                 <CaptureCard
                   target={captureTarget}
@@ -4488,13 +3815,13 @@ function ScanPage() {
                     pill={<Pill tone={analyzing ? 'blue' : 'slate'}>{analyzing ? 'Analyse IA en cours…' : 'Vérifiez les champs signalés'}</Pill>}
                   />
 
-                  <div className="grid gap-4 p-4 lg:grid-cols-[260px_1fr]">
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+                  <div className="grid gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[260px_1fr]">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-1">
                       <PhotoBox url={photoMonture} label="Monture" />
                       <PhotoBox url={photoBranche} label="Branche" />
                     </div>
 
-                    <div className="space-y-2.5">
+                    <div className="space-y-2 sm:space-y-2.5">
                       <Field
                         icon={ic.tag()} label="Référence" source={sources.reference}
                         collapsed={collapsed.reference} summary={form.reference} invalid={invalid.reference}
@@ -4511,8 +3838,6 @@ function ScanPage() {
                         collapsed={collapsed.marque} summary={form.marque} invalid={invalid.marque}
                         onExpand={() => setCollapsed(p => ({ ...p, marque: false }))}
                       >
-                        {/* Suggestions : OPAL (marque maison) puis les marques déjà
-                            enregistrées par ce compte. Le champ reste libre en saisie. */}
                         <input
                           type="text" list="marquesList" value={form.marque} placeholder="Ray-Ban" className={INPUT}
                           onChange={e => setField('marque', e.target.value)}
@@ -4539,12 +3864,7 @@ function ScanPage() {
                         collapsed={collapsed.forme} summary={form.forme} invalid={invalid.forme}
                         onExpand={() => setCollapsed(p => ({ ...p, forme: false }))}
                       >
-                        {/* Grille fluide plutôt que des paliers fixes (`sm:`/`lg:` seuls
-                          sautaient de 3 à 4 colonnes à 640px, une largeur qu'aucun téléphone
-                          en portrait n'atteint) : `repeat(auto-fit, minmax(...))` calcule le
-                          nombre de colonnes à partir de la largeur réelle du conteneur, quelle
-                          que soit celle du téléphone. */}
-                      <div className="grid grid-cols-[repeat(auto-fit,minmax(80px,1fr))] gap-2">
+                        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-[repeat(auto-fit,minmax(80px,1fr))] sm:gap-2">
                           {FORMES.map(forme => {
                             const selected = form.forme === forme
                             return (
@@ -4552,17 +3872,17 @@ function ScanPage() {
                                 key={forme}
                                 type="button"
                                 onClick={() => setField('forme', forme)}
-                                className={`flex flex-col items-center gap-1 rounded-xl border p-2 text-[11px] font-semibold transition-all ${selected
+                                className={`flex flex-col items-center gap-0.5 rounded-xl border p-1.5 text-[10px] font-semibold transition-all sm:gap-1 sm:p-2 sm:text-[11px] ${selected
                                   ? 'border-[#2563eb] bg-[#2563eb]/10 text-[#2563eb]'
                                   : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'}`}
                               >
-                                <ShapeIcon name={forme} />
+                                <ShapeIcon name={forme} className="w-8 h-4 sm:w-10 sm:h-5" />
                                 <span className="text-center leading-tight">{forme === 'Oeil de chat' ? 'Œil de chat' : forme}</span>
                               </button>
                             )
                           })}
                         </div>
-                        <p className="mt-2 text-[11px] text-slate-400">
+                        <p className="mt-1 text-[9px] text-slate-400 sm:mt-2 sm:text-[11px]">
                           Choisissez la forme réelle de la monture : ça aide l'IA à mieux la reconnaître.
                         </p>
                       </Field>
@@ -4572,9 +3892,7 @@ function ScanPage() {
                         collapsed={collapsed.couleur} summary={form.couleur} invalid={invalid.couleur}
                         onExpand={() => setCollapsed(p => ({ ...p, couleur: false }))}
                       >
-                        {/* Même grille fluide que « Forme » : le nombre de colonnes suit la
-                          largeur réelle du téléphone au lieu d'un saut fixe à 640px. */}
-                      <div className="grid grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-2">
+                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-[repeat(auto-fit,minmax(100px,1fr))] sm:gap-2">
                           {COULEURS.map(({ value, swatch }) => {
                             const selected = form.couleur === value
                             return (
@@ -4582,20 +3900,20 @@ function ScanPage() {
                                 key={value}
                                 type="button"
                                 onClick={() => setField('couleur', value)}
-                                className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition-all ${selected
+                                className={`flex items-center gap-1 rounded-xl border px-1.5 py-1 text-[10px] font-semibold transition-all sm:gap-1.5 sm:px-2 sm:py-1.5 sm:text-[11px] ${selected
                                   ? 'border-[#2563eb] bg-[#2563eb]/10 text-[#2563eb]'
                                   : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'}`}
                               >
                                 <span
-                                  className="h-4 w-4 flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-600"
+                                  className="h-3 w-3 flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-600 sm:h-4 sm:w-4"
                                   style={{ background: swatch }}
                                 />
-                                <span className="truncate">{value}</span>
+                                <span className="truncate text-[9px] sm:text-[11px]">{value}</span>
                               </button>
                             )
                           })}
                         </div>
-                        <p className="mt-2 text-[11px] text-slate-400">
+                        <p className="mt-1 text-[9px] text-slate-400 sm:mt-2 sm:text-[11px]">
                           Choisissez la couleur réelle de la monture : ça aide l'IA à mieux la reconnaître.
                         </p>
                       </Field>
@@ -4611,7 +3929,6 @@ function ScanPage() {
                         </select>
                       </Field>
 
-                      {/* La gamme n'est jamais détectée : toujours ouverte. */}
                       <Field icon={ic.banknote()} label="Gamme" invalid={invalid.gamme || invalid.prixCustom}>
                         <select value={form.gamme} className={INPUT} onChange={e => setField('gamme', e.target.value)}>
                           <option value="">Sélectionner une gamme</option>
@@ -4630,9 +3947,9 @@ function ScanPage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700">
-                    <Btn onClick={() => { setStep(1); void startCamera() }}>{ic.arrowLeft()} Retour</Btn>
-                    <Btn variant="primary" className="ml-auto" onClick={() => void confirmVerification()} disabled={confirming}>
+                  <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-3 py-2.5 dark:border-slate-700 sm:gap-2 sm:px-4 sm:py-3">
+                    <Btn onClick={() => { setStep(1); void startCamera() }} className="text-xs sm:text-sm">{ic.arrowLeft()} Retour</Btn>
+                    <Btn variant="primary" className="ml-auto text-xs sm:text-sm" onClick={() => void confirmVerification()} disabled={confirming}>
                       {ic.check()} {confirming ? "Recherche de l'emplacement…" : 'Confirmer →'}
                     </Btn>
                   </div>
@@ -4649,62 +3966,53 @@ function ScanPage() {
                     </Pill>}
                   />
 
-                  <div className="p-4">
-                    <div className="mx-auto flex max-w-sm flex-col items-center rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700">
-                      {/* Rien à dessiner sans numéro : un code-barres vide se scannerait
-                          quand même, et rendrait une chaîne vide. */}
+                  <div className="p-3 sm:p-4">
+                    <div className="mx-auto flex max-w-sm flex-col items-center rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 sm:p-4">
                       {finalData.id
                         ? <>
                             <BarcodePreview value={finalData.id} />
-                            <div className="mt-1 font-mono text-sm font-bold tabular-nums text-slate-900">{finalData.id}</div>
+                            <div className="mt-0.5 font-mono text-xs font-bold tabular-nums text-slate-900 sm:mt-1 sm:text-sm">{finalData.id}</div>
                           </>
-                        : <div className="py-4 text-center text-xs text-slate-400">Numéro attribué à l'enregistrement</div>}
-                      <span className="mt-1 text-[11px] text-slate-400">Aperçu de l'étiquette</span>
+                        : <div className="py-3 text-center text-[10px] text-slate-400 sm:py-4 sm:text-xs">Numéro attribué à l'enregistrement</div>}
+                      <span className="mt-0.5 text-[9px] text-slate-400 sm:mt-1 sm:text-[11px]">Aperçu de l'étiquette</span>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-3">
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fit,minmax(110px,1fr))] sm:gap-3 sm:mt-4">
                       {[
                         ['Marque', finalData.marque || '—'],
                         ['Référence', finalData.reference || '—'],
-                        // « Code-barres » et non « ID » : c'est bien le numéro imprimé sur
-                        // l'étiquette, celui que la douchette lira en rayon.
                         ['Code-barres', finalData.id || 'À l\'enregistrement'],
                         ['Emplacement', finalData.emplacement],
                         ['Quantité', String(finalData.quantite)],
                         ['Gamme', fmtFCFA(finalData.prix)],
                       ].map(([label, value]) => (
-                        <div key={label} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/50">
-                          <div className="text-[11px] font-semibold text-slate-400">{label}</div>
-                          <div className="mt-0.5 truncate text-sm font-bold text-slate-900 dark:text-white">{value}</div>
+                        <div key={label} className="rounded-xl bg-slate-50 p-2 dark:bg-slate-900/50 sm:p-3">
+                          <div className="text-[9px] font-semibold text-slate-400 sm:text-[11px]">{label}</div>
+                          <div className="mt-0.5 truncate text-xs font-bold text-slate-900 dark:text-white sm:mt-0.5 sm:text-sm">{value}</div>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700">
+                  <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-3 py-2.5 dark:border-slate-700 sm:gap-2 sm:px-4 sm:py-3">
                     {!saved ? (
                       <>
-                        <Btn onClick={() => setStep(2)}>{ic.arrowLeft()} Retour</Btn>
-                        <Btn variant="success" className="ml-auto" onClick={() => void saveRecord()} disabled={saving}>
+                        <Btn onClick={() => setStep(2)} className="text-xs sm:text-sm">{ic.arrowLeft()} Retour</Btn>
+                        <Btn variant="success" className="ml-auto text-xs sm:text-sm" onClick={() => void saveRecord()} disabled={saving}>
                           {ic.save()} {saving ? 'Enregistrement en cours…' : 'Enregistrer'}
                         </Btn>
                       </>
                     ) : (
                       <>
-                        <Btn onClick={() => void printMontureLabel(finalData)}>{ic.printer()} Réimprimer l'étiquette</Btn>
+                        <Btn onClick={() => void printMontureLabel(finalData)} className="text-xs sm:text-sm">{ic.printer()} Réimprimer</Btn>
 
-                        {/* Une réception se quitte en cours de route : le magasinier peut
-                            reprendre plus tard, ou passer à une autre commande. */}
                         {!sessionFull && (
-                          <Btn onClick={goToSessions}>{ic.calendar()} Mes sessions</Btn>
+                          <Btn onClick={goToSessions} className="text-xs sm:text-sm">{ic.calendar()} Mes sessions</Btn>
                         )}
 
-                        {/* `resetAll` sait déjà distinguer les deux cas : relancer la
-                            caméra tant qu'il reste du quota, sortir vers « Mes sessions »
-                            quand il est épuisé. Seul le libellé change. */}
-                        <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+                        <div className="flex w-full items-center gap-1.5 sm:ml-auto sm:w-auto sm:gap-2">
                           <Btn
-                            className="w-full sm:w-auto"
+                            className="w-full text-xs sm:w-auto sm:text-sm"
                             variant={sessionFull ? 'success' : 'primary'}
                             onClick={() => {
                               if (sessionFull) {
@@ -4717,10 +4025,10 @@ function ScanPage() {
                           >
                             {sessionFull
                               ? <>
-                                  {ic.check()} Réception terminée → Mes sessions
+                                  {ic.check()} Terminée → Sessions
                                   {autoRetour !== null && <span className="tabular-nums"> ({autoRetour} s)</span>}
                                 </>
-                              : <>{ic.plus()} Enregistrer une autre monture</>}
+                              : <>{ic.plus()} Autre monture</>}
                           </Btn>
                         </div>
                       </>
@@ -4733,9 +4041,8 @@ function ScanPage() {
           </main>
         </div>
 
-        {/* Remonté au-dessus de la barre mobile, qui le masquerait sinon sur téléphone. */}
         {toast && (
-          <div className="fixed bottom-20 md:bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl bg-[#16a34a] px-4 py-3 text-sm font-semibold text-white shadow-lg">
+          <div className="fixed bottom-16 sm:bottom-20 md:bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1.5 rounded-xl bg-[#16a34a] px-3 py-2 text-[10px] font-semibold text-white shadow-lg sm:gap-2 sm:px-4 sm:py-3 sm:text-sm">
             {ic.checkCircle()} {toast}
           </div>
         )}
