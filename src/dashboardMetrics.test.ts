@@ -36,17 +36,36 @@ describe('summarizeStockSummary', () => {
 })
 
 describe('summarizeReceptionSessionProgress', () => {
-  it('uses the tracked reception sessions as dashboard stock source', () => {
+  it('uses every reception session as dashboard stock source by default', () => {
     const progress = summarizeReceptionSessionProgress([
+      { id: 17, target_count: 499, registered_count: 499 },
+      { id: 16, target_count: 259, registered_count: 259 },
       { id: 15, target_count: 715, registered_count: 313 },
       { id: 14, target_count: 936, registered_count: 811 },
       { id: 6, target_count: 47, registered_count: 47 },
-      { id: 1, target_count: 1135, registered_count: 1135 },
+      { id: 1, target_count: 1141, registered_count: 1141 },
       { id: 99, target_count: 748, registered_count: 748 },
     ])
 
-    expect(progress.initialStock).toBe(2833)
-    expect(progress.registeredStock).toBe(2306)
+    expect(progress.initialStock).toBe(4345)
+    expect(progress.registeredStock).toBe(3818)
+    expect(progress.remainingStock).toBe(527)
+    expect(progress.matchedSessions).toBe(7)
+    expect(progress.hasData).toBe(true)
+  })
+
+  it('can still be restricted to explicit session ids when needed', () => {
+    const progress = summarizeReceptionSessionProgress([
+      { id: 17, target_count: 499, registered_count: 499 },
+      { id: 16, target_count: 259, registered_count: 259 },
+      { id: 15, target_count: 715, registered_count: 313 },
+      { id: 14, target_count: 936, registered_count: 811 },
+      { id: 6, target_count: 47, registered_count: 47 },
+      { id: 1, target_count: 1141, registered_count: 1141 },
+    ], [1, 6, 14, 15])
+
+    expect(progress.initialStock).toBe(2839)
+    expect(progress.registeredStock).toBe(2312)
     expect(progress.remainingStock).toBe(527)
     expect(progress.matchedSessions).toBe(4)
     expect(progress.hasData).toBe(true)

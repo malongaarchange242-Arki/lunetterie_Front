@@ -456,7 +456,7 @@ const EMPLOYEES: Array<{ id: number; name: string; role: string; station: string
 
 interface ReceptionSessionResult {
   id?: number
-  orderId: number
+  orderId?: number
   code: string
   targetCount: number
   registeredCount?: number
@@ -471,7 +471,21 @@ export function isSessionReceived(linkedCommand?: { activatedAt?: string | null 
   return Boolean(linkedCommand?.activatedAt) || receivedCount > 0
 }
 
-const RECEPTION_SESSIONS: Array<{ id: string; orderId?: number; date: string; time: string; frames: number; status: string; operator: string; note?: string; quantity?: number }> = []
+type ReceptionSessionItem = {
+  id: string
+  orderId?: number
+  commandId?: number
+  code?: string
+  date: string
+  time: string
+  frames: number
+  status: string
+  operator: string
+  note?: string
+  quantity?: number
+}
+
+const RECEPTION_SESSIONS: ReceptionSessionItem[] = []
 
 const SUPPLIER_ORDERS_INIT: Array<{ id: string; supplier: string; quantity: number; sent: number; date: string; note: string; status: 'partial' | 'complete' | 'pending' }> = []
 
@@ -1563,6 +1577,98 @@ function formatReceptionNote(note: string | undefined, operator: string) {
   return deduped.join(' | ')
 }
 
+function receptionSessionDateParts(...sources: Array<string | null | undefined>) {
+  const source = sources.find(value => String(value || '').trim()) || new Date().toISOString()
+  const parsed = new Date(source)
+  const date = Number.isNaN(parsed.getTime()) && /^\d{4}-\d{2}-\d{2}/.test(source)
+    ? new Date(`${source.slice(0, 10)}T12:00:00`)
+    : parsed
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date
+  return {
+    date: safeDate.toLocaleDateString('fr-FR'),
+    time: safeDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+  }
+}
+
+function normalizeReceptionCommand(command: any): ReceptionSessionResult | null {
+  const code = String(command?.code || '').trim()
+  if (!code) return null
+  const orderId = Number(command?.supplier_order_id || 0) || undefined
+  return {
+    id: Number(command?.id || 0) || undefined,
+    orderId,
+    code,
+    targetCount: Number(command?.target_count || 0),
+    registeredCount: Number(command?.registered_count || 0),
+    status: String(command?.status || ''),
+    activatedAt: command?.activated_at || null,
+  }
+}
+
+function receptionCommandNote(command: any) {
+  const gamme = String(command?.gamme || '').trim()
+  return gamme ? `Gamme: ${GAMME_LABELS[gamme as SupplierOrderGamme] || gamme}` : ''
+}
+
+function buildReceptionSessions(orders: any[] = [], commands: any[] = []): ReceptionSessionItem[] {
+  const sessionsByOrderId = new Map<number, ReceptionSessionItem>()
+  const sessions: ReceptionSessionItem[] = orders.map((order: any) => {
+    const { date, time } = receptionSessionDateParts(order?.created_at, order?.updated_at, order?.order_date)
+    const orderId = Number(order?.id || 0) || undefined
+    const session: ReceptionSessionItem = {
+      id: orderId ? `EXP-${orderId}` : `EXP-${order?.id || sessionsByOrderId.size + 1}`,
+      orderId,
+      date,
+      time,
+      frames: Number(order?.quantity || 0),
+      status: 'Enregistré',
+      operator: order?.supplier || '—',
+      note: order?.note || '',
+      quantity: Number(order?.quantity || 0),
+    }
+    if (orderId) sessionsByOrderId.set(orderId, session)
+    return session
+  })
+
+  commands.forEach((command: any) => {
+    const normalized = normalizeReceptionCommand(command)
+    if (!normalized) return
+
+    const existing = normalized.orderId ? sessionsByOrderId.get(normalized.orderId) : undefined
+    if (existing) {
+      existing.commandId = normalized.id
+      existing.code = normalized.code
+      if (!existing.note) existing.note = receptionCommandNote(command)
+      return
+    }
+
+    const { date, time } = receptionSessionDateParts(command?.created_at, command?.updated_at, command?.activated_at)
+    sessions.push({
+      id: normalized.orderId ? `EXP-${normalized.orderId}` : normalized.code,
+      orderId: normalized.orderId,
+      commandId: normalized.id,
+      code: normalized.code,
+      date,
+      time,
+      frames: normalized.targetCount,
+      status: 'Enregistré',
+      operator: '—',
+      note: receptionCommandNote(command),
+      quantity: normalized.targetCount,
+    })
+  })
+
+  return sessions
+}
+
+function findReceptionCommandForSession(commands: ReceptionSessionResult[], session: ReceptionSessionItem) {
+  return commands.find(cmd =>
+    (session.commandId && cmd.id === session.commandId)
+    || (session.orderId && cmd.orderId === session.orderId)
+    || (session.code && cmd.code === session.code)
+  )
+}
+
 function InputField({ label, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   return (
     <div>
@@ -1674,7 +1780,7 @@ function CalendarModal({ year, month, selectedDay, onSelectDay, onClose, onPrevM
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
-function DashboardScreen({ onNavigate, stockSummary, initialStock, cityStockCounts, stationCities }: { onNavigate: (s: NavScreen) => void; stockSummary: any[]; initialStock: number; cityStockCounts: Record<string, CityStats>; stationCities: string[] }) {
+function DashboardScreen({ onNavigate, stockSummary, initialStock, registeredReceptionStock, cityStockCounts, stationCities }: { onNavigate: (s: NavScreen) => void; stockSummary: any[]; initialStock: number; registeredReceptionStock: number; cityStockCounts: Record<string, CityStats>; stationCities: string[] }) {
   const [selectedCity, setSelectedCity] = useState('')
   const cityNames = mergeCityNames(stationCities, Object.keys(cityStockCounts))
   const stats = cityStockCounts[selectedCity]
@@ -1769,7 +1875,7 @@ function DashboardScreen({ onNavigate, stockSummary, initialStock, cityStockCoun
       {(() => {
         const detailTiles = [
           { key: 'stock-initial', label: 'Stock initial', value: initialStock, total: initialStock, of: 'total commandé', color: '#0f766e', screen: { type: 'module', id: 'reception' } as NavScreen },
-          { key: 'stock-general', label: 'Stock général', value: summary.generalUnits, total: summary.totalUnits, of: 'sur stock initial', color: '#2563eb', screen: { type: 'stock-general' } as NavScreen },
+          { key: 'stock-general', label: 'Stock général', value: registeredReceptionStock, total: initialStock, of: 'sur stock initial', color: '#2563eb', screen: { type: 'stock-general' } as NavScreen },
           { key: 'stock-magasin', label: 'Stock magasin', value: selectedCity ? (selectedCityStats?.local ?? 0) : summary.localUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#0891b2', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'stock' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
           { key: 'labo-tuile', label: 'Labo', value: selectedCity ? (selectedCityStats?.labo ?? 0) : summary.laboUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#7c3aed', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'labo' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
           { key: 'reserve', label: 'Réserve', value: selectedCity ? (selectedCityStats?.reserve ?? 0) : summary.reserveUnits, total: selectedCity ? Math.max(selectedCityTotalForMetrics, 1) : summary.totalUnits, of: selectedCity ? `sur ${selectedCityTotalForMetrics.toLocaleString('fr-FR')} monture${selectedCityTotalForMetrics > 1 ? 's' : ''}` : montureDenominator, color: '#059669', screen: targetCity ? { type: 'suivi-detail', pays: targetCity, city: targetCity, section: 'placement' } as NavScreen : { type: 'pays', block: 'suivi' } as NavScreen },
@@ -3579,34 +3685,10 @@ function HistoryView() {
         .then(payload => payload?.data?.commands || [])
         .catch(() => []),
     ]).then(([orders, commands]) => {
-      const nextSessions = orders.map((order: any) => {
-        const timestampSource = order.created_at || order.updated_at || order.order_date || new Date().toISOString()
-        const parsedDate = new Date(timestampSource)
-        const safeDate = Number.isNaN(parsedDate.getTime()) && order.order_date
-          ? new Date(`${String(order.order_date).trim()}T12:00:00`)
-          : parsedDate
-        return {
-          id: `EXP-${order.id}`,
-          orderId: order.id,
-          date: safeDate.toLocaleDateString('fr-FR'),
-          time: safeDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-          frames: Number(order.quantity || 0),
-          status: 'Enregistré',
-          operator: order.supplier || '—',
-          note: order.note || '',
-          quantity: Number(order.quantity || 0),
-        }
-      })
-      const nextCommands: ReceptionSessionResult[] = commands.map((command: any) => ({
-        id: Number(command.id || 0),
-        orderId: Number(command.supplier_order_id || 0),
-        code: String(command.code || ''),
-        targetCount: Number(command.target_count || 0),
-        registeredCount: Number(command.registered_count || 0),
-        status: String(command.status || ''),
-        activatedAt: command.activated_at || null,
-      })).filter((cmd: ReceptionSessionResult) => cmd.orderId > 0 && cmd.code)
-      setReceptionSessions(nextSessions)
+      const nextCommands: ReceptionSessionResult[] = commands
+        .map(normalizeReceptionCommand)
+        .filter(Boolean) as ReceptionSessionResult[]
+      setReceptionSessions(buildReceptionSessions(orders, commands))
       setReceptionSessionCommands(nextCommands)
     }).finally(() => setIsLoadingReceptionSessions(false))
   }, [])
@@ -3867,7 +3949,7 @@ function HistoryView() {
       ) : (
         <div className="flex flex-col gap-4">
           {receptionSessions.map(s => {
-            const linkedCommand = receptionSessionCommands.find(cmd => cmd.orderId === s.orderId)
+            const linkedCommand = findReceptionCommandForSession(receptionSessionCommands, s)
             const receivedCount = linkedCommand ? Number(linkedCommand.registeredCount || 0) : 0
             const totalCount = Number(s.frames || 0)
             const receptionState = getReceptionCardState(linkedCommand, receivedCount, totalCount)
@@ -4107,7 +4189,7 @@ function ReceptionView() {
   const [isLoadingDetailSessionGlasses, setIsLoadingDetailSessionGlasses] = useState(false)
   const [showReceptionSessionCard, setShowReceptionSessionCard] = useState(true)
   const [isCreatingReceptionSession, setIsCreatingReceptionSession] = useState(false)
-  const [isDeletingSessionId, setIsDeletingSessionId] = useState<number | null>(null)
+  const [isDeletingSessionId, setIsDeletingSessionId] = useState<string | null>(null)
   const [isCancelingListId, setIsCancelingListId] = useState<number | null>(null)
   // Une liste annulée est vraiment supprimée côté serveur (DELETE /send-lists/:id) et
   // disparaîtrait donc du prochain chargement — gardée ici pour rester visible (bordure
@@ -4417,7 +4499,7 @@ function ReceptionView() {
     setSendListSent(false)
     setSendListLines([createSendListLine()])
 
-    const linkedCommand = receptionCommands.find(cmd => cmd.orderId === session.orderId)
+    const linkedCommand = findReceptionCommandForSession(receptionCommands, session)
     if (!linkedCommand?.id) return
 
     const token = window.localStorage.getItem('token')
@@ -4688,33 +4770,28 @@ function ReceptionView() {
 
     if (!silent) setIsLoadingSessions(true)
     try {
-      const response = await fetch(`${API_URL}/inventory/expeditions`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!response.ok) throw new Error('expeditions unavailable')
-      const payload = await response.json().catch(() => ({}))
-      const list = payload?.data?.orders || []
-      const nextSessions = list.map((order: any) => {
-        const timestampSource = order.created_at || order.updated_at || order.order_date || new Date().toISOString()
-        const parsedDate = new Date(timestampSource)
-        const safeDate = Number.isNaN(parsedDate.getTime()) && order.order_date
-          ? new Date(`${String(order.order_date).trim()}T12:00:00`)
-          : parsedDate
-        const dateLabel = safeDate.toLocaleDateString('fr-FR')
-        const timeLabel = safeDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-        return {
-          id: `EXP-${order.id}`,
-          orderId: order.id,
-          date: dateLabel,
-          time: timeLabel,
-          frames: Number(order.quantity || 0),
-          status: 'Enregistré',
-          operator: order.supplier || '—',
-          note: order.note || '',
-          quantity: Number(order.quantity || 0),
-        }
-      })
-      setSessions(nextSessions)
+      const headers = { Authorization: `Bearer ${token}` }
+      const [orders, commands] = await Promise.all([
+        fetch(`${API_URL}/inventory/expeditions`, { headers })
+          .then(async response => {
+            if (!response.ok) throw new Error('expeditions unavailable')
+            const payload = await response.json().catch(() => ({}))
+            return payload?.data?.orders || []
+          })
+          .catch(() => []),
+        fetch(`${API_URL}/inventory/reception-commands`, { headers })
+          .then(async response => {
+            if (!response.ok) throw new Error('reception commands unavailable')
+            const payload = await response.json().catch(() => ({}))
+            return payload?.data?.commands || []
+          })
+          .catch(() => []),
+      ])
+      const loadedCommands = commands
+        .map(normalizeReceptionCommand)
+        .filter(Boolean) as ReceptionSessionResult[]
+      setReceptionCommands(loadedCommands)
+      setSessions(buildReceptionSessions(orders, commands))
     } catch {
       setSessions([])
     } finally {
@@ -4722,28 +4799,51 @@ function ReceptionView() {
     }
   }
 
-  async function deleteReceptionSession(orderId?: number) {
-    if (!orderId) return
+  async function deleteReceptionSession(session: ReceptionSessionItem) {
+    const linkedCommand = findReceptionCommandForSession(receptionCommands, session)
+    if (!session.orderId && !linkedCommand?.id) return
     if (!window.confirm('Voulez-vous supprimer cette session de réception ?')) return
 
     const token = window.localStorage.getItem('token')
     if (!token) return
 
-    setIsDeletingSessionId(orderId)
+    const deletingKey = session.id
+    setIsDeletingSessionId(deletingKey)
     try {
-      const response = await fetch(`${API_URL}/inventory/supplier-orders/${encodeURIComponent(String(orderId))}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const headers = { Authorization: `Bearer ${token}` }
+
+      if (linkedCommand?.id) {
+        const response = await fetch(`${API_URL}/inventory/reception-commands/${encodeURIComponent(String(linkedCommand.id))}`, {
+          method: 'DELETE',
+          headers,
+        })
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}))
+          throw new Error(payload?.message || payload?.error || 'delete reception command failed')
+        }
+      }
+
+      if (session.orderId) {
+        const response = await fetch(`${API_URL}/inventory/supplier-orders/${encodeURIComponent(String(session.orderId))}`, {
+          method: 'DELETE',
+          headers,
+        })
+        if (!response.ok && response.status !== 404) throw new Error('delete supplier order failed')
+      }
+
+      setSessions(prev => prev.filter(item => item.id !== session.id))
+      setReceptionCommands(prev => prev.filter(cmd =>
+        linkedCommand?.id ? cmd.id !== linkedCommand.id : cmd.orderId !== session.orderId
+      ))
+      setExpandedId(prev => (prev === session.id ? null : prev))
+      setReceptionSession(prev => {
+        if (!prev) return prev
+        if (linkedCommand?.id && prev.id === linkedCommand.id) return null
+        if (session.orderId && prev.orderId === session.orderId) return null
+        return prev
       })
-      if (!response.ok) throw new Error('delete failed')
-      setSessions(prev => prev.filter(session => session.orderId !== orderId))
-      setReceptionCommands(prev => prev.filter(cmd => cmd.orderId !== orderId))
-      setExpandedId(prev => (prev === `EXP-${orderId}` ? null : prev))
-      setReceptionSession(prev => (prev?.orderId === orderId ? null : prev))
-    } catch {
-      window.alert('Impossible de supprimer cette session pour le moment.')
+    } catch (error: any) {
+      window.alert(error?.message || 'Impossible de supprimer cette session pour le moment.')
     } finally {
       setIsDeletingSessionId(null)
     }
@@ -4829,15 +4929,9 @@ function ReceptionView() {
       if (!response.ok) throw new Error('reception commands unavailable')
       const payload = await response.json().catch(() => ({}))
       const commands = payload?.data?.commands || []
-      const loaded: ReceptionSessionResult[] = commands.map((command: any) => ({
-        id: Number(command.id || 0),
-        orderId: Number(command.supplier_order_id || 0),
-        code: String(command.code || ''),
-        targetCount: Number(command.target_count || 0),
-        registeredCount: Number(command.registered_count || 0),
-        status: String(command.status || ''),
-        activatedAt: command.activated_at || null,
-      })).filter((cmd: ReceptionSessionResult) => cmd.orderId > 0 && cmd.code)
+      const loaded: ReceptionSessionResult[] = commands
+        .map(normalizeReceptionCommand)
+        .filter(Boolean) as ReceptionSessionResult[]
       setReceptionCommands(loaded)
       return loaded
     } catch {
@@ -6400,10 +6494,10 @@ function ReceptionView() {
     setDetailGenreFilter('all')
     setDetailGammeFilter('all')
 
-    let linkedCommand = receptionCommands.find(cmd => cmd.orderId === session.orderId)
+    let linkedCommand = findReceptionCommandForSession(receptionCommands, session)
     if (!linkedCommand) {
       const loaded = await loadReceptionCommands()
-      linkedCommand = loaded.find(cmd => cmd.orderId === session.orderId)
+      linkedCommand = findReceptionCommandForSession(loaded, session)
     }
 
     if (linkedCommand?.id) {
@@ -7103,7 +7197,7 @@ function ReceptionView() {
         </div>
       ) : sessions.map(s => {
         const isExpanded = expandedId === s.id
-        const linkedCommand = receptionCommands.find(cmd => cmd.orderId === s.orderId)
+        const linkedCommand = findReceptionCommandForSession(receptionCommands, s)
         const receivedCount = linkedCommand ? Number(linkedCommand.registeredCount || 0) : 0
         // "Reçu" se coche au scan du code-barres de session par le magasinier.
         // Le repli sur receivedCount couvre les sessions entamées avant que le
@@ -7172,7 +7266,7 @@ function ReceptionView() {
                   </div>
                 )}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {s.orderId !== undefined && receptionCommands.some(cmd => cmd.orderId === s.orderId) && (
+                  {s.orderId !== undefined && findReceptionCommandForSession(receptionCommands, s) && (
                     <button type="button" onClick={() => void viewReceptionBarcode(s.orderId)} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
                       Revoir le code-barres
                     </button>
@@ -7203,15 +7297,15 @@ function ReceptionView() {
                   <p className="text-3xl font-black text-blue-600 dark:text-blue-400 tabular-nums">{s.frames}</p>
                   <p className="text-xs text-slate-400">quantité</p>
                 </div>
-                {s.orderId !== undefined && (
+                {(s.orderId !== undefined || linkedCommand?.id) && (
                   <button
                     type="button"
-                    onClick={() => void deleteReceptionSession(s.orderId)}
-                    disabled={isDeletingSessionId === s.orderId}
+                    onClick={() => void deleteReceptionSession(s)}
+                    disabled={isDeletingSessionId === s.id}
                     className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/40"
                   >
                     {ic.trash('w-4 h-4')}
-                    {isDeletingSessionId === s.orderId ? 'Suppression...' : 'Supprimer'}
+                    {isDeletingSessionId === s.id ? 'Suppression...' : 'Supprimer'}
                   </button>
                 )}
               </div>
@@ -9140,6 +9234,7 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false)
   const [stockSummary, setStockSummary] = useState<any[]>([])
   const [initialStock, setInitialStock] = useState(0)
+  const [registeredReceptionStock, setRegisteredReceptionStock] = useState(0)
   const [cityStockCounts, setCityStockCounts] = useState<Record<string, CityStats>>({})
   const [stationCities, setStationCities] = useState<string[]>([])
   const [framesByCity, setFramesByCity] = useState<Record<string, FrameRecord[]>>({})
@@ -9207,18 +9302,23 @@ export default function App() {
         const receptionProgress = receptionCommandsResult.status === 'fulfilled'
           ? summarizeReceptionSessionProgress(receptionCommandsResult.value)
           : null
-        const dashboardStockSummary = receptionProgress?.hasData
-          ? stockSummaryRowsFromReceptionProgress(receptionProgress)
-          : stockResult.status === 'fulfilled'
-            ? stockResult.value
+        const realStockSummary = stockResult.status === 'fulfilled' ? stockResult.value : []
+        const dashboardStockSummary = realStockSummary.length > 0
+          ? realStockSummary
+          : receptionProgress?.hasData
+            ? stockSummaryRowsFromReceptionProgress(receptionProgress)
             : []
         const summary = summarizeStockSummary(dashboardStockSummary)
+        const orderedStock = supplierOrdersResult.status === 'fulfilled'
+          ? supplierOrdersResult.value.reduce((sum: number, order: any) => sum + Math.max(0, Number(order.quantity) || 0), 0)
+          : 0
 
-        setInitialStock(receptionProgress?.hasData
-          ? receptionProgress.initialStock
-          : supplierOrdersResult.status === 'fulfilled'
-            ? supplierOrdersResult.value.reduce((sum: number, order: any) => sum + Math.max(0, Number(order.quantity) || 0), 0)
-            : 0)
+        setInitialStock(Math.max(
+          orderedStock,
+          receptionProgress?.initialStock || 0,
+          summary.totalUnits,
+        ))
+        setRegisteredReceptionStock(receptionProgress?.registeredStock || summary.generalUnits)
 
         if (dashboardStockSummary.length > 0) {
           setStockSummary(dashboardStockSummary)
@@ -9294,6 +9394,7 @@ export default function App() {
       .catch(() => {
         setStockSummary([])
         setInitialStock(0)
+        setRegisteredReceptionStock(0)
         setCityStockCounts({})
         setStationCities([])
         setRevenueByCity({})
@@ -9411,7 +9512,7 @@ export default function App() {
 
   function renderScreen() {
     switch (current.type) {
-      case 'dashboard': return <DashboardScreen onNavigate={navigate} stockSummary={stockSummary} initialStock={initialStock} cityStockCounts={cityStockCounts} stationCities={stationCities} />
+      case 'dashboard': return <DashboardScreen onNavigate={navigate} stockSummary={stockSummary} initialStock={initialStock} registeredReceptionStock={registeredReceptionStock} cityStockCounts={cityStockCounts} stationCities={stationCities} />
       case 'pays': return <PaysScreen block={current.block} onNavigate={navigate} cityStockCounts={cityStockCounts} stationCities={stationCities} stockSummary={stockSummary} />
       case 'city': return <CityDetailScreen block={current.block} pays={current.pays} city={current.city} onNavigate={navigate} cityStockCounts={cityStockCounts} framesByCity={framesByCity} revenueByCity={revenueByCity} />
       case 'suivi-detail': return <SuiviDetailScreen pays={current.pays} city={current.city} section={current.section} cityStockCounts={cityStockCounts} framesByCity={framesByCity} onNavigate={navigate} />

@@ -38,14 +38,14 @@ export interface ReceptionSessionProgress {
   hasData: boolean
 }
 
-export const DASHBOARD_RECEPTION_SESSION_IDS = [1, 6, 14, 15] as const
-
 export function summarizeReceptionSessionProgress(
   commands: ReceptionCommandRow[] = [],
-  sessionIds: readonly number[] = DASHBOARD_RECEPTION_SESSION_IDS
+  sessionIds?: readonly number[]
 ): ReceptionSessionProgress {
-  const allowedIds = new Set(sessionIds.map(id => Number(id)))
-  const tracked = commands.filter(command => allowedIds.has(Number(command.id)))
+  const allowedIds = sessionIds ? new Set(sessionIds.map(id => Number(id))) : null
+  const tracked = allowedIds
+    ? commands.filter(command => allowedIds.has(Number(command.id)))
+    : commands
 
   const initialStock = tracked.reduce((sum, command) => sum + Math.max(0, Number(command.target_count) || 0), 0)
   const registeredStock = tracked.reduce((sum, command) => sum + Math.max(0, Number(command.registered_count) || 0), 0)
