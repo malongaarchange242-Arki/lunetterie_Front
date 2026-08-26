@@ -323,6 +323,8 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
   const [batchTarget, setBatchTarget] = useState<number | null>(null)
   const [duplicatingMonture, setDuplicatingMonture] = useState<any | null>(null)
   const [duplicateQty, setDuplicateQty] = useState(2)
+  const [editingMonture, setEditingMonture] = useState<any | null>(null)
+  const [editForm, setEditForm] = useState<VerifyForm>(EMPTY_FORM)
 
   const quotaCap = typeof sessionRemaining === 'number' ? Math.max(0, sessionRemaining) : Infinity
   const maxItems = (typeof batchTarget === 'number' && batchTarget > 0) ? Math.min(batchTarget, quotaCap) : quotaCap
@@ -584,6 +586,55 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
     window.alert(`${count} copie${count > 1 ? 's' : ''} ajoutée${count > 1 ? 's' : ''}.`)
   }
 
+  function openEditMonture(monture: any) {
+    setEditingMonture(monture)
+    setEditForm({
+      reference: String(monture.reference || ''),
+      marque: String(monture.marque || ''),
+      genre: String(monture.genre || sessionGenre || ''),
+      forme: String(monture.forme || ''),
+      couleur: String(monture.couleur || ''),
+      matiere: String(monture.matiere || ''),
+      gamme: String(monture.gamme || sessionGamme || ''),
+      prixCustom: String(monture.prixCustom || ''),
+    })
+  }
+
+  function setEditField(key: keyof VerifyForm, value: string) {
+    setEditForm(previous => ({ ...previous, [key]: value }))
+  }
+
+  function saveEditedMonture() {
+    if (!editingMonture) return
+
+    const required: (keyof VerifyForm)[] = ['reference', 'marque', 'genre', 'forme', 'couleur', 'gamme']
+    const missing = required.some(key => !String(editForm[key]).trim())
+    const price = Number(editForm.prixCustom)
+    const invalidPrice = editForm.gamme === 'luxe' && (!editForm.prixCustom.trim() || !Number.isFinite(price) || price <= 0)
+    if (missing || invalidPrice) {
+      window.alert('Veuillez remplir tous les champs obligatoires.')
+      return
+    }
+
+    setMontures(previous => previous.map(monture => (
+      monture.id === editingMonture.id
+        ? {
+            ...monture,
+            reference: editForm.reference.trim(),
+            marque: editForm.marque.trim(),
+            genre: editForm.genre,
+            forme: editForm.forme,
+            couleur: editForm.couleur,
+            matiere: editForm.matiere,
+            gamme: editForm.gamme,
+            prixCustom: editForm.prixCustom,
+          }
+        : monture
+    )))
+    setEditingMonture(null)
+    setEditForm(EMPTY_FORM)
+  }
+
   function removeMonture(id: string | number) {
     setMontures(previous => previous.filter(monture => monture.id !== id))
   }
@@ -732,7 +783,19 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
             </div>
             <ul className="divide-y divide-slate-100 dark:divide-slate-700">
               {montures.map((monture, index) => (
-                <li key={monture.id} className="flex items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-2.5">
+                <li
+                  key={monture.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openEditMonture(monture)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      openEditMonture(monture)
+                    }
+                  }}
+                  className="flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none dark:hover:bg-slate-900/50 dark:focus:bg-slate-900/50 sm:gap-3 sm:px-4 sm:py-2.5"
+                >
                   <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-900 sm:h-12 sm:w-12">
                     {monture.photoFace
                       ? <img src={monture.photoFace} alt="" className="h-full w-full object-cover" />
@@ -745,16 +808,24 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
                   <button
                     type="button"
                     title="Dupliquer cette monture"
-                    onClick={() => { setDuplicatingMonture(monture); setDuplicateQty(2) }}
+                    onClick={event => { event.stopPropagation(); setDuplicatingMonture(monture); setDuplicateQty(2) }}
                     className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-[#2563eb]/30 px-2 py-1.5 text-[10px] font-bold text-[#2563eb] hover:bg-[#2563eb]/10 sm:px-3 sm:text-xs"
                   >
                     {ic.plus('w-3 h-3')} Dupliquer
                   </button>
                   <button
                     type="button"
+                    title="Modifier cette monture"
+                    onClick={event => { event.stopPropagation(); openEditMonture(monture) }}
+                    className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 sm:px-3 sm:text-xs"
+                  >
+                    {ic.pencil('w-3 h-3')} Modifier
+                  </button>
+                  <button
+                    type="button"
                     title="Retirer cette monture du lot"
                     aria-label={`Retirer ${monture.reference || 'la monture'}`}
-                    onClick={() => removeMonture(monture.id)}
+                    onClick={event => { event.stopPropagation(); removeMonture(monture.id) }}
                     className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
                   >
                     ×
@@ -974,6 +1045,141 @@ function MonturesManager({ onClose, sessionRemaining, sessionCode, sessionGenre,
             ) : (
               <span className="text-[10px] text-slate-400 sm:text-xs">Ne fermez pas cette fenêtre…</span>
             )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {editingMonture && (
+      <div className="fixed inset-0 z-[10060] flex items-center justify-center bg-black/50 p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="edit-monture-title">
+        <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-800" style={{ maxHeight: '92vh' }}>
+          <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700 sm:px-5 sm:py-4">
+            <div className="min-w-0">
+              <h3 id="edit-monture-title" className="text-base font-bold text-slate-900 dark:text-white">Modifier la monture</h3>
+              <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+                {editingMonture.reference || 'Monture'} · {editingMonture.marque || 'Marque inconnue'}
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Fermer"
+              onClick={() => { setEditingMonture(null); setEditForm(EMPTY_FORM) }}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="grid gap-3 overflow-y-auto p-4 sm:grid-cols-[220px_1fr] sm:gap-4 sm:p-5">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-1 sm:gap-3">
+              <PhotoBox url={editingMonture.photoFace || null} label="Monture" />
+              <PhotoBox url={editingMonture.photoBranche || null} label="Branche" />
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="space-y-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Référence
+                  <input type="text" value={editForm.reference} placeholder="RB2180-001" className={INPUT} onChange={event => setEditField('reference', event.target.value)} />
+                </label>
+                <label className="space-y-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Marque
+                  <input type="text" list="editMarquesList" value={editForm.marque} placeholder="Ray-Ban" className={INPUT} onChange={event => setEditField('marque', event.target.value)} />
+                  <datalist id="editMarquesList">
+                    <option value="OPAL" />
+                    {(knownBrands || []).filter(brand => brand !== 'OPAL').map(brand => <option key={brand} value={brand} />)}
+                  </datalist>
+                </label>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="space-y-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Genre
+                  <select value={editForm.genre} className={INPUT} onChange={event => setEditField('genre', event.target.value)}>
+                    <option value="">Sélectionner un genre</option>
+                    {GENRES.map(genre => <option key={genre} value={genre}>{genre}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Matière
+                  <select value={editForm.matiere} className={INPUT} onChange={event => setEditField('matiere', event.target.value)}>
+                    <option value="">Sélectionner une matière</option>
+                    {MATIERES.map(matiere => <option key={matiere} value={matiere}>{matiere}</option>)}
+                  </select>
+                </label>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Forme</p>
+                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-[repeat(auto-fit,minmax(90px,1fr))] sm:gap-2">
+                  {FORMES.map(forme => {
+                    const selected = editForm.forme === forme
+                    return (
+                      <button
+                        key={forme}
+                        type="button"
+                        onClick={() => setEditField('forme', forme)}
+                        className={`flex flex-col items-center gap-0.5 rounded-xl border p-1.5 text-[10px] font-semibold transition-all sm:gap-1 sm:p-2 sm:text-[11px] ${selected
+                          ? 'border-[#2563eb] bg-[#2563eb]/10 text-[#2563eb]'
+                          : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'}`}
+                      >
+                        <ShapeIcon name={forme} className="w-8 h-4 sm:w-10 sm:h-5" />
+                        <span className="text-center leading-tight">{forme === 'Oeil de chat' ? 'Œil de chat' : forme}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Couleur</p>
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-[repeat(auto-fit,minmax(110px,1fr))] sm:gap-2">
+                  {COULEURS.map(({ value, swatch }) => {
+                    const selected = editForm.couleur === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setEditField('couleur', value)}
+                        className={`flex items-center gap-1 rounded-xl border px-1.5 py-1 text-[10px] font-semibold transition-all sm:gap-1.5 sm:px-2 sm:py-1.5 sm:text-[11px] ${selected
+                          ? 'border-[#2563eb] bg-[#2563eb]/10 text-[#2563eb]'
+                          : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400'}`}
+                      >
+                        <span className="h-3 w-3 flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-600 sm:h-4 sm:w-4" style={{ background: swatch }} />
+                        <span className="truncate text-[9px] sm:text-[11px]">{value}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="space-y-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Gamme
+                  <select value={editForm.gamme} className={INPUT} onChange={event => setEditField('gamme', event.target.value)}>
+                    <option value="">Sélectionner une gamme</option>
+                    <option value="classique">Classique</option>
+                    <option value="moyenne gamme">Moyenne gamme</option>
+                    <option value="luxe">Luxe</option>
+                  </select>
+                </label>
+                {editForm.gamme === 'luxe' && (
+                  <label className="space-y-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    Prix en FCFA
+                    <input type="text" inputMode="numeric" value={editForm.prixCustom} placeholder="Prix en FCFA" className={INPUT} onChange={event => setEditField('prixCustom', event.target.value)} />
+                  </label>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-700 sm:flex-row-reverse sm:px-5 sm:py-4">
+            <Btn variant="primary" onClick={saveEditedMonture} className="w-full justify-center sm:w-auto">
+              {ic.check()} Enregistrer
+            </Btn>
+            <Btn onClick={() => { setEditingMonture(null); setEditForm(EMPTY_FORM) }} className="w-full justify-center sm:w-auto">
+              Annuler
+            </Btn>
           </div>
         </div>
       </div>
