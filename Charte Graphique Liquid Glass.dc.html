@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<style>
+html{scroll-behavior:smooth}
+body{margin:0;background:#0D0D0D;color:#F2F2F2;font-family:Manrope,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#5FC2D9;text-decoration:none}
+a:hover{color:#F2138E}
+::selection{background:rgba(242,19,142,.35);color:#fff}
+*{box-sizing:border-box}
+[data-lucide]{display:inline-block;width:1em;height:1em}
+@keyframes floatOrb{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(40px,-60px,0) scale(1.12)}}
+@keyframes driftOrb{0%,100%{transform:translate3d(0,0,0) scale(1.05)}50%{transform:translate3d(-70px,50px,0) scale(.92)}}
+@keyframes sheen{0%{transform:translateX(-120%)}55%,100%{transform:translateX(220%)}}
+@keyframes pulseRing{0%{box-shadow:0 0 0 0 rgba(242,19,142,.45)}70%{box-shadow:0 0 0 18px rgba(242,19,142,0)}100%{box-shadow:0 0 0 0 rgba(242,19,142,0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes tiltIdle{0%,100%{transform:perspective(900px) rotateX(6deg) rotateY(-12deg) translateZ(0)}50%{transform:perspective(900px) rotateX(-4deg) rotateY(12deg) translateZ(18px)}}
+@keyframes shimmerBar{0%{background-position:-200% 0}100%{background-position:200% 0}}
+</style>
+</helmet>
+
+<div style="position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none">
+  <div style="position:absolute;inset:0;background:radial-gradient(1100px 700px at 12% -5%,rgba(242,19,142,.20),transparent 60%),radial-gradient(900px 600px at 88% 8%,rgba(95,194,217,.16),transparent 62%),radial-gradient(1000px 800px at 50% 105%,rgba(191,33,120,.18),transparent 60%)"></div>
+  <div style="{{ orbAStyle }}"></div>
+  <div style="{{ orbBStyle }}"></div>
+  <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(242,242,242,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(242,242,242,.028) 1px,transparent 1px);background-size:92px 92px;mask-image:radial-gradient(120% 100% at 50% 0%,#000 35%,transparent 85%)"></div>
+</div>
+
+<div style="position:relative;z-index:1">
+
+<header style="max-width:1240px;margin:0 auto;padding:96px 40px 64px">
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:38px">
+    <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#F2138E,#BF2178);display:grid;place-items:center;box-shadow:0 10px 30px -8px rgba(242,19,142,.75),inset 0 1px 0 rgba(255,255,255,.4);font-size:22px;color:#fff"><i data-lucide="boxes"></i></div>
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <span style="font:600 15px/1 Sora,sans-serif;letter-spacing:-.01em">STOKA</span>
+      <span style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.2em;color:rgba(242,242,242,.42)">SUIVI DE STOCK</span>
+    </div>
+  </div>
+  <div style="font:500 12px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#5FC2D9;margin-bottom:22px">CHARTE GRAPHIQUE — V1</div>
+  <h1 style="font:600 clamp(40px,6vw,76px)/1.02 Sora,sans-serif;letter-spacing:-.035em;margin:0 0 26px;max-width:16ch;text-wrap:balance">Liquid Glass<br><span style="background:linear-gradient(100deg,#F2138E,#5FC2D9);-webkit-background-clip:text;background-clip:text;color:transparent">Spatial</span></h1>
+  <p style="font:300 19px/1.6 Manrope,sans-serif;color:rgba(242,242,242,.6);max-width:56ch;margin:0 0 44px;text-wrap:pretty">Système visuel pour un logiciel de suivi et d'enregistrement de stock. Verre translucide en couches, profondeur 3D légère, mouvement continu et une seule couleur d'action. Tout ce qui suit est directement réutilisable en production.</p>
+  <div style="display:flex;flex-wrap:wrap;gap:10px">
+    <a href="#palette" style="padding:9px 16px;border-radius:999px;font:500 12.5px/1 Manrope,sans-serif;color:rgba(242,242,242,.8);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(14px)" style-hover="background:rgba(242,19,142,.18);border-color:rgba(242,19,142,.5);color:#fff">01 Couleurs</a>
+    <a href="#type" style="padding:9px 16px;border-radius:999px;font:500 12.5px/1 Manrope,sans-serif;color:rgba(242,242,242,.8);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(14px)" style-hover="background:rgba(242,19,142,.18);border-color:rgba(242,19,142,.5);color:#fff">02 Typographie</a>
+    <a href="#glass" style="padding:9px 16px;border-radius:999px;font:500 12.5px/1 Manrope,sans-serif;color:rgba(242,242,242,.8);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(14px)" style-hover="background:rgba(242,19,142,.18);border-color:rgba(242,19,142,.5);color:#fff">03 Matière verre</a>
+    <a href="#buttons" style="padding:9px 16px;border-radius:999px;font:500 12.5px/1 Manrope,sans-serif;color:rgba(242,242,242,.8);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(14px)" style-hover="background:rgba(242,19,142,.18);border-color:rgba(242,19,142,.5);color:#fff">04 Boutons</a>
+    <a href="#selection" style="padding:9px 16px;border-radius:999px;font:500 12.5px/1 Manrope,sans-serif;color:rgba(242,242,242,.8);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(14px)" style-hover="background:rgba(242,19,142,.18);border-color:rgba(242,19,142,.5);color:#fff">05 Sélection</a>
+    <a href="#overlays" style="padding:9px 16px;border-radius:999px;font:500 12.5px/1 Manrope,sans-serif;color:rgba(242,242,242,.8);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(14px)" style-hover="background:rgba(242,19,142,.18);border-color:rgba(242,19,142,.5);color:#fff">06 Overlays</a>
+    <a href="#motion" style="padding:9px 16px;border-radius:999px;font:500 12.5px/1 Manrope,sans-serif;color:rgba(242,242,242,.8);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(14px)" style-hover="background:rgba(242,19,142,.18);border-color:rgba(242,19,142,.5);color:#fff">07 Animations</a>
+    <a href="#icons" style="padding:9px 16px;border-radius:999px;font:500 12.5px/1 Manrope,sans-serif;color:rgba(242,242,242,.8);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(14px)" style-hover="background:rgba(242,19,142,.18);border-color:rgba(242,19,142,.5);color:#fff">08 Icônes</a>
+    <a href="#app" style="padding:9px 16px;border-radius:999px;font:500 12.5px/1 Manrope,sans-serif;color:#0D0D0D;background:#F2F2F2;border:1px solid #F2F2F2" style-hover="background:#F2138E;color:#fff;border-color:#F2138E">09 Écran type</a>
+  </div>
+</header>
+
+<section id="palette" style="max-width:1240px;margin:0 auto;padding:70px 40px;border-top:1px solid rgba(242,242,242,.10)">
+  <div style="font:500 11px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#5FC2D9;margin-bottom:16px">01 — COULEURS</div>
+  <h2 style="font:600 38px/1.1 Sora,sans-serif;letter-spacing:-.028em;margin:0 0 14px">Palette et rôles</h2>
+  <p style="font:300 16px/1.65 Manrope,sans-serif;color:rgba(242,242,242,.58);max-width:62ch;margin:0 0 40px;text-wrap:pretty">Vos cinq couleurs, chacune avec un rôle unique. Le magenta ne sert qu'à l'action et à l'urgence, le cyan à la donnée et à la sélection. C'est ce qui garde l'interface lisible quand un écran affiche 200 lignes de stock.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(216px,1fr));gap:18px;margin-bottom:44px">
+    <div style="border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);backdrop-filter:blur(20px)">
+      <div style="height:132px;background:#F2138E;position:relative;overflow:hidden"><div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.35),transparent 55%)"></div></div>
+      <div style="padding:18px 18px 20px">
+        <div style="font:600 15px/1.2 Sora,sans-serif;margin-bottom:5px">Magenta Prime</div>
+        <div style="font:500 11.5px/1 'JetBrains Mono',monospace;color:#F2138E;margin-bottom:12px">#F2138E</div>
+        <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:rgba(242,242,242,.55)">Action principale, CTA, badge critique, focus. Jamais en fond de page ni en texte courant.</div>
+      </div>
+    </div>
+    <div style="border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);backdrop-filter:blur(20px)">
+      <div style="height:132px;background:#BF2178;position:relative;overflow:hidden"><div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.3),transparent 55%)"></div></div>
+      <div style="padding:18px 18px 20px">
+        <div style="font:600 15px/1.2 Sora,sans-serif;margin-bottom:5px">Magenta Deep</div>
+        <div style="font:500 11.5px/1 'JetBrains Mono',monospace;color:#BF2178;margin-bottom:12px">#BF2178</div>
+        <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:rgba(242,242,242,.55)">État pressé, fin des dégradés, ombres colorées, graphiques en second plan.</div>
+      </div>
+    </div>
+    <div style="border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);backdrop-filter:blur(20px)">
+      <div style="height:132px;background:#5FC2D9;position:relative;overflow:hidden"><div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.4),transparent 55%)"></div></div>
+      <div style="padding:18px 18px 20px">
+        <div style="font:600 15px/1.2 Sora,sans-serif;margin-bottom:5px">Cyan Halo</div>
+        <div style="font:500 11.5px/1 'JetBrains Mono',monospace;color:#5FC2D9;margin-bottom:12px">#5FC2D9</div>
+        <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:rgba(242,242,242,.55)">Sélection, information, liens, courbes de données, en-têtes de section.</div>
+      </div>
+    </div>
+    <div style="border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);backdrop-filter:blur(20px)">
+      <div style="height:132px;background:#F2F2F2;position:relative;overflow:hidden"><div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.6),transparent 55%)"></div></div>
+      <div style="padding:18px 18px 20px">
+        <div style="font:600 15px/1.2 Sora,sans-serif;margin-bottom:5px">Blanc Optique</div>
+        <div style="font:500 11.5px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.85);margin-bottom:12px">#F2F2F2</div>
+        <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:rgba(242,242,242,.55)">Texte, icônes, bordures du verre. Utilisé en opacités : 100 / 72 / 55 / 38 %.</div>
+      </div>
+    </div>
+    <div style="border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);backdrop-filter:blur(20px)">
+      <div style="height:132px;background:#0D0D0D;position:relative;overflow:hidden;border-bottom:1px solid rgba(255,255,255,.1)"><div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.14),transparent 55%)"></div></div>
+      <div style="padding:18px 18px 20px">
+        <div style="font:600 15px/1.2 Sora,sans-serif;margin-bottom:5px">Noir Spatial</div>
+        <div style="font:500 11.5px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.85);margin-bottom:12px">#0D0D0D</div>
+        <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:rgba(242,242,242,.55)">Fond unique de l'application. Le verre ne fonctionne que sur ce noir.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px">
+    <div style="padding:26px 26px 28px;border-radius:24px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px) saturate(150%);box-shadow:inset 0 1px 0 rgba(255,255,255,.2)">
+      <div style="font:600 14px/1 Sora,sans-serif;margin-bottom:18px">Rampes tonales</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:rgba(242,242,242,.45)">MAGENTA 100 → 900</div>
+          <div style="display:flex;height:34px;border-radius:10px;overflow:hidden">
+            <div style="flex:1;background:#FCD0E6"></div><div style="flex:1;background:#F79BC9"></div><div style="flex:1;background:#F55FAB"></div><div style="flex:1;background:#F2138E"></div><div style="flex:1;background:#D91B81"></div><div style="flex:1;background:#BF2178"></div><div style="flex:1;background:#8F1A5B"></div><div style="flex:1;background:#5E123C"></div><div style="flex:1;background:#2E091E"></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:rgba(242,242,242,.45)">CYAN 100 → 900</div>
+          <div style="display:flex;height:34px;border-radius:10px;overflow:hidden">
+            <div style="flex:1;background:#E3F5F9"></div><div style="flex:1;background:#BFE9F1"></div><div style="flex:1;background:#8FD8E7"></div><div style="flex:1;background:#5FC2D9"></div><div style="flex:1;background:#43A6BE"></div><div style="flex:1;background:#33879C"></div><div style="flex:1;background:#256777"></div><div style="flex:1;background:#184551"></div><div style="flex:1;background:#0C242B"></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:rgba(242,242,242,.45)">NEUTRES (VERRE) 100 → 900</div>
+          <div style="display:flex;height:34px;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.1)">
+            <div style="flex:1;background:#F2F2F2"></div><div style="flex:1;background:#D4D4D4"></div><div style="flex:1;background:#A8A8A8"></div><div style="flex:1;background:#7C7C7C"></div><div style="flex:1;background:#565656"></div><div style="flex:1;background:#3B3B3B"></div><div style="flex:1;background:#272727"></div><div style="flex:1;background:#1A1A1A"></div><div style="flex:1;background:#0D0D0D"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:26px 26px 28px;border-radius:24px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px) saturate(150%);box-shadow:inset 0 1px 0 rgba(255,255,255,.2)">
+      <div style="font:600 14px/1 Sora,sans-serif;margin-bottom:8px">Couleurs métier ajoutées</div>
+      <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Un logiciel de stock a besoin de trois états lisibles au premier coup d'œil. Vos cinq couleurs n'en couvrent qu'un ; j'ajoute deux teintes calibrées sur la même luminosité.</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:14px;padding:13px 15px;border-radius:14px;background:rgba(63,214,154,.10);border:1px solid rgba(63,214,154,.28)">
+          <span style="width:26px;height:26px;border-radius:9px;background:#3FD69A;display:grid;place-items:center;color:#06281B;font-size:14px"><i data-lucide="check"></i></span>
+          <div style="flex:1"><div style="font:600 13px/1.3 Manrope,sans-serif">Stock sain</div><div style="font:500 10.5px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.45);margin-top:3px">#3FD69A</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;padding:13px 15px;border-radius:14px;background:rgba(245,165,36,.10);border:1px solid rgba(245,165,36,.28)">
+          <span style="width:26px;height:26px;border-radius:9px;background:#F5A524;display:grid;place-items:center;color:#2B1802;font-size:14px"><i data-lucide="triangle-alert"></i></span>
+          <div style="flex:1"><div style="font:600 13px/1.3 Manrope,sans-serif">Seuil bas</div><div style="font:500 10.5px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.45);margin-top:3px">#F5A524</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;padding:13px 15px;border-radius:14px;background:rgba(242,19,142,.12);border:1px solid rgba(242,19,142,.34)">
+          <span style="width:26px;height:26px;border-radius:9px;background:#F2138E;display:grid;place-items:center;color:#fff;font-size:14px"><i data-lucide="package-x"></i></span>
+          <div style="flex:1"><div style="font:600 13px/1.3 Manrope,sans-serif">Rupture</div><div style="font:500 10.5px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.45);margin-top:3px">#F2138E</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="type" style="max-width:1240px;margin:0 auto;padding:70px 40px;border-top:1px solid rgba(242,242,242,.10)">
+  <div style="font:500 11px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#5FC2D9;margin-bottom:16px">02 — TYPOGRAPHIE</div>
+  <h2 style="font:600 38px/1.1 Sora,sans-serif;letter-spacing:-.028em;margin:0 0 14px">Sora · Manrope · JetBrains Mono</h2>
+  <p style="font:300 16px/1.65 Manrope,sans-serif;color:rgba(242,242,242,.58);max-width:62ch;margin:0 0 40px;text-wrap:pretty">Trois familles, chacune avec un usage strict. Sora pour les titres : géométrique, un peu spatiale, très lisible en grand. Manrope pour tout le texte courant et les libellés d'interface. JetBrains Mono pour les références, quantités, SKU et codes-barres — les chiffres s'alignent en colonne, indispensable dans un tableau de stock.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:20px;margin-bottom:36px">
+    <div style="padding:30px;border-radius:24px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:22px"><span style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:#F2138E">TITRES</span><span style="font:400 11px/1 Manrope,sans-serif;color:rgba(242,242,242,.4)">Sora 400–700</span></div>
+      <div style="font:600 46px/1.05 Sora,sans-serif;letter-spacing:-.03em;margin-bottom:10px">Inventaire</div>
+      <div style="font:400 15px/1.4 Sora,sans-serif;color:rgba(242,242,242,.5)">ABCDEFGHIJKLM · 0123456789</div>
+    </div>
+    <div style="padding:30px;border-radius:24px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:22px"><span style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:#5FC2D9">TEXTE</span><span style="font:400 11px/1 Manrope,sans-serif;color:rgba(242,242,242,.4)">Manrope 300–600</span></div>
+      <div style="font:400 17px/1.55 Manrope,sans-serif;margin-bottom:10px">Le mouvement de stock a été enregistré sur l'entrepôt Nord et affecté au lot 2026-08.</div>
+      <div style="font:400 15px/1.4 Manrope,sans-serif;color:rgba(242,242,242,.5)">ABCDEFGHIJKLM · 0123456789</div>
+    </div>
+    <div style="padding:30px;border-radius:24px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:22px"><span style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:#F5A524">DONNÉES</span><span style="font:400 11px/1 Manrope,sans-serif;color:rgba(242,242,242,.4)">JetBrains Mono 400–500</span></div>
+      <div style="font:500 26px/1.35 'JetBrains Mono',monospace;letter-spacing:-.02em;margin-bottom:10px">SKU-4482-B<br>1 248 u.</div>
+      <div style="font:400 14px/1.4 'JetBrains Mono',monospace;color:rgba(242,242,242,.5)">0123456789 · €</div>
+    </div>
+  </div>
+
+  <div style="border-radius:24px;border:1px solid rgba(255,255,255,.12);overflow:hidden;background:rgba(255,255,255,.03);backdrop-filter:blur(20px)">
+    <div style="display:grid;grid-template-columns:1.1fr 1.5fr 1fr 1fr;gap:0;padding:15px 24px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.1);font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:rgba(242,242,242,.5)">
+      <div>RÔLE</div><div>FAMILLE / GRAISSE</div><div>TAILLE</div><div>INTERLIGNE</div>
+    </div>
+    <sc-for list="{{ typeScale }}" as="row" hint-placeholder-count="7">
+      <div style="display:grid;grid-template-columns:1.1fr 1.5fr 1fr 1fr;padding:15px 24px;border-bottom:1px solid rgba(255,255,255,.06);align-items:center">
+        <div style="font:600 13px/1.3 Manrope,sans-serif">{{ row.role }}</div>
+        <div style="font:400 13px/1.3 Manrope,sans-serif;color:rgba(242,242,242,.62)">{{ row.font }}</div>
+        <div style="font:500 12.5px/1 'JetBrains Mono',monospace;color:#5FC2D9">{{ row.size }}</div>
+        <div style="font:500 12.5px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.55)">{{ row.lh }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section id="glass" style="max-width:1240px;margin:0 auto;padding:70px 40px;border-top:1px solid rgba(242,242,242,.10)">
+  <div style="font:500 11px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#5FC2D9;margin-bottom:16px">03 — MATIÈRE VERRE</div>
+  <h2 style="font:600 38px/1.1 Sora,sans-serif;letter-spacing:-.028em;margin:0 0 14px">Quatre niveaux de verre</h2>
+  <p style="font:300 16px/1.65 Manrope,sans-serif;color:rgba(242,242,242,.58);max-width:62ch;margin:0 0 40px;text-wrap:pretty">La profondeur se lit à l'opacité du fond et à la force du flou, pas à l'ombre. Plus un élément est haut dans la pile, plus il est clair et plus il floute ce qui est derrière. Chaque niveau porte un liseré interne clair en haut : c'est ce reflet qui donne l'effet liquide.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin-bottom:32px">
+    <div style="padding:24px;border-radius:20px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(12px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.45);margin-bottom:14px">GLASS 01 — FOND</div>
+      <div style="font:600 17px/1.25 Sora,sans-serif;margin-bottom:12px">Zones et rails</div>
+      <div style="font:400 12px/1.7 'JetBrains Mono',monospace;color:rgba(242,242,242,.5)">bg 3.5% blanc<br>blur 12px<br>bord 8%<br>r 20px</div>
+    </div>
+    <div style="padding:24px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px) saturate(150%);box-shadow:inset 0 1px 0 rgba(255,255,255,.2)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:14px">GLASS 02 — CARTE</div>
+      <div style="font:600 17px/1.25 Sora,sans-serif;margin-bottom:12px">Cartes, tableaux</div>
+      <div style="font:400 12px/1.7 'JetBrains Mono',monospace;color:rgba(242,242,242,.55)">bg 9 → 2.8%<br>blur 24px + sat 150%<br>bord 13% + reflet 20%<br>r 22px</div>
+    </div>
+    <div style="padding:24px;border-radius:24px;background:linear-gradient(150deg,rgba(255,255,255,.16),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.2);backdrop-filter:blur(34px) saturate(170%);box-shadow:0 20px 50px -18px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.34)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.6);margin-bottom:14px">GLASS 03 — FLOTTANT</div>
+      <div style="font:600 17px/1.25 Sora,sans-serif;margin-bottom:12px">Menus, popovers, toasts</div>
+      <div style="font:400 12px/1.7 'JetBrains Mono',monospace;color:rgba(242,242,242,.6)">bg 16 → 6%<br>blur 34px + sat 170%<br>ombre portée<br>r 24px</div>
+    </div>
+    <div style="padding:24px;border-radius:28px;background:linear-gradient(150deg,rgba(255,255,255,.22),rgba(255,255,255,.09));border:1px solid rgba(255,255,255,.28);backdrop-filter:blur(48px) saturate(190%);box-shadow:0 40px 90px -24px rgba(0,0,0,.9),0 0 60px -30px rgba(242,19,142,.5),inset 0 1px 0 rgba(255,255,255,.5)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.7);margin-bottom:14px">GLASS 04 — MODALE</div>
+      <div style="font:600 17px/1.25 Sora,sans-serif;margin-bottom:12px">Dialogues, palette</div>
+      <div style="font:400 12px/1.7 'JetBrains Mono',monospace;color:rgba(242,242,242,.68)">bg 22 → 9%<br>blur 48px + sat 190%<br>halo magenta<br>r 28px</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:600 14px/1 Sora,sans-serif;margin-bottom:16px">Rayons</div>
+      <div style="display:flex;align-items:flex-end;gap:12px">
+        <div style="flex:1;height:56px;border-radius:8px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);display:grid;place-items:center;font:500 10px 'JetBrains Mono',monospace;color:rgba(242,242,242,.6)">8</div>
+        <div style="flex:1;height:56px;border-radius:14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);display:grid;place-items:center;font:500 10px 'JetBrains Mono',monospace;color:rgba(242,242,242,.6)">14</div>
+        <div style="flex:1;height:56px;border-radius:22px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);display:grid;place-items:center;font:500 10px 'JetBrains Mono',monospace;color:rgba(242,242,242,.6)">22</div>
+        <div style="flex:1;height:56px;border-radius:28px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);display:grid;place-items:center;font:500 10px 'JetBrains Mono',monospace;color:rgba(242,242,242,.6)">28</div>
+        <div style="flex:1;height:56px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);display:grid;place-items:center;font:500 10px 'JetBrains Mono',monospace;color:rgba(242,242,242,.6)">∞</div>
+      </div>
+      <div style="font:400 12px/1.55 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-top:14px">Champs 14 · cartes 22 · modales 28 · pilules et boutons ronds 999.</div>
+    </div>
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:600 14px/1 Sora,sans-serif;margin-bottom:16px">Espacements — base 4</div>
+      <div style="display:flex;align-items:flex-end;gap:8px;height:70px">
+        <div style="width:26px;height:4px;background:#5FC2D9;border-radius:2px"></div>
+        <div style="width:26px;height:8px;background:#5FC2D9;border-radius:2px"></div>
+        <div style="width:26px;height:12px;background:#5FC2D9;border-radius:2px"></div>
+        <div style="width:26px;height:16px;background:#5FC2D9;border-radius:2px"></div>
+        <div style="width:26px;height:24px;background:#F2138E;border-radius:2px"></div>
+        <div style="width:26px;height:32px;background:#F2138E;border-radius:2px"></div>
+        <div style="width:26px;height:48px;background:#F2138E;border-radius:2px"></div>
+        <div style="width:26px;height:64px;background:#BF2178;border-radius:2px"></div>
+      </div>
+      <div style="font:400 12px/1.7 'JetBrains Mono',monospace;color:rgba(242,242,242,.5);margin-top:14px">4 · 8 · 12 · 16 · 24 · 32 · 48 · 64</div>
+    </div>
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px);perspective:900px">
+      <div style="font:600 14px/1 Sora,sans-serif;margin-bottom:8px">Profondeur 3D</div>
+      <div style="font:400 12px/1.55 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:18px">Survolez : rotation 6°, élévation 14px. Réservé aux cartes cliquables.</div>
+      <div style="height:96px;border-radius:18px;background:linear-gradient(135deg,rgba(242,19,142,.5),rgba(95,194,217,.4));border:1px solid rgba(255,255,255,.28);box-shadow:inset 0 1px 0 rgba(255,255,255,.4);transition:transform .5s cubic-bezier(.22,1,.36,1),box-shadow .5s;transform-style:preserve-3d" style-hover="transform:rotateX(6deg) rotateY(-9deg) translateZ(14px);box-shadow:0 28px 50px -18px rgba(242,19,142,.6),inset 0 1px 0 rgba(255,255,255,.5)"></div>
+    </div>
+  </div>
+</section>
+
+<section id="buttons" style="max-width:1240px;margin:0 auto;padding:70px 40px;border-top:1px solid rgba(242,242,242,.10)">
+  <div style="font:500 11px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#5FC2D9;margin-bottom:16px">04 — BOUTONS</div>
+  <h2 style="font:600 38px/1.1 Sora,sans-serif;letter-spacing:-.028em;margin:0 0 14px">Douze types de boutons</h2>
+  <p style="font:300 16px/1.65 Manrope,sans-serif;color:rgba(242,242,242,.58);max-width:62ch;margin:0 0 40px;text-wrap:pretty">Un seul bouton magenta plein par écran : celui qui enregistre. Tout le reste est en verre. Chaque bouton a la même mécanique de survol — le fond s'éclaircit, le reflet du haut s'intensifie, l'élément monte de 1px.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(292px,1fr));gap:20px">
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:#F2138E;margin-bottom:6px">01 PRIMAIRE</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Action unique et irréversible : enregistrer un mouvement.</div>
+      <button style="position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:14px;border:1px solid rgba(255,255,255,.22);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 14px/1 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -12px rgba(242,19,142,.85),inset 0 1px 0 rgba(255,255,255,.42);transition:transform .28s cubic-bezier(.22,1,.36,1),box-shadow .28s" style-hover="transform:translateY(-1px);box-shadow:0 20px 38px -12px rgba(242,19,142,1),inset 0 1px 0 rgba(255,255,255,.55)" style-active="transform:translateY(1px);background:linear-gradient(145deg,#BF2178,#8F1A5B)" style-after="content:'';position:absolute;top:0;left:0;width:40%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.4),transparent);animation:sheen 5s ease-in-out infinite;pointer-events:none">
+        <i data-lucide="package-plus" style="font-size:16px"></i>Enregistrer l'entrée
+      </button>
+    </div>
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:6px">02 SECONDAIRE — VERRE</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Action courante : exporter, filtrer, dupliquer.</div>
+      <button style="display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);backdrop-filter:blur(18px);color:#F2F2F2;font:600 14px/1 Manrope,sans-serif;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.22);transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);transform:translateY(-1px)" style-active="background:rgba(255,255,255,.06);transform:translateY(1px)">
+        <i data-lucide="file-spreadsheet" style="font-size:16px"></i>Exporter
+      </button>
+    </div>
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:#5FC2D9;margin-bottom:6px">03 CYAN — DONNÉE</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Consulter, analyser, ouvrir un rapport.</div>
+      <button style="display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:14px;border:1px solid rgba(95,194,217,.45);background:rgba(95,194,217,.14);backdrop-filter:blur(18px);color:#5FC2D9;font:600 14px/1 Manrope,sans-serif;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.18);transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.24);color:#C9EDF5;transform:translateY(-1px);box-shadow:0 12px 28px -14px rgba(95,194,217,.7),inset 0 1px 0 rgba(255,255,255,.28)" style-active="background:rgba(95,194,217,.1);transform:translateY(1px)">
+        <i data-lucide="chart-line" style="font-size:16px"></i>Voir le rapport
+      </button>
+    </div>
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:6px">04 FANTÔME</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Annuler, revenir, actions de faible poids.</div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button style="display:inline-flex;align-items:center;gap:8px;padding:13px 18px;border-radius:14px;border:1px solid transparent;background:transparent;color:rgba(242,242,242,.68);font:600 14px/1 Manrope,sans-serif;cursor:pointer;transition:all .24s ease" style-hover="background:rgba(255,255,255,.08);color:#F2F2F2;border-color:rgba(255,255,255,.14)">Annuler</button>
+        <button style="display:inline-flex;align-items:center;gap:8px;padding:13px 18px;border-radius:14px;border:1px solid transparent;background:transparent;color:rgba(242,242,242,.4);font:600 14px/1 Manrope,sans-serif;cursor:not-allowed;opacity:.5">Désactivé</button>
+      </div>
+    </div>
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:#F2138E;margin-bottom:6px">05 DESTRUCTIF</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Supprimer un article, annuler un mouvement validé.</div>
+      <button style="display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:14px;border:1px solid rgba(242,19,142,.5);background:rgba(242,19,142,.12);backdrop-filter:blur(18px);color:#F55FAB;font:600 14px/1 Manrope,sans-serif;cursor:pointer;transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="background:#F2138E;color:#fff;border-color:#F2138E;box-shadow:0 14px 30px -12px rgba(242,19,142,.9)" style-active="background:#BF2178;transform:translateY(1px)">
+        <i data-lucide="trash-2" style="font-size:16px"></i>Supprimer
+      </button>
+    </div>
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:6px">06 ICÔNE</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Barres d'outils. 40px minimum, toujours avec infobulle.</div>
+      <div style="display:flex;gap:10px">
+        <button style="width:42px;height:42px;border-radius:13px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#F2F2F2;font-size:17px;cursor:pointer;backdrop-filter:blur(16px);transition:all .24s ease" style-hover="background:rgba(255,255,255,.16);transform:translateY(-1px)"><i data-lucide="search"></i></button>
+        <button style="width:42px;height:42px;border-radius:13px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#F2F2F2;font-size:17px;cursor:pointer;backdrop-filter:blur(16px);transition:all .24s ease" style-hover="background:rgba(95,194,217,.2);border-color:rgba(95,194,217,.5);color:#5FC2D9;transform:translateY(-1px)"><i data-lucide="filter"></i></button>
+        <button style="width:42px;height:42px;border-radius:13px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#F2F2F2;font-size:17px;cursor:pointer;backdrop-filter:blur(16px);transition:all .24s ease" style-hover="background:rgba(255,255,255,.16);transform:translateY(-1px)"><i data-lucide="refresh-cw"></i></button>
+        <button style="width:42px;height:42px;border-radius:999px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.24);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font-size:19px;cursor:pointer;box-shadow:0 12px 26px -10px rgba(242,19,142,.85),inset 0 1px 0 rgba(255,255,255,.42);transition:all .3s cubic-bezier(.22,1,.36,1)" style-hover="transform:translateY(-2px) scale(1.05)"><i data-lucide="plus"></i></button>
+      </div>
+    </div>
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:6px">07 SEGMENTÉ</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Bascule entre vues. Le curseur glisse en 320ms.</div>
+      <div style="position:relative;display:inline-flex;padding:4px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(16px)">
+        <div style="{{ segIndicatorStyle }}"></div>
+        <sc-for list="{{ segOpts }}" as="opt" hint-placeholder-count="3">
+          <button onClick="{{ opt.onClick }}" style="{{ opt.style }}">{{ opt.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:6px">08 INTERRUPTEUR</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Réglages. La pastille est un galet de verre.</div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+          <span style="font:500 13.5px/1.3 Manrope,sans-serif">Alerte seuil bas</span>
+          <button onClick="{{ toggleA }}" style="{{ switchAStyle }}"><span style="{{ knobAStyle }}"></span></button>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+          <span style="font:500 13.5px/1.3 Manrope,sans-serif">Scan automatique</span>
+          <button onClick="{{ toggleB }}" style="{{ switchBStyle }}"><span style="{{ knobBStyle }}"></span></button>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:6px">09 SCINDÉ</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Action par défaut + variantes d'enregistrement.</div>
+      <div style="display:inline-flex;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.22);box-shadow:0 14px 30px -14px rgba(242,19,142,.7)">
+        <button style="display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border:0;background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 14px/1 Manrope,sans-serif;cursor:pointer;transition:filter .24s" style-hover="filter:brightness(1.12)"><i data-lucide="save" style="font-size:16px"></i>Enregistrer</button>
+        <button style="padding:13px 13px;border:0;border-left:1px solid rgba(255,255,255,.28);background:linear-gradient(145deg,#D91B81,#8F1A5B);color:#fff;font-size:15px;cursor:pointer;display:grid;place-items:center;transition:filter .24s" style-hover="filter:brightness(1.15)"><i data-lucide="chevron-down"></i></button>
+      </div>
+    </div>
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:6px">10 PUCES / FILTRES</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Filtres actifs au-dessus du tableau. Cliquez pour activer.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <sc-for list="{{ chips }}" as="chip" hint-placeholder-count="5">
+          <button onClick="{{ chip.onClick }}" style="{{ chip.style }}">{{ chip.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:6px">11 CHARGEMENT</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Le libellé reste, l'icône devient un anneau. Largeur figée.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button style="display:inline-flex;align-items:center;gap:10px;padding:13px 22px;border-radius:14px;border:1px solid rgba(255,255,255,.22);background:linear-gradient(145deg,#D91B81,#8F1A5B);color:rgba(255,255,255,.85);font:600 14px/1 Manrope,sans-serif;cursor:progress">
+          <span style="{{ spinnerStyle }}"></span>Enregistrement…
+        </button>
+        <button style="display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:14px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:rgba(242,242,242,.34);font:600 14px/1 Manrope,sans-serif;cursor:not-allowed">Indisponible</button>
+      </div>
+    </div>
+
+    <div style="padding:26px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:#F2138E;margin-bottom:6px">12 FLOTTANT (FAB)</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:20px">Ancré en bas à droite. Halo pulsé toutes les 3s.</div>
+      <button style="{{ fabStyle }}"><i data-lucide="scan-barcode" style="font-size:19px"></i>Scanner un article</button>
+    </div>
+  </div>
+
+  <div style="margin-top:30px;padding:26px 28px;border-radius:22px;background:rgba(95,194,217,.07);border:1px solid rgba(95,194,217,.24);backdrop-filter:blur(20px)">
+    <div style="font:600 14px/1 Sora,sans-serif;color:#5FC2D9;margin-bottom:14px">Les six états, valables pour tous les boutons</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px">
+      <div style="padding:14px;border-radius:14px;background:rgba(255,255,255,.05)"><div style="font:600 12.5px Manrope,sans-serif;margin-bottom:5px">Repos</div><div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5)">Fond de base</div></div>
+      <div style="padding:14px;border-radius:14px;background:rgba(255,255,255,.05)"><div style="font:600 12.5px Manrope,sans-serif;margin-bottom:5px">Survol</div><div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5)">+7% clarté, −1px Y, 280ms</div></div>
+      <div style="padding:14px;border-radius:14px;background:rgba(255,255,255,.05)"><div style="font:600 12.5px Manrope,sans-serif;margin-bottom:5px">Pressé</div><div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5)">Magenta Deep, +1px Y, 90ms</div></div>
+      <div style="padding:14px;border-radius:14px;background:rgba(255,255,255,.05)"><div style="font:600 12.5px Manrope,sans-serif;margin-bottom:5px">Focus clavier</div><div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5)">Anneau 2px #5FC2D9, offset 3px</div></div>
+      <div style="padding:14px;border-radius:14px;background:rgba(255,255,255,.05)"><div style="font:600 12.5px Manrope,sans-serif;margin-bottom:5px">Désactivé</div><div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5)">Opacité 40%, pas de flou</div></div>
+      <div style="padding:14px;border-radius:14px;background:rgba(255,255,255,.05)"><div style="font:600 12.5px Manrope,sans-serif;margin-bottom:5px">Chargement</div><div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5)">Anneau, largeur figée</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="selection" style="max-width:1240px;margin:0 auto;padding:70px 40px;border-top:1px solid rgba(242,242,242,.10)">
+  <div style="font:500 11px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#5FC2D9;margin-bottom:16px">05 — SÉLECTION</div>
+  <h2 style="font:600 38px/1.1 Sora,sans-serif;letter-spacing:-.028em;margin:0 0 14px">La sélection est cyan</h2>
+  <p style="font:300 16px/1.65 Manrope,sans-serif;color:rgba(242,242,242,.58);max-width:62ch;margin:0 0 40px;text-wrap:pretty">Règle absolue : le magenta agit, le cyan sélectionne. Un élément sélectionné reçoit un liseré cyan à gauche, un fond cyan à 10% et une case cochée. Jamais de magenta pour marquer une ligne — sinon l'utilisateur croit qu'elle est en rupture.</p>
+
+  <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:24px;align-items:start">
+    <div style="border-radius:24px;overflow:hidden;border:1px solid rgba(255,255,255,.13);background:linear-gradient(150deg,rgba(255,255,255,.08),rgba(255,255,255,.025));backdrop-filter:blur(24px)">
+      <div style="{{ selBarStyle }}">
+        <span style="display:inline-flex;align-items:center;gap:8px;font:600 13px/1 Manrope,sans-serif;color:#5FC2D9"><i data-lucide="check-check" style="font-size:16px"></i>{{ selCount }} sélectionné(s)</span>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <button style="padding:8px 14px;border-radius:11px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#F2F2F2;font:600 12.5px/1 Manrope,sans-serif;cursor:pointer">Transférer</button>
+          <button style="padding:8px 14px;border-radius:11px;border:1px solid rgba(242,19,142,.45);background:rgba(242,19,142,.14);color:#F55FAB;font:600 12.5px/1 Manrope,sans-serif;cursor:pointer">Supprimer</button>
+          <button onClick="{{ clearSel }}" style="width:32px;height:32px;border-radius:11px;border:1px solid rgba(255,255,255,.14);background:transparent;color:rgba(242,242,242,.6);cursor:pointer;display:grid;place-items:center"><i data-lucide="x" style="font-size:15px"></i></button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:44px 1fr 120px 96px;padding:14px 20px;background:rgba(255,255,255,.045);border-bottom:1px solid rgba(255,255,255,.1);font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:rgba(242,242,242,.5)">
+        <div></div><div>ARTICLE</div><div>EMPLACEMENT</div><div style="text-align:right">STOCK</div>
+      </div>
+      <sc-for list="{{ rows }}" as="row" hint-placeholder-count="5">
+        <div onClick="{{ row.onClick }}" style="{{ row.style }}">
+          <div style="display:grid;place-items:center"><span style="{{ row.boxStyle }}">{{ row.mark }}</span></div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <span style="font:600 13.5px/1.25 Manrope,sans-serif">{{ row.nom }}</span>
+            <span style="font:400 11px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.42)">{{ row.sku }}</span>
+          </div>
+          <div style="font:400 12.5px/1.3 Manrope,sans-serif;color:rgba(242,242,242,.58)">{{ row.zone }}</div>
+          <div style="text-align:right;font:500 13.5px/1 'JetBrains Mono',monospace;color:{{ row.qtyColor }}">{{ row.qty }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div style="padding:24px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+        <div style="font:600 13.5px/1 Sora,sans-serif;margin-bottom:16px">Cases et radios</div>
+        <div style="display:flex;gap:22px;align-items:center;margin-bottom:20px">
+          <span style="width:22px;height:22px;border-radius:7px;border:1.5px solid rgba(255,255,255,.28);background:rgba(255,255,255,.05)"></span>
+          <span style="width:22px;height:22px;border-radius:7px;border:1.5px solid #5FC2D9;background:#5FC2D9;display:grid;place-items:center;color:#08252C;font-size:14px"><i data-lucide="check"></i></span>
+          <span style="width:22px;height:22px;border-radius:7px;border:1.5px solid #5FC2D9;background:#5FC2D9;display:grid;place-items:center;color:#08252C;font-size:14px"><i data-lucide="minus"></i></span>
+          <span style="width:22px;height:22px;border-radius:999px;border:1.5px solid rgba(255,255,255,.28)"></span>
+          <span style="width:22px;height:22px;border-radius:999px;border:1.5px solid #5FC2D9;display:grid;place-items:center"><span style="width:10px;height:10px;border-radius:999px;background:#5FC2D9"></span></span>
+        </div>
+        <div style="font:600 13.5px/1 Sora,sans-serif;margin-bottom:14px">Champ actif</div>
+        <div style="padding:13px 15px;border-radius:14px;background:rgba(255,255,255,.05);border:1.5px solid #5FC2D9;box-shadow:0 0 0 3px rgba(95,194,217,.16);font:400 13.5px/1 Manrope,sans-serif;color:#F2F2F2;display:flex;align-items:center;gap:10px"><i data-lucide="search" style="font-size:16px;color:#5FC2D9"></i>Rechercher un SKU<span style="width:1.5px;height:16px;background:#5FC2D9;margin-left:2px"></span></div>
+      </div>
+
+      <div style="padding:24px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+        <div style="font:600 13.5px/1 Sora,sans-serif;margin-bottom:8px">Carte sélectionnable</div>
+        <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:16px">Choix d'entrepôt à l'enregistrement. Cliquez.</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ depots }}" as="d" hint-placeholder-count="3">
+            <div onClick="{{ d.onClick }}" style="{{ d.style }}">
+              <span style="{{ d.dotStyle }}"></span>
+              <div style="flex:1"><div style="font:600 13px/1.3 Manrope,sans-serif">{{ d.nom }}</div><div style="font:400 11px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.42);margin-top:4px">{{ d.code }}</div></div>
+              <span style="font:500 12px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.55)">{{ d.qty }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="overlays" style="max-width:1240px;margin:0 auto;padding:70px 40px;border-top:1px solid rgba(242,242,242,.10)">
+  <div style="font:500 11px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#5FC2D9;margin-bottom:16px">06 — OVERLAYS</div>
+  <h2 style="font:600 38px/1.1 Sora,sans-serif;letter-spacing:-.028em;margin:0 0 14px">Couches flottantes</h2>
+  <p style="font:300 16px/1.65 Manrope,sans-serif;color:rgba(242,242,242,.58);max-width:62ch;margin:0 0 40px;text-wrap:pretty">Le fond derrière une modale n'est jamais noirci à plat : il est flouté à 20px et assombri à 55%. On voit encore l'inventaire derrière le dialogue — c'est ce qui rend la couche « liquide ». Les tiroirs entrent par la droite, les toasts par le bas.</p>
+
+  <div style="display:flex;gap:12px;margin-bottom:32px;flex-wrap:wrap">
+    <button onClick="{{ openModal }}" style="display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:14px;border:1px solid rgba(255,255,255,.22);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 14px/1 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -12px rgba(242,19,142,.85),inset 0 1px 0 rgba(255,255,255,.42)"><i data-lucide="maximize-2" style="font-size:16px"></i>Ouvrir la modale</button>
+    <button onClick="{{ openDrawer }}" style="display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#F2F2F2;font:600 14px/1 Manrope,sans-serif;cursor:pointer;backdrop-filter:blur(18px)"><i data-lucide="panel-right" style="font-size:16px"></i>Ouvrir le tiroir</button>
+    <button onClick="{{ fireToast }}" style="display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:14px;border:1px solid rgba(95,194,217,.45);background:rgba(95,194,217,.14);color:#5FC2D9;font:600 14px/1 Manrope,sans-serif;cursor:pointer;backdrop-filter:blur(18px)"><i data-lucide="bell" style="font-size:16px"></i>Notification</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(288px,1fr));gap:20px">
+    <div style="padding:24px;border-radius:22px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(14px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:16px">MENU CONTEXTUEL</div>
+      <div style="padding:8px;border-radius:18px;background:linear-gradient(150deg,rgba(255,255,255,.16),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.2);backdrop-filter:blur(34px);box-shadow:0 20px 50px -18px rgba(0,0,0,.85),inset 0 1px 0 rgba(255,255,255,.34)">
+        <div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;font:500 13px/1 Manrope,sans-serif;cursor:pointer;transition:background .18s" style-hover="background:rgba(95,194,217,.18)"><i data-lucide="pencil" style="font-size:15px;color:#5FC2D9"></i>Modifier l'article</div>
+        <div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;font:500 13px/1 Manrope,sans-serif;cursor:pointer;transition:background .18s" style-hover="background:rgba(95,194,217,.18)"><i data-lucide="arrow-up-from-line" style="font-size:15px;color:#5FC2D9"></i>Sortie de stock</div>
+        <div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;font:500 13px/1 Manrope,sans-serif;cursor:pointer;transition:background .18s" style-hover="background:rgba(95,194,217,.18)"><i data-lucide="history" style="font-size:15px;color:#5FC2D9"></i>Historique</div>
+        <div style="height:1px;background:rgba(255,255,255,.12);margin:6px 10px"></div>
+        <div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;font:500 13px/1 Manrope,sans-serif;color:#F55FAB;cursor:pointer;transition:background .18s" style-hover="background:rgba(242,19,142,.2)"><i data-lucide="trash-2" style="font-size:15px"></i>Supprimer</div>
+      </div>
+    </div>
+
+    <div style="padding:24px;border-radius:22px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(14px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:16px">INFOBULLE + PASTILLE</div>
+      <div style="display:flex;flex-direction:column;gap:20px;align-items:flex-start">
+        <div style="padding:9px 13px;border-radius:11px;background:rgba(242,242,242,.94);color:#0D0D0D;font:600 12px/1.3 Manrope,sans-serif;box-shadow:0 14px 30px -14px rgba(0,0,0,.9);position:relative">Dernier inventaire : 12 août<span style="position:absolute;left:22px;bottom:-5px;width:10px;height:10px;background:rgba(242,242,242,.94);transform:rotate(45deg)"></span></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <span style="padding:5px 11px;border-radius:999px;font:600 11px/1 Manrope,sans-serif;background:rgba(63,214,154,.16);color:#3FD69A;border:1px solid rgba(63,214,154,.36)">Sain</span>
+          <span style="padding:5px 11px;border-radius:999px;font:600 11px/1 Manrope,sans-serif;background:rgba(245,165,36,.16);color:#F5A524;border:1px solid rgba(245,165,36,.36)">Seuil bas</span>
+          <span style="padding:5px 11px;border-radius:999px;font:600 11px/1 Manrope,sans-serif;background:rgba(242,19,142,.18);color:#F55FAB;border:1px solid rgba(242,19,142,.42)">Rupture</span>
+          <span style="padding:5px 11px;border-radius:999px;font:600 11px/1 Manrope,sans-serif;background:rgba(95,194,217,.16);color:#5FC2D9;border:1px solid rgba(95,194,217,.36)">En transit</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:24px;border-radius:22px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(14px)">
+      <div style="font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:16px">PALETTE DE COMMANDES ⌘K</div>
+      <div style="border-radius:18px;background:linear-gradient(150deg,rgba(255,255,255,.18),rgba(255,255,255,.07));border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(40px);box-shadow:0 24px 60px -20px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.4);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.14)"><i data-lucide="search" style="font-size:16px;color:rgba(242,242,242,.55)"></i><span style="font:400 13.5px/1 Manrope,sans-serif;color:rgba(242,242,242,.5)">entrée…</span></div>
+        <div style="padding:6px">
+          <div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;background:rgba(95,194,217,.2);font:500 13px/1 Manrope,sans-serif"><i data-lucide="package-plus" style="font-size:15px;color:#5FC2D9"></i>Nouvelle entrée de stock<span style="margin-left:auto;font:500 10.5px 'JetBrains Mono',monospace;color:rgba(242,242,242,.45)">↵</span></div>
+          <div style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;font:500 13px/1 Manrope,sans-serif;color:rgba(242,242,242,.7)"><i data-lucide="clipboard-list" style="font-size:15px;color:rgba(242,242,242,.5)"></i>Entrées du jour</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="motion" style="max-width:1240px;margin:0 auto;padding:70px 40px;border-top:1px solid rgba(242,242,242,.10)">
+  <div style="font:500 11px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#5FC2D9;margin-bottom:16px">07 — ANIMATIONS</div>
+  <h2 style="font:600 38px/1.1 Sora,sans-serif;letter-spacing:-.028em;margin:0 0 14px">Mouvement et 3D</h2>
+  <p style="font:300 16px/1.65 Manrope,sans-serif;color:rgba(242,242,242,.58);max-width:62ch;margin:0 0 40px;text-wrap:pretty">Une seule courbe pour presque tout : cubic-bezier(.22, 1, .36, 1). Elle démarre vite et se pose lentement, ce qui donne la sensation de masse liquide. Les durées sont courtes dans l'interface de travail et longues seulement pour les couches décoratives de fond.</p>
+
+  <div style="border-radius:24px;border:1px solid rgba(255,255,255,.12);overflow:hidden;background:rgba(255,255,255,.03);backdrop-filter:blur(20px);margin-bottom:26px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1.3fr 1.4fr;padding:15px 24px;background:rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.1);font:500 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:rgba(242,242,242,.5)">
+      <div>JETON</div><div>DURÉE</div><div>COURBE</div><div>USAGE</div>
+    </div>
+    <sc-for list="{{ motionTokens }}" as="m" hint-placeholder-count="6">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1.3fr 1.4fr;padding:15px 24px;border-bottom:1px solid rgba(255,255,255,.06);align-items:center">
+        <div style="font:500 12.5px/1 'JetBrains Mono',monospace;color:#5FC2D9">{{ m.token }}</div>
+        <div style="font:500 12.5px/1 'JetBrains Mono',monospace">{{ m.dur }}</div>
+        <div style="font:400 11.5px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.55)">{{ m.ease }}</div>
+        <div style="font:400 12.5px/1.4 Manrope,sans-serif;color:rgba(242,242,242,.62)">{{ m.use }}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
+    <div style="padding:24px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px);perspective:800px">
+      <div style="font:600 13px/1 Sora,sans-serif;margin-bottom:6px">Carte flottante 3D</div>
+      <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:18px">Rotation continue 8s. Écrans vides et pages de connexion.</div>
+      <div style="height:120px;display:grid;place-items:center"><div style="{{ tiltStyle }}"><i data-lucide="package" style="font-size:34px;color:#fff"></i></div></div>
+    </div>
+    <div style="padding:24px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:600 13px/1 Sora,sans-serif;margin-bottom:6px">Halo pulsé</div>
+      <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:18px">Attire l'œil sur une alerte de rupture. 3s, non bloquant.</div>
+      <div style="height:120px;display:grid;place-items:center"><div style="{{ pulseStyle }}"><i data-lucide="triangle-alert" style="font-size:26px;color:#fff"></i></div></div>
+    </div>
+    <div style="padding:24px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:600 13px/1 Sora,sans-serif;margin-bottom:6px">Squelette de chargement</div>
+      <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:18px">Balayage 1.6s. Jamais de spinner plein écran.</div>
+      <div style="height:120px;display:flex;flex-direction:column;gap:12px;justify-content:center">
+        <div style="{{ skelA }}"></div><div style="{{ skelB }}"></div><div style="{{ skelC }}"></div>
+      </div>
+    </div>
+    <div style="padding:24px;border-radius:22px;background:linear-gradient(150deg,rgba(255,255,255,.09),rgba(255,255,255,.028));border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(24px)">
+      <div style="font:600 13px/1 Sora,sans-serif;margin-bottom:6px">Compteur de stock</div>
+      <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.5);margin-bottom:18px">Les quantités s'incrémentent en 520ms après enregistrement.</div>
+      <div style="height:120px;display:grid;place-items:center"><div style="font:500 44px/1 'JetBrains Mono',monospace;letter-spacing:-.03em;background:linear-gradient(100deg,#F2138E,#5FC2D9);-webkit-background-clip:text;background-clip:text;color:transparent">{{ counter }}</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="icons" style="max-width:1240px;margin:0 auto;padding:70px 40px;border-top:1px solid rgba(242,242,242,.10)">
+  <div style="font:500 11px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#5FC2D9;margin-bottom:16px">08 — ICÔNES</div>
+  <h2 style="font:600 38px/1.1 Sora,sans-serif;letter-spacing:-.028em;margin:0 0 14px">Lucide, trait 1.75px</h2>
+  <p style="font:300 16px/1.65 Manrope,sans-serif;color:rgba(242,242,242,.58);max-width:62ch;margin:0 0 40px;text-wrap:pretty">Un seul jeu, en trait ouvert, jamais rempli. Trois tailles : 16px dans les boutons et les lignes, 20px dans la navigation, 34px dans les états vides. Voici les icônes dont un logiciel de stock a réellement besoin.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:12px">
+    <sc-for list="{{ icons }}" as="ic" hint-placeholder-count="24">
+      <div style="padding:18px 12px 14px;border-radius:16px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;align-items:center;gap:10px;transition:all .24s ease" style-hover="background:rgba(95,194,217,.14);border-color:rgba(95,194,217,.4);transform:translateY(-2px)">
+        <i data-lucide="{{ ic.n }}" style="font-size:22px;color:#5FC2D9"></i>
+        <span style="font:500 10.5px/1.3 Manrope,sans-serif;color:rgba(242,242,242,.6);text-align:center">{{ ic.l }}</span>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section id="app" style="max-width:1240px;margin:0 auto;padding:70px 40px 40px;border-top:1px solid rgba(242,242,242,.10)">
+  <div style="font:500 11px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#5FC2D9;margin-bottom:16px">09 — ÉCRAN TYPE</div>
+  <h2 style="font:600 38px/1.1 Sora,sans-serif;letter-spacing:-.028em;margin:0 0 14px">Tout appliqué : le tableau de bord</h2>
+  <p style="font:300 16px/1.65 Manrope,sans-serif;color:rgba(242,242,242,.58);max-width:62ch;margin:0 0 40px;text-wrap:pretty">Le système en situation réelle. Rail de navigation en Glass 01, cartes en Glass 02, un seul bouton magenta, sélection cyan, données en mono.</p>
+
+  <div style="border-radius:28px;overflow:hidden;border:1px solid rgba(255,255,255,.14);background:linear-gradient(160deg,rgba(255,255,255,.07),rgba(255,255,255,.02));backdrop-filter:blur(30px);box-shadow:0 50px 110px -40px rgba(0,0,0,.95);display:grid;grid-template-columns:236px 1fr;min-height:640px">
+    <aside style="border-right:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);padding:24px 16px;display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;align-items:center;gap:11px;padding:0 8px 24px">
+        <div style="width:34px;height:34px;border-radius:11px;background:linear-gradient(145deg,#F2138E,#BF2178);display:grid;place-items:center;color:#fff;font-size:17px;box-shadow:0 8px 20px -8px rgba(242,19,142,.8),inset 0 1px 0 rgba(255,255,255,.4)"><i data-lucide="boxes"></i></div>
+        <span style="font:600 14px/1 Sora,sans-serif;letter-spacing:-.01em">STOKA</span>
+      </div>
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="6">
+        <div onClick="{{ n.onClick }}" style="{{ n.style }}"><i data-lucide="{{ n.icon }}" style="font-size:17px"></i>{{ n.label }}<span style="{{ n.badgeStyle }}">{{ n.badge }}</span></div>
+      </sc-for>
+      <div style="margin-top:auto;padding:16px;border-radius:16px;background:rgba(242,19,142,.1);border:1px solid rgba(242,19,142,.28)">
+        <div style="display:flex;align-items:center;gap:8px;font:600 12px/1 Manrope,sans-serif;color:#F55FAB;margin-bottom:8px"><i data-lucide="triangle-alert" style="font-size:14px"></i>3 ruptures</div>
+        <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:rgba(242,242,242,.55)">Réapprovisionnement à valider avant vendredi.</div>
+      </div>
+    </aside>
+
+    <main style="padding:26px 28px 34px;position:relative">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:26px">
+        <div style="flex:1">
+          <div style="font:600 25px/1.15 Sora,sans-serif;letter-spacing:-.025em">Inventaire</div>
+          <div style="font:400 12.5px/1 Manrope,sans-serif;color:rgba(242,242,242,.48);margin-top:6px">1 482 références · mis à jour il y a 4 min</div>
+        </div>
+        <button style="width:40px;height:40px;border-radius:13px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#F2F2F2;font-size:17px;cursor:pointer" style-hover="background:rgba(255,255,255,.15)"><i data-lucide="search"></i></button>
+        <button style="width:40px;height:40px;border-radius:13px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#F2F2F2;font-size:17px;cursor:pointer" style-hover="background:rgba(255,255,255,.15)"><i data-lucide="filter"></i></button>
+        <button style="display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.22);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -12px rgba(242,19,142,.85),inset 0 1px 0 rgba(255,255,255,.42)" style-hover="filter:brightness(1.1);transform:translateY(-1px)"><i data-lucide="package-plus" style="font-size:16px"></i>Nouvelle entrée</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px">
+        <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+          <div style="padding:18px;border-radius:20px;background:linear-gradient(150deg,rgba(255,255,255,.085),rgba(255,255,255,.025));border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(22px);box-shadow:inset 0 1px 0 rgba(255,255,255,.18);transition:transform .4s cubic-bezier(.22,1,.36,1),box-shadow .4s" style-hover="transform:translateY(-3px);box-shadow:0 22px 44px -20px rgba(0,0,0,.85),inset 0 1px 0 rgba(255,255,255,.26)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+              <span style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:rgba(242,242,242,.45)">{{ k.label }}</span>
+              <i data-lucide="{{ k.icon }}" style="font-size:15px;color:{{ k.color }}"></i>
+            </div>
+            <div style="font:500 27px/1 'JetBrains Mono',monospace;letter-spacing:-.03em;margin-bottom:8px">{{ k.value }}</div>
+            <div style="font:500 11.5px/1 Manrope,sans-serif;color:{{ k.color }}">{{ k.delta }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:linear-gradient(150deg,rgba(255,255,255,.06),rgba(255,255,255,.02));backdrop-filter:blur(22px)">
+        <div style="display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.1)">
+          <span style="padding:6px 12px;border-radius:999px;font:600 11.5px/1 Manrope,sans-serif;background:rgba(95,194,217,.18);color:#5FC2D9;border:1px solid rgba(95,194,217,.4)">Tous</span>
+          <span style="padding:6px 12px;border-radius:999px;font:600 11.5px/1 Manrope,sans-serif;background:rgba(255,255,255,.05);color:rgba(242,242,242,.6);border:1px solid rgba(255,255,255,.1)">Seuil bas</span>
+          <span style="padding:6px 12px;border-radius:999px;font:600 11.5px/1 Manrope,sans-serif;background:rgba(255,255,255,.05);color:rgba(242,242,242,.6);border:1px solid rgba(255,255,255,.1)">Rupture</span>
+          <span style="margin-left:auto;font:400 11.5px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.4)">8 / 1482</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1.6fr 1fr .9fr .8fr 110px;padding:13px 18px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.09);font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:rgba(242,242,242,.45)">
+          <div>ARTICLE</div><div>EMPLACEMENT</div><div>DERNIER MVT</div><div style="text-align:right">STOCK</div><div style="text-align:right">ÉTAT</div>
+        </div>
+        <sc-for list="{{ stock }}" as="s" hint-placeholder-count="8">
+          <div style="display:grid;grid-template-columns:1.6fr 1fr .9fr .8fr 110px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.055);align-items:center;transition:background .2s" style-hover="background:rgba(255,255,255,.045)">
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <span style="font:600 13px/1.25 Manrope,sans-serif">{{ s.nom }}</span>
+              <span style="font:400 10.5px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.4)">{{ s.sku }}</span>
+            </div>
+            <div style="font:400 12px/1.3 Manrope,sans-serif;color:rgba(242,242,242,.58)">{{ s.zone }}</div>
+            <div style="font:400 11.5px/1 'JetBrains Mono',monospace;color:rgba(242,242,242,.45)">{{ s.mvt }}</div>
+            <div style="text-align:right;font:500 13px/1 'JetBrains Mono',monospace">{{ s.qty }}</div>
+            <div style="text-align:right"><span style="{{ s.tagStyle }}">{{ s.etat }}</span></div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="position:absolute;right:28px;bottom:26px"><button style="{{ fabSmallStyle }}"><i data-lucide="scan-barcode" style="font-size:20px"></i></button></div>
+    </main>
+  </div>
+
+  <p style="font:400 13px/1.7 Manrope,sans-serif;color:rgba(242,242,242,.45);margin:32px 0 0;max-width:70ch;text-wrap:pretty">Prochaines étapes possibles : l'écran d'enregistrement d'une entrée (formulaire + scan), la fiche article avec historique des mouvements, la version claire du système pour l'impression des bons, et les états vides / erreurs.</p>
+</section>
+
+<div style="height:60px"></div>
+</div>
+
+<sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeModal }}" style="position:fixed;inset:0;z-index:60;background:rgba(13,13,13,.55);backdrop-filter:blur(20px);display:grid;place-items:center;padding:24px;animation:rise .3s cubic-bezier(.22,1,.36,1)">
+    <div style="width:min(520px,100%);border-radius:28px;padding:32px;background:linear-gradient(150deg,rgba(255,255,255,.22),rgba(255,255,255,.09));border:1px solid rgba(255,255,255,.28);backdrop-filter:blur(48px) saturate(190%);box-shadow:0 40px 90px -24px rgba(0,0,0,.9),0 0 60px -30px rgba(242,19,142,.5),inset 0 1px 0 rgba(255,255,255,.5);animation:rise .42s cubic-bezier(.22,1,.36,1)">
+      <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:22px">
+        <span style="width:40px;height:40px;border-radius:13px;background:linear-gradient(145deg,#F2138E,#BF2178);display:grid;place-items:center;color:#fff;font-size:19px;flex:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.4)"><i data-lucide="package-minus"></i></span>
+        <div style="flex:1">
+          <div style="font:600 20px/1.25 Sora,sans-serif;letter-spacing:-.02em;margin-bottom:8px">Confirmer la sortie de stock</div>
+          <div style="font:400 13.5px/1.6 Manrope,sans-serif;color:rgba(242,242,242,.65)">42 unités de <strong style="font-weight:600">Palette bois EUR 120×80</strong> seront retirées de l'entrepôt Nord. Le mouvement sera enregistré et horodaté.</div>
+        </div>
+      </div>
+      <div style="padding:14px 16px;border-radius:14px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.12);font:400 12.5px/1.6 'JetBrains Mono',monospace;color:rgba(242,242,242,.7);margin-bottom:24px">
+        SKU-4482-B<br>Stock après opération : <span style="color:#F5A524">86 u.</span> — sous le seuil (120)
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button onClick="{{ closeModal }}" style="padding:12px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#F2F2F2;font:600 13.5px/1 Manrope,sans-serif;cursor:pointer">Annuler</button>
+        <button onClick="{{ closeModal }}" style="display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border-radius:14px;border:1px solid rgba(255,255,255,.24);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -12px rgba(242,19,142,.9),inset 0 1px 0 rgba(255,255,255,.42)"><i data-lucide="check" style="font-size:16px"></i>Confirmer la sortie</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeDrawer }}" style="position:fixed;inset:0;z-index:60;background:rgba(13,13,13,.5);backdrop-filter:blur(14px)">
+    <div style="position:absolute;top:0;right:0;bottom:0;width:min(420px,92vw);padding:30px 28px;background:linear-gradient(200deg,rgba(255,255,255,.18),rgba(255,255,255,.07));border-left:1px solid rgba(255,255,255,.22);backdrop-filter:blur(48px) saturate(180%);box-shadow:-40px 0 90px -30px rgba(0,0,0,.9);animation:rise .4s cubic-bezier(.22,1,.36,1)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:26px">
+        <div style="font:600 18px/1.2 Sora,sans-serif;letter-spacing:-.02em;flex:1">Fiche article</div>
+        <button onClick="{{ closeDrawer }}" style="width:34px;height:34px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#F2F2F2;cursor:pointer;display:grid;place-items:center"><i data-lucide="x" style="font-size:16px"></i></button>
+      </div>
+      <div style="font:500 11px/1 'JetBrains Mono',monospace;letter-spacing:.16em;color:#5FC2D9;margin-bottom:10px">SKU-4482-B</div>
+      <div style="font:600 22px/1.25 Sora,sans-serif;letter-spacing:-.02em;margin-bottom:22px">Palette bois EUR 120×80</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;justify-content:space-between;padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)"><span style="font:400 13px Manrope,sans-serif;color:rgba(242,242,242,.6)">Stock actuel</span><span style="font:500 13px 'JetBrains Mono',monospace">128 u.</span></div>
+        <div style="display:flex;justify-content:space-between;padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)"><span style="font:400 13px Manrope,sans-serif;color:rgba(242,242,242,.6)">Seuil d'alerte</span><span style="font:500 13px 'JetBrains Mono',monospace;color:#F5A524">120 u.</span></div>
+        <div style="display:flex;justify-content:space-between;padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)"><span style="font:400 13px Manrope,sans-serif;color:rgba(242,242,242,.6)">Emplacement</span><span style="font:500 13px 'JetBrains Mono',monospace">NORD · A-14</span></div>
+      </div>
+      <div style="margin-top:24px;display:flex;gap:10px">
+        <button style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:13px;border-radius:14px;border:1px solid rgba(255,255,255,.24);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1 Manrope,sans-serif;cursor:pointer"><i data-lucide="arrow-down-to-line" style="font-size:16px"></i>Entrée</button>
+        <button style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:13px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#F2F2F2;font:600 13.5px/1 Manrope,sans-serif;cursor:pointer"><i data-lucide="arrow-up-from-line" style="font-size:16px"></i>Sortie</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;z-index:70;bottom:28px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:13px;padding:15px 20px;border-radius:18px;background:linear-gradient(150deg,rgba(255,255,255,.2),rgba(255,255,255,.08));border:1px solid rgba(255,255,255,.26);backdrop-filter:blur(40px) saturate(180%);box-shadow:0 26px 60px -20px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.42);animation:rise .34s cubic-bezier(.22,1,.36,1)">
+    <span style="width:30px;height:30px;border-radius:10px;background:#3FD69A;display:grid;place-items:center;color:#06281B;font-size:16px;flex:none"><i data-lucide="check"></i></span>
+    <div>
+      <div style="font:600 13.5px/1.2 Manrope,sans-serif">Entrée enregistrée</div>
+      <div style="font:400 11.5px/1.3 'JetBrains Mono',monospace;color:rgba(242,242,242,.55);margin-top:3px">+42 u. · SKU-4482-B · NORD A-14</div>
+    </div>
+    <button onClick="{{ hideToast }}" style="width:28px;height:28px;border-radius:9px;border:0;background:transparent;color:rgba(242,242,242,.5);cursor:pointer;display:grid;place-items:center"><i data-lucide="x" style="font-size:14px"></i></button>
+  </div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;motion&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Mouvement&quot;},&quot;glow&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0,&quot;max&quot;:1.6,&quot;step&quot;:0.1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Mouvement&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;confortable&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;confortable&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Densité&quot;}}">
+class Component extends DCLogic {
+  state = {
+    seg: 0, tA: true, tB: false,
+    chips: [false, true, false, true, false],
+    sel: { 1: true, 3: true },
+    depot: 1, nav: 1,
+    modalOpen: false, drawerOpen: false, toastOn: false,
+    counter: 0
+  };
+
+  componentDidMount() {
+    this.icons();
+    this.cTimer = setInterval(() => {
+      if (this.props.motion === false) return;
+      this.setState(s => ({ counter: s.counter >= 1482 ? 0 : Math.min(1482, s.counter + 37) }));
+    }, 90);
+  }
+  componentDidUpdate() { this.icons(); }
+  componentWillUnmount() { clearInterval(this.cTimer); clearTimeout(this.tTimer); }
+  icons() {
+    if (window.lucide) { try { window.lucide.createIcons(); } catch (e) {} }
+    else setTimeout(() => { if (window.lucide) { try { window.lucide.createIcons(); } catch (e) {} } }, 400);
+  }
+
+  get anim() { return this.props.motion === false ? 'paused' : 'running'; }
+
+  renderVals() {
+    const s = this.state;
+    const glow = this.props.glow ?? 1;
+    const compact = (this.props.density ?? 'confortable') === 'compact';
+    const rowPad = compact ? '11px 20px' : '16px 20px';
+    const ease = 'cubic-bezier(.22,1,.36,1)';
+
+    const segLabels = ['Liste', 'Cartes', 'Carte 3D'];
+    const segOpts = segLabels.map((label, i) => ({
+      label,
+      onClick: () => this.setState({ seg: i }),
+      style: `position:relative;z-index:1;padding:10px 16px;border:0;background:transparent;cursor:pointer;font:600 13px/1 Manrope,sans-serif;color:${i === s.seg ? '#0D0D0D' : 'rgba(242,242,242,.6)'};transition:color .3s ${ease}`
+    }));
+
+    const chipLabels = ['Entrepôt Nord', 'Seuil bas', 'Fournisseur A', 'Août 2026', 'Périssable'];
+    const chips = chipLabels.map((label, i) => {
+      const on = s.chips[i];
+      return {
+        label, onClick: () => this.setState(st => { const c = st.chips.slice(); c[i] = !c[i]; return { chips: c }; }),
+        style: `padding:8px 14px;border-radius:999px;cursor:pointer;font:600 12px/1 Manrope,sans-serif;transition:all .26s ${ease};backdrop-filter:blur(14px);` +
+          (on ? 'background:rgba(95,194,217,.2);border:1px solid rgba(95,194,217,.5);color:#5FC2D9;'
+              : 'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:rgba(242,242,242,.62);')
+      };
+    });
+
+    const data = [
+      { nom: 'Palette bois EUR 120×80', sku: 'SKU-4482-B', zone: 'NORD · A-14', qty: '128', st: 'warn' },
+      { nom: 'Carton double cannelure', sku: 'SKU-1190-C', zone: 'NORD · B-02', qty: '3 420', st: 'ok' },
+      { nom: 'Film étirable 17µ', sku: 'SKU-7731-A', zone: 'SUD · C-08', qty: '0', st: 'out' },
+      { nom: 'Sangle polyester 25mm', sku: 'SKU-2204-D', zone: 'SUD · C-11', qty: '860', st: 'ok' },
+      { nom: 'Étiquette thermique 100×150', sku: 'SKU-6650-E', zone: 'EST · D-03', qty: '74', st: 'warn' }
+    ];
+    const qtyCol = { ok: '#F2F2F2', warn: '#F5A524', out: '#F55FAB' };
+    const rows = data.map((d, i) => {
+      const on = !!s.sel[i];
+      return {
+        nom: d.nom, sku: d.sku, zone: d.zone, qty: d.qty, qtyColor: qtyCol[d.st],
+        mark: on ? '✓' : '',
+        onClick: () => this.setState(st => { const n = { ...st.sel }; if (n[i]) delete n[i]; else n[i] = true; return { sel: n }; }),
+        style: `display:grid;grid-template-columns:44px 1fr 120px 96px;padding:${rowPad};border-bottom:1px solid rgba(255,255,255,.055);align-items:center;cursor:pointer;transition:background .22s,box-shadow .22s;` +
+          (on ? 'background:rgba(95,194,217,.12);box-shadow:inset 3px 0 0 #5FC2D9;' : 'background:transparent;'),
+        boxStyle: `width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font:600 12px/1 Manrope,sans-serif;transition:all .22s ${ease};` +
+          (on ? 'background:#5FC2D9;border:1.5px solid #5FC2D9;color:#08252C;' : 'background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.26);color:transparent;')
+      };
+    });
+    const selCount = Object.keys(s.sel).length;
+
+    const depotData = [{ nom: 'Entrepôt Nord', code: 'WH-NORD', qty: '842 réf.' }, { nom: 'Entrepôt Sud', code: 'WH-SUD', qty: '511 réf.' }, { nom: 'Dépôt Est', code: 'WH-EST', qty: '129 réf.' }];
+    const depots = depotData.map((d, i) => {
+      const on = s.depot === i;
+      return {
+        nom: d.nom, code: d.code, qty: d.qty,
+        onClick: () => this.setState({ depot: i }),
+        style: `display:flex;align-items:center;gap:13px;padding:14px 15px;border-radius:15px;cursor:pointer;transition:all .28s ${ease};` +
+          (on ? 'background:rgba(95,194,217,.14);border:1.5px solid #5FC2D9;box-shadow:0 0 0 3px rgba(95,194,217,.14);'
+              : 'background:rgba(255,255,255,.045);border:1.5px solid rgba(255,255,255,.1);'),
+        dotStyle: `width:18px;height:18px;border-radius:999px;flex:none;display:grid;place-items:center;transition:all .24s;` +
+          (on ? 'border:5px solid #5FC2D9;background:#0D0D0D;' : 'border:1.5px solid rgba(255,255,255,.28);')
+      };
+    });
+
+    const navData = [
+      { label: 'Tableau de bord', icon: 'layout-dashboard', badge: '' },
+      { label: 'Inventaire', icon: 'boxes', badge: '' },
+      { label: 'Entrées', icon: 'arrow-down-to-line', badge: '12' },
+      { label: 'Sorties', icon: 'arrow-up-from-line', badge: '' },
+      { label: 'Fournisseurs', icon: 'truck', badge: '' },
+      { label: 'Historique', icon: 'history', badge: '' },
+      { label: 'Réglages', icon: 'settings', badge: '' }
+    ];
+    const nav = navData.map((n, i) => {
+      const on = s.nav === i;
+      return {
+        label: n.label, icon: n.icon, badge: n.badge,
+        onClick: () => this.setState({ nav: i }),
+        style: `display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:13px;cursor:pointer;font:${on ? 600 : 500} 13px/1 Manrope,sans-serif;transition:all .26s ${ease};` +
+          (on ? 'background:rgba(95,194,217,.14);color:#F2F2F2;box-shadow:inset 2px 0 0 #5FC2D9;' : 'background:transparent;color:rgba(242,242,242,.58);'),
+        badgeStyle: n.badge
+          ? 'margin-left:auto;padding:3px 8px;border-radius:999px;background:rgba(242,19,142,.22);border:1px solid rgba(242,19,142,.42);color:#F55FAB;font:600 10px/1 "JetBrains Mono",monospace'
+          : 'display:none'
+      };
+    });
+
+    const kpis = [
+      { label: 'RÉFÉRENCES', value: '1 482', delta: '+24 ce mois', icon: 'boxes', color: '#5FC2D9' },
+      { label: 'VALEUR STOCK', value: '284 k€', delta: '+3,1 %', icon: 'chart-line', color: '#3FD69A' },
+      { label: 'SEUIL BAS', value: '17', delta: 'à surveiller', icon: 'triangle-alert', color: '#F5A524' },
+      { label: 'RUPTURES', value: '3', delta: 'action requise', icon: 'package-x', color: '#F2138E' }
+    ];
+
+    const tag = (c, bg, bd) => `display:inline-flex;padding:5px 10px;border-radius:999px;font:600 10.5px/1 Manrope,sans-serif;color:${c};background:${bg};border:1px solid ${bd}`;
+    const tags = {
+      ok: tag('#3FD69A', 'rgba(63,214,154,.14)', 'rgba(63,214,154,.34)'),
+      warn: tag('#F5A524', 'rgba(245,165,36,.14)', 'rgba(245,165,36,.34)'),
+      out: tag('#F55FAB', 'rgba(242,19,142,.16)', 'rgba(242,19,142,.4)'),
+      tr: tag('#5FC2D9', 'rgba(95,194,217,.14)', 'rgba(95,194,217,.34)')
+    };
+    const labels = { ok: 'Sain', warn: 'Seuil bas', out: 'Rupture', tr: 'En transit' };
+    const stockData = [
+      { nom: 'Carton double cannelure', sku: 'SKU-1190-C', zone: 'NORD · B-02', mvt: '28/08 09:14', qty: '3 420', st: 'ok' },
+      { nom: 'Palette bois EUR 120×80', sku: 'SKU-4482-B', zone: 'NORD · A-14', mvt: '28/08 08:02', qty: '128', st: 'warn' },
+      { nom: 'Film étirable 17µ', sku: 'SKU-7731-A', zone: 'SUD · C-08', mvt: '27/08 17:41', qty: '0', st: 'out' },
+      { nom: 'Sangle polyester 25mm', sku: 'SKU-2204-D', zone: 'SUD · C-11', mvt: '27/08 15:20', qty: '860', st: 'ok' },
+      { nom: 'Étiquette thermique 100×150', sku: 'SKU-6650-E', zone: 'EST · D-03', mvt: '27/08 11:08', qty: '74', st: 'warn' },
+      { nom: 'Adhésif PP 48mm', sku: 'SKU-3312-F', zone: 'NORD · B-09', mvt: '26/08 16:55', qty: '1 204', st: 'ok' },
+      { nom: 'Coin de protection carton', sku: 'SKU-8820-G', zone: 'EST · D-07', mvt: '26/08 10:30', qty: '640', st: 'tr' },
+      { nom: 'Housse palette 150µ', sku: 'SKU-5507-H', zone: 'SUD · C-02', mvt: '25/08 14:12', qty: '0', st: 'out' }
+    ];
+    const stock = stockData.map(d => ({ ...d, etat: labels[d.st], tagStyle: tags[d.st] }));
+
+    const skel = w => `height:12px;width:${w};border-radius:6px;background:linear-gradient(90deg,rgba(255,255,255,.06) 25%,rgba(255,255,255,.18) 50%,rgba(255,255,255,.06) 75%);background-size:200% 100%;animation:shimmerBar 1.6s linear infinite;animation-play-state:${this.anim}`;
+
+    return {
+      typeScale: [
+        { role: 'Display', font: 'Sora 600', size: '48 / 76 px', lh: '1.02' },
+        { role: 'Titre page', font: 'Sora 600', size: '25 px', lh: '1.15' },
+        { role: 'Titre section', font: 'Sora 600', size: '38 px', lh: '1.10' },
+        { role: 'Titre carte', font: 'Sora 600', size: '17 px', lh: '1.25' },
+        { role: 'Corps', font: 'Manrope 400', size: '15 / 17 px', lh: '1.60' },
+        { role: 'Libellé UI', font: 'Manrope 600', size: '13 / 14 px', lh: '1.00' },
+        { role: 'Sur-titre', font: 'JetBrains Mono 500 · +0.18em', size: '10.5 px', lh: '1.00' },
+        { role: 'Donnée / SKU', font: 'JetBrains Mono 500', size: '13 / 27 px', lh: '1.00' }
+      ],
+      motionTokens: [
+        { token: 'motion-instant', dur: '90 ms', ease: 'ease-out', use: 'Appui, case cochée' },
+        { token: 'motion-fast', dur: '180 ms', ease: 'ease', use: 'Survol de ligne, infobulle' },
+        { token: 'motion-base', dur: '280 ms', ease: 'cubic-bezier(.22,1,.36,1)', use: 'Boutons, puces, sélection' },
+        { token: 'motion-glass', dur: '320 ms', ease: 'cubic-bezier(.22,1,.36,1)', use: 'Curseur segmenté, tiroir' },
+        { token: 'motion-layer', dur: '420 ms', ease: 'cubic-bezier(.22,1,.36,1)', use: 'Modale, palette ⌘K' },
+        { token: 'motion-data', dur: '520 ms', ease: 'cubic-bezier(.33,1,.68,1)', use: 'Compteurs, graphiques' },
+        { token: 'motion-ambient', dur: '8 – 22 s', ease: 'ease-in-out', use: 'Sphères de fond, carte 3D' }
+      ],
+      icons: [
+        { n: 'boxes', l: 'Inventaire' }, { n: 'package', l: 'Article' }, { n: 'package-plus', l: 'Entrée' }, { n: 'package-minus', l: 'Sortie' },
+        { n: 'package-x', l: 'Rupture' }, { n: 'warehouse', l: 'Entrepôt' }, { n: 'scan-barcode', l: 'Scanner' }, { n: 'clipboard-list', l: 'Inventaire tour.' },
+        { n: 'truck', l: 'Fournisseur' }, { n: 'arrow-down-to-line', l: 'Réception' }, { n: 'arrow-up-from-line', l: 'Expédition' }, { n: 'history', l: 'Historique' },
+        { n: 'triangle-alert', l: 'Alerte' }, { n: 'chart-line', l: 'Rapport' }, { n: 'map-pin', l: 'Emplacement' }, { n: 'tag', l: 'Étiquette' },
+        { n: 'search', l: 'Recherche' }, { n: 'filter', l: 'Filtre' }, { n: 'refresh-cw', l: 'Actualiser' }, { n: 'file-spreadsheet', l: 'Export' },
+        { n: 'bell', l: 'Notifs' }, { n: 'users', l: 'Équipe' }, { n: 'settings', l: 'Réglages' }, { n: 'layout-dashboard', l: 'Tableau bord' },
+        { n: 'plus', l: 'Ajouter' }, { n: 'pencil', l: 'Modifier' }, { n: 'trash-2', l: 'Supprimer' }, { n: 'check', l: 'Valider' }
+      ],
+      segOpts, chips, rows, selCount, depots, nav, kpis, stock,
+      counter: s.counter.toLocaleString('fr-FR'),
+
+      segIndicatorStyle: `position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px)/3);transform:translateX(${s.seg * 100}%);border-radius:11px;background:#F2F2F2;box-shadow:0 6px 16px -6px rgba(0,0,0,.7);transition:transform .32s ${ease}`,
+
+      switchAStyle: this.sw(s.tA), knobAStyle: this.knob(s.tA),
+      switchBStyle: this.sw(s.tB), knobBStyle: this.knob(s.tB),
+      toggleA: () => this.setState(st => ({ tA: !st.tA })),
+      toggleB: () => this.setState(st => ({ tB: !st.tB })),
+
+      clearSel: () => this.setState({ sel: {} }),
+      selBarStyle: `display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.1);background:rgba(95,194,217,.10);transition:opacity .3s ${ease};` + (selCount ? 'opacity:1' : 'opacity:.35;pointer-events:none'),
+
+      spinnerStyle: `width:16px;height:16px;border-radius:999px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite;animation-play-state:${this.anim};display:inline-block`,
+
+      fabStyle: `display:inline-flex;align-items:center;gap:10px;padding:15px 24px;border-radius:999px;border:1px solid rgba(255,255,255,.26);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 14px/1 Manrope,sans-serif;cursor:pointer;box-shadow:0 18px 40px -14px rgba(242,19,142,.9),inset 0 1px 0 rgba(255,255,255,.45);animation:pulseRing 3s ease-out infinite;animation-play-state:${this.anim};transition:transform .3s ${ease}`,
+      fabSmallStyle: `width:54px;height:54px;border-radius:999px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.26);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;cursor:pointer;box-shadow:0 18px 40px -14px rgba(242,19,142,.9),inset 0 1px 0 rgba(255,255,255,.45);animation:pulseRing 3s ease-out infinite;animation-play-state:${this.anim}`,
+
+      tiltStyle: `width:100px;height:100px;border-radius:26px;display:grid;place-items:center;background:linear-gradient(140deg,rgba(242,19,142,.75),rgba(95,194,217,.55));border:1px solid rgba(255,255,255,.32);box-shadow:0 26px 50px -20px rgba(242,19,142,.7),inset 0 1px 0 rgba(255,255,255,.5);animation:tiltIdle 8s ease-in-out infinite;animation-play-state:${this.anim}`,
+      pulseStyle: `width:74px;height:74px;border-radius:999px;display:grid;place-items:center;background:linear-gradient(145deg,#F2138E,#BF2178);border:1px solid rgba(255,255,255,.3);animation:pulseRing 3s ease-out infinite;animation-play-state:${this.anim}`,
+      skelA: skel('100%'), skelB: skel('72%'), skelC: skel('45%'),
+
+      orbAStyle: `position:absolute;top:-160px;left:-120px;width:620px;height:620px;border-radius:999px;background:radial-gradient(circle at 35% 35%,rgba(242,19,142,${0.34 * glow}),transparent 68%);filter:blur(60px);animation:floatOrb 22s ease-in-out infinite;animation-play-state:${this.anim}`,
+      orbBStyle: `position:absolute;bottom:-220px;right:-140px;width:700px;height:700px;border-radius:999px;background:radial-gradient(circle at 60% 40%,rgba(95,194,217,${0.26 * glow}),transparent 66%);filter:blur(70px);animation:driftOrb 26s ease-in-out infinite;animation-play-state:${this.anim}`,
+
+      modalOpen: s.modalOpen, drawerOpen: s.drawerOpen, toastOn: s.toastOn,
+      openModal: () => this.setState({ modalOpen: true }),
+      closeModal: () => this.setState({ modalOpen: false }),
+      openDrawer: () => this.setState({ drawerOpen: true }),
+      closeDrawer: () => this.setState({ drawerOpen: false }),
+      hideToast: () => this.setState({ toastOn: false }),
+      fireToast: () => {
+        this.setState({ toastOn: true });
+        clearTimeout(this.tTimer);
+        this.tTimer = setTimeout(() => this.setState({ toastOn: false }), 4200);
+      }
+    };
+  }
+
+  sw(on) {
+    return `position:relative;width:50px;height:28px;border-radius:999px;border:1px solid ${on ? 'rgba(242,19,142,.6)' : 'rgba(255,255,255,.16)'};background:${on ? 'linear-gradient(145deg,#F2138E,#BF2178)' : 'rgba(255,255,255,.06)'};cursor:pointer;padding:0;transition:all .3s cubic-bezier(.22,1,.36,1);box-shadow:${on ? '0 8px 20px -8px rgba(242,19,142,.8),inset 0 1px 0 rgba(255,255,255,.4)' : 'inset 0 1px 0 rgba(255,255,255,.14)'}`;
+  }
+  knob(on) {
+    return `position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:999px;background:${on ? '#fff' : 'rgba(242,242,242,.75)'};transform:translateX(${on ? 22 : 0}px);transition:transform .3s cubic-bezier(.22,1,.36,1),background .3s;box-shadow:0 3px 8px rgba(0,0,0,.5)`;
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/modernist-ccc26aa6-06b7-41cc-8036-726514f699d8/styles.css">
+<script src="_ds/modernist-ccc26aa6-06b7-41cc-8036-726514f699d8/_ds_bundle.js"></script>
+<script src="./doc-page.js"></script>
+<style>
+doc-page:not(:defined){visibility:hidden}
+.k{display:inline-block;width:11px;height:11px;border:2px solid var(--color-text);margin-right:10px;flex:none;position:relative;top:2px}
+.step{display:flex;gap:0;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--color-neutral-200)}
+.step:last-child{border-bottom:0}
+.num{font-family:var(--font-heading);font-weight:700;font-size:11px;width:26px;flex:none;color:var(--color-accent-700)}
+.lab{font-family:var(--font-heading);font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent-700)}
+.blk{break-inside:avoid;orphans:3;widows:3}
+</style>
+</helmet>
+
+<doc-page margin="0.7in">
+
+  <div slot="header" style="display:flex;align-items:baseline;gap:14px;padding-bottom:8px;border-bottom:2px solid var(--color-divider);font-family:var(--font-heading);font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase">
+    <span>La Lunetterie</span>
+    <span style="color:var(--color-accent-700)">Parcours de test</span>
+    <span style="margin-left:auto;font-weight:400;letter-spacing:.1em">v1 · 29.08.2026</span>
+  </div>
+
+  <div slot="footer" style="display:flex;align-items:baseline;gap:12px;padding-top:8px;border-top:2px solid var(--color-divider);font-family:var(--font-body);font-size:9.5px;letter-spacing:.06em">
+    <span>Suivi de stock — quatre postes</span>
+    <span style="margin-left:auto">Cocher chaque case après vérification</span>
+  </div>
+
+  <div class="lab" style="margin-bottom:12px">Protocole de recette</div>
+  <h1 style="font-family:var(--font-heading);font-size:40px;line-height:1.04;letter-spacing:-.02em;margin:0 0 16px;max-width:22ch">Parcours de test complet</h1>
+  <p style="font-size:13px;line-height:1.6;margin:0 0 18px;max-width:70ch">Ce document parcourt les quatre postes dans l'ordre réel de la chaîne, du bon de commande fournisseur jusqu'à la vente en boutique, puis le chemin retour. Chaque bouton de l'application y est atteint au moins une fois. Les six variations de la seconde partie couvrent les cas d'exception : refus, panne de lecteur, rupture, transfert entre magasins.</p>
+
+  <div class="hr" style="margin:0 0 18px"></div>
+
+  <div class="blk" style="display:flex;gap:0;border-bottom:2px solid var(--color-divider);padding-bottom:14px;margin-bottom:14px">
+    <div style="flex:1;padding-right:18px">
+      <div class="lab" style="margin-bottom:8px">Avant de commencer</div>
+      <p style="font-size:12px;line-height:1.6;margin:0">Les quatre pages partagent une même base. Pour repartir de zéro, ouvrir n'importe quelle page et vider la base depuis la console du navigateur, ou simplement dérouler le parcours dans l'ordre : chaque étape prépare la suivante.</p>
+    </div>
+    <div style="flex:1;padding-left:18px;border-left:2px solid var(--color-divider)">
+      <div class="lab" style="margin-bottom:8px">Ordre des pages</div>
+      <p style="font-size:12px;line-height:1.6;margin:0">Connexion → Admin → Pré-enregistrement → Stock général → Responsable magasin. La molette de la page de connexion donne accès aux quatre rôles.</p>
+    </div>
+  </div>
+
+  <h2 style="font-family:var(--font-heading);font-size:22px;line-height:1.15;letter-spacing:-.01em;margin:22px 0 4px">Partie 1 — Le parcours nominal</h2>
+  <p style="font-size:12px;line-height:1.6;margin:0 0 20px;max-width:68ch">Douze séquences enchaînées. À la fin, une monture est née d'un bon de commande, a traversé quatre postes et a été vendue.</p>
+
+  <div class="blk" style="margin-bottom:22px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--color-divider);padding-bottom:7px;margin-bottom:10px">
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:15px">A. Connexion</span>
+      <span style="margin-left:auto;font-family:var(--font-body);font-size:10px;letter-spacing:.1em;text-transform:uppercase">Connexion.dc.html</span>
+    </div>
+    <div class="step"><span class="num">01</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Faire défiler la molette des rôles à la molette de souris, puis au glisser, puis aux flèches haut et bas. Vérifier que l'avatar, le sur-titre, le titre et la description changent tous les quatre.</span></div>
+    <div class="step"><span class="num">02</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Cliquer les deux chevrons de navigation, vérifier le compteur.</span></div>
+    <div class="step"><span class="num">03</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Cliquer « Se connecter » sans identifiant : la bannière d'erreur doit apparaître.</span></div>
+    <div class="step"><span class="num">04</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Saisir un identifiant, cocher « Rester connecté », basculer l'œil du mot de passe, cliquer « Mot de passe oublié ».</span></div>
+    <div class="step"><span class="num">05</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sélectionner <strong>Admin</strong> et se connecter.</span></div>
+  </div>
+
+  <div class="blk" style="margin-bottom:22px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--color-divider);padding-bottom:7px;margin-bottom:10px">
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:15px">B. Admin — le bon de commande</span>
+      <span style="margin-left:auto;font-family:var(--font-body);font-size:10px;letter-spacing:.1em;text-transform:uppercase">Admin.dc.html</span>
+    </div>
+    <div class="step"><span class="num">06</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Parcourir les six entrées du menu latéral. Ouvrir « Aide » sur chacune : le contenu doit changer d'écran en écran.</span></div>
+    <div class="step"><span class="num">07</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sur <strong>Bons de commande</strong>, cliquer « Envoyer au pré-enregistrement » sans rien remplir : le bouton doit être inactif et le message indiquer ce qui manque.</span></div>
+    <div class="step"><span class="num">08</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Remplir fournisseur, provenance, unités (3 000) et date (15/09/2026). Envoyer. Vérifier la référence générée et le code-barres sur la carte.</span></div>
+    <div class="step"><span class="num">09</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sur <strong>Validation des listes</strong>, tester les trois filtres de statut. Valider une demande, refuser une autre. Vérifier le badge de trajet « Livré par → Pour » et le message de confirmation.</span></div>
+    <div class="step"><span class="num">10</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sur <strong>Expéditions internes</strong>, choisir une origine et une destination identiques : le bouton doit se bloquer avec l'explication. Corriger, générer la liste, puis l'envoyer.</span></div>
+  </div>
+
+  <div class="blk" style="margin-bottom:22px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--color-divider);padding-bottom:7px;margin-bottom:10px">
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:15px">C. Pré-enregistrement</span>
+      <span style="margin-left:auto;font-family:var(--font-body);font-size:10px;letter-spacing:.1em;text-transform:uppercase">Pre-enregistrement.dc.html</span>
+    </div>
+    <div class="step"><span class="num">11</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Se reconnecter en <strong>Magasinier Pré-enregistrement</strong>. Sur <strong>Commandes à pré-enregistrer</strong>, tester le tri par date, le filtre de provenance et « Actualiser ».</span></div>
+    <div class="step"><span class="num">12</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Scanner le code-barres du bon envoyé à l'étape 08 : le voyant passe au vert et le bouton devient « Démarrer le pré-enregistrement ».</span></div>
+    <div class="step"><span class="num">13</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Créer une valise : nommer la couleur, choisir une pastille de teinte, renseigner gamme, genre et nombre de montures.</span></div>
+    <div class="step"><span class="num">14</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Créer les cartons de cette valise. Vérifier que les quantités pré-remplies suivent les lots de 20 ou 30, et qu'on ne peut pas dépasser le total de la valise.</span></div>
+    <div class="step"><span class="num">15</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Dans un carton, renseigner formes, marques, couleurs et matières. Ajouter une marque hors liste. Ajouter une couleur complexe (« rose transparent », « guépard »).</span></div>
+    <div class="step"><span class="num">16</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Modifier une valise puis un carton avant l'enregistrement. Supprimer un carton, le recréer.</span></div>
+    <div class="step"><span class="num">17</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Créer les valises jusqu'au total du bon : la création doit se fermer une fois le nombre atteint.</span></div>
+    <div class="step"><span class="num">18</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Expédier la commande. Vérifier qu'elle quitte la liste, passe en transit, et apparaît dans « Commandes à expédier ».</span></div>
+  </div>
+
+  <div class="blk" style="margin-bottom:22px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--color-divider);padding-bottom:7px;margin-bottom:10px">
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:15px">D. Stock général — réception et création</span>
+      <span style="margin-left:auto;font-family:var(--font-body);font-size:10px;letter-spacing:.1em;text-transform:uppercase">Stock general.dc.html</span>
+    </div>
+    <div class="step"><span class="num">19</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Se connecter en <strong>Magasinier stock général</strong>. Scanner les valises une à une : la commande ne passe « arrivée » qu'à la dernière.</span></div>
+    <div class="step"><span class="num">20</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Vérifier côté pré-enregistrement que le bon est passé de « en transit » à « arrivée au stock général », avec la date d'arrivée.</span></div>
+    <div class="step"><span class="num">21</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Ouvrir une valise, puis scanner un carton. Vérifier que la fiche affiche gamme, type, prix, genre, formes, marques, couleurs et matières sans saisie.</span></div>
+    <div class="step"><span class="num">22</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Créer une monture : forme, marque, couleur, matière, référence, photo. Cliquer « Créer l'identifiant » avant la photo : le refus doit être expliqué.</span></div>
+    <div class="step"><span class="num">23</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Ressaisir la même référence : le message doit renvoyer vers « Dupliquer ».</span></div>
+    <div class="step"><span class="num">24</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Dupliquer une monture deux fois. Vérifier le compteur « ×3 en stock » et trois identifiants distincts. Supprimer une des copies.</span></div>
+    <div class="step"><span class="num">25</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Remplir le carton jusqu'au bout : le formulaire se ferme et « Carton suivant » apparaît.</span></div>
+    <div class="step"><span class="num">26</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sur <strong>Gestion du stock</strong>, tester la recherche et les filtres marque, forme, gamme, puis « Réinitialiser ». Vérifier la colonne photo.</span></div>
+    <div class="step"><span class="num">27</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Parcourir les six onglets de « Composition du stock ». Lire « Santé du stock » : le total à commander doit correspondre à un seul axe, pas à la somme des trois.</span></div>
+    <div class="step"><span class="num">28</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Envoyer la liste de besoins à l'administrateur. Vérifier son apparition dans « Mes listes envoyées », puis chez l'admin dans « Bons de commande ». Tester « Préparer le bon », « Soldée » et « Écarter ».</span></div>
+  </div>
+
+  <div class="blk" style="margin-bottom:22px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--color-divider);padding-bottom:7px;margin-bottom:10px">
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:15px">E. Stock général — expédition</span>
+      <span style="margin-left:auto;font-family:var(--font-body);font-size:10px;letter-spacing:.1em;text-transform:uppercase">Stock general.dc.html</span>
+    </div>
+    <div class="step"><span class="num">29</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sur <strong>Commande à expédier</strong>, filtrer par magasin. Ouvrir une demande : vérifier l'origine (automatique, responsable, admin) et l'emplacement de chaque ligne.</span></div>
+    <div class="step"><span class="num">30</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Cliquer « Créer le carton » liste incomplète : le refus doit indiquer le nombre restant.</span></div>
+    <div class="step"><span class="num">31</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Scanner chaque monture : les lignes se dégrisent. Puis créer le carton et générer le QR.</span></div>
+    <div class="step"><span class="num">32</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Vérifier que « Disponibles en stock » baisse d'autant et que « Sorties vers boutiques » monte.</span></div>
+    <div class="step"><span class="num">33</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sur <strong>Scan</strong>, connecter le téléphone puis le déconnecter. Saisir un code inconnu, puis un code valide via la liste des cartons.</span></div>
+  </div>
+
+  <div class="blk" style="margin-bottom:22px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--color-divider);padding-bottom:7px;margin-bottom:10px">
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:15px">F. Responsable magasin</span>
+      <span style="margin-left:auto;font-family:var(--font-body);font-size:10px;letter-spacing:.1em;text-transform:uppercase">Responsable magasin.dc.html</span>
+    </div>
+    <div class="step"><span class="num">34</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Se connecter en <strong>Responsable magasin</strong>. Basculer entre les cinq boutiques : chaque écran doit se recharger sur la bonne.</span></div>
+    <div class="step"><span class="num">35</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sur <strong>Cartons à réceptionner</strong>, ouvrir le carton envoyé à l'étape 31. Scanner son QR : il passe de « en transit » à « en cours d'enregistrement ».</span></div>
+    <div class="step"><span class="num">36</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Scanner les montures une par une. Vérifier qu'aucun bouton ne permet de tout scanner d'un coup, et que le stock général voit l'avancement.</span></div>
+    <div class="step"><span class="num">37</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Carton clos : vérifier qu'il quitte la liste et que ses montures sont dans le stock du magasin.</span></div>
+    <div class="step"><span class="num">38</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sur <strong>Stock du magasin</strong>, parcourir les six onglets de composition et lire « Santé du stock ». Utiliser un raccourci « Demander un réassort » : la demande doit être pré-remplie avec le bon axe et le bon écart.</span></div>
+    <div class="step"><span class="num">39</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sur <strong>Mes cartons</strong>, dérouler un carton, chercher une référence, vérifier l'emplacement affiché.</span></div>
+    <div class="step"><span class="num">40</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sur <strong>Scan</strong>, appairer le téléphone puis chercher une référence en stock : vérifier le nombre restant, la répartition par site et les variantes de couleur. Chercher une référence inconnue.</span></div>
+    <div class="step"><span class="num">41</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sur <strong>Mes demandes</strong>, valider une liste automatique et en écarter une autre. Créer une demande complète : livré par, type, gamme, genre, couleur, unités, urgence, commentaire. Envoyer sans unités d'abord.</span></div>
+    <div class="step"><span class="num">42</span><span style="font-size:12px;line-height:1.55"><span class="k"></span>Sortir une monture du stock, puis en transférer une vers un autre magasin. Vérifier les deux entrées dans « Sorties vers magasins ».</span></div>
+  </div>
+
+  <div class="hr" style="margin:0 0 20px"></div>
+
+  <h2 style="font-family:var(--font-heading);font-size:22px;line-height:1.15;letter-spacing:-.01em;margin:0 0 4px">Partie 2 — Six variations</h2>
+  <p style="font-size:12px;line-height:1.6;margin:0 0 20px;max-width:68ch">Chaque variation part d'un état atteint en partie 1 et pousse le système dans un cas d'exception. Elles se jouent dans n'importe quel ordre.</p>
+
+  <div class="blk" style="border-top:2px solid var(--color-divider);padding-top:12px;margin-bottom:16px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+      <span class="lab">Variation 1</span>
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:14px">Magasin à magasin</span>
+    </div>
+    <p style="font-size:12px;line-height:1.6;margin:0 0 8px;max-width:74ch">Depuis Pointe-Noire, créer une demande dont « Livré par » est Brazzaville. Passer chez l'admin : le badge doit lire « Brazzaville → Pointe-Noire », et la validation annoncer « Transmise à Brazzaville ». Basculer sur Brazzaville : la liste apparaît dans « Mes expéditions ». Cliquer « Accepter et préparer », scanner chaque monture selon l'emplacement affiché, envoyer. Revenir sur Pointe-Noire et réceptionner le carton.</p>
+    <p style="font-size:11.5px;line-height:1.55;margin:0;color:var(--color-neutral-700)"><strong>À vérifier</strong> — le stock de Brazzaville baisse, celui de Pointe-Noire monte, et le stock général n'a pas bougé.</p>
+  </div>
+
+  <div class="blk" style="border-top:2px solid var(--color-divider);padding-top:12px;margin-bottom:16px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+      <span class="lab">Variation 2</span>
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:14px">Le refus, à trois niveaux</span>
+    </div>
+    <p style="font-size:12px;line-height:1.6;margin:0 0 8px;max-width:74ch">Refuser une liste automatique côté magasin avant transmission. Refuser une demande côté admin. Refuser une liste reçue côté magasin dans « Mes expéditions ». Écarter une liste de besoins côté admin.</p>
+    <p style="font-size:11.5px;line-height:1.55;margin:0;color:var(--color-neutral-700)"><strong>À vérifier</strong> — chaque refus retire la ligne des files d'attente sans jamais toucher au stock, et le statut refusé reste consultable.</p>
+  </div>
+
+  <div class="blk" style="border-top:2px solid var(--color-divider);padding-top:12px;margin-bottom:16px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+      <span class="lab">Variation 3</span>
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:14px">Panne de lecteur</span>
+    </div>
+    <p style="font-size:12px;line-height:1.6;margin:0 0 8px;max-width:74ch">Rejouer les étapes 12, 21 et 36 sans jamais utiliser un bouton de scan : uniquement la saisie manuelle des codes. Saisir un code vide, un code inconnu, un code appartenant à un carton déjà terminé, puis le bon code.</p>
+    <p style="font-size:11.5px;line-height:1.55;margin:0;color:var(--color-neutral-700)"><strong>À vérifier</strong> — chaque refus nomme la raison, et le chemin manuel aboutit exactement au même état que le scan.</p>
+  </div>
+
+  <div class="blk" style="border-top:2px solid var(--color-divider);padding-top:12px;margin-bottom:16px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+      <span class="lab">Variation 4</span>
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:14px">Stock à sec</span>
+    </div>
+    <p style="font-size:12px;line-height:1.6;margin:0 0 8px;max-width:74ch">Vider un stock de boutique par sorties successives jusqu'à zéro. Puis, côté stock général, ouvrir une demande dont aucune monture ne correspond.</p>
+    <p style="font-size:11.5px;line-height:1.55;margin:0;color:var(--color-neutral-700)"><strong>À vérifier</strong> — « Tout a été expédié » remplace « Stock vide », les catégories passent en critique, « Stock insuffisant » s'affiche au lieu d'une liste fantôme, et le bouton de création de carton reste bloqué.</p>
+  </div>
+
+  <div class="blk" style="border-top:2px solid var(--color-divider);padding-top:12px;margin-bottom:16px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+      <span class="lab">Variation 5</span>
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:14px">Le chemin retour</span>
+    </div>
+    <p style="font-size:12px;line-height:1.6;margin:0 0 8px;max-width:74ch">Dans le stock du magasin, choisir un motif de retour puis cliquer « Retour » sur une ligne. Suivre le retour dans « Mes expéditions », en transit, puis le confirmer.</p>
+    <p style="font-size:11.5px;line-height:1.55;margin:0;color:var(--color-neutral-700)"><strong>À vérifier</strong> — la monture disparaît du magasin, réapparaît au stock général une fois confirmée, et les compteurs des deux côtés concordent. Tester les cinq motifs.</p>
+  </div>
+
+  <div class="blk" style="border-top:2px solid var(--color-divider);padding-top:12px;margin-bottom:20px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+      <span class="lab">Variation 6</span>
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:14px">Historique et archives</span>
+    </div>
+    <p style="font-size:12px;line-height:1.6;margin:0 0 8px;max-width:74ch">Sur le pré-enregistrement, ouvrir <strong>Historique des expéditions</strong> : tester les quatre périodes et les deux tris, ouvrir le détail d'un bon, vérifier les dates d'expédition et d'arrivée, et le regroupement des archives par mois. Côté admin, ouvrir <strong>Valises et cartons</strong> et dérouler un carton éclaté entre plusieurs sites.</p>
+    <p style="font-size:11.5px;line-height:1.55;margin:0;color:var(--color-neutral-700)"><strong>À vérifier</strong> — un bon arrivé depuis plus d'un mois est archivé, et l'en-tête du carton résume correctement la répartition de son contenu.</p>
+  </div>
+
+  <div class="hr" style="margin:0 0 18px"></div>
+
+  <h2 style="font-family:var(--font-heading);font-size:22px;line-height:1.15;letter-spacing:-.01em;margin:0 0 14px">Couverture des boutons</h2>
+  <table class="table" style="font-size:11.5px">
+    <thead>
+      <tr><th>Poste</th><th>Écrans</th><th>Étapes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Connexion</td><td>Molette, formulaire, erreurs</td><td>01 – 05</td></tr>
+      <tr><td>Admin</td><td>Bons, validation, expéditions internes, vue du stock, valises et cartons, mes expéditions</td><td>06 – 10, 28, V2, V6</td></tr>
+      <tr><td>Pré-enregistrement</td><td>Commandes, valises, cartons, expédition, historique, scan</td><td>11 – 18, 20, V3, V6</td></tr>
+      <tr><td>Stock général</td><td>Réception, saisie, gestion du stock, expédition, scan, process</td><td>19 – 33, V3, V4</td></tr>
+      <tr><td>Responsable magasin</td><td>Réceptions, stock, cartons, scan, demandes, expéditions, sorties</td><td>34 – 42, V1 – V5</td></tr>
+    </tbody>
+  </table>
+
+  <div class="blk" style="border-top:2px solid var(--color-divider);margin-top:22px;padding-top:14px">
+    <div class="lab" style="margin-bottom:8px">Notes de séance</div>
+    <div style="border-bottom:1px solid var(--color-neutral-300);height:22px"></div>
+    <div style="border-bottom:1px solid var(--color-neutral-300);height:22px"></div>
+    <div style="border-bottom:1px solid var(--color-neutral-300);height:22px"></div>
+    <div style="border-bottom:1px solid var(--color-neutral-300);height:22px"></div>
+    <div style="border-bottom:1px solid var(--color-neutral-300);height:22px"></div>
+    <div style="border-bottom:1px solid var(--color-neutral-300);height:22px"></div>
+  </div>
+
+</doc-page>
+
+</x-dc>
+</body>
+</html>
