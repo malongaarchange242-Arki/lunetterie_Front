@@ -374,7 +374,7 @@ input::placeholder{color:var(--ink-34)}
                     <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onChange="{{ onPhotoSelected }}">
                     <sc-if value="{{ photoPreview }}" hint-placeholder-val="{{ false }}">
                       <div style="position:relative;border-radius:16px;overflow:hidden;background:var(--srf-74);border:1px solid var(--ink-12);margin-top:10px;max-width:400px">
-                        <img src="{{ photoPreview }}" alt="Aperçu" style="width:100%;max-height:240px;object-fit:contain;display:block">
+                        <img bindSrc="{{ photoPreview }}" alt="Aperçu" style="width:100%;max-height:240px;object-fit:contain;display:block">
                         <div style="position:absolute;top:8px;right:8px;padding:4px 10px;border-radius:999px;background:rgba(52,201,141,.9);color:#fff;font:600 10px/1.3 Manrope,sans-serif">✓ Photo</div>
                       </div>
                     </sc-if>
@@ -936,7 +936,7 @@ input::placeholder{color:var(--ink-34)}
                     <span style="{{ b.style }}"></span>
                   </sc-for>
                 </div>
-                <sc-if value="{{ pairQrReady }}" hint-placeholder-val="{{ false }}"><img src="{{ pairQrUrl }}" alt="QR d’appairage" style="display:block;width:100%;max-width:260px;margin:16px auto 0;border-radius:12px;background:#fff"></sc-if>
+                <sc-if value="{{ pairQrReady }}" hint-placeholder-val="{{ false }}"><img bindSrc="{{ pairQrUrl }}" alt="QR d’appairage" style="display:block;width:100%;max-width:260px;margin:16px auto 0;border-radius:12px;background:#fff"></sc-if>
                 <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:2px;display:none">
                 </div>
               </div>
