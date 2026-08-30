@@ -589,7 +589,10 @@ input::placeholder{color:var(--ink-34)}
           </div>
           <sc-for list="{{ stockRows }}" as="r" hint-placeholder-count="0">
             <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(140px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
-              <div style="{{ r.photoStyle }}"><span data-icon="glasses" style="display:grid;place-items:center;font-size:17px;color:var(--srf-9)"></span></div>
+              <div style="{{ r.photoStyle }}">
+                <sc-if value="{{ r.photoUrl }}" hint-placeholder-val="false"><img bindSrc="{{ r.photoUrl }}" alt="Photo monture" style="display:block;width:100%;height:100%;object-fit:cover"></sc-if>
+                <sc-if value="{{ r.photoMissing }}" hint-placeholder-val="true"><span data-icon="glasses" style="display:grid;place-items:center;font-size:17px;color:var(--srf-9)"></span></sc-if>
+              </div>
               <div style="min-width:0;font:600 12.5px/1.3 'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.ref }}</div>
               <div style="min-width:0;font:500 12.5px/1.3 Manrope,sans-serif;color:var(--ink-72)">{{ r.marque }}</div>
               <div style="min-width:0;font:500 12.5px/1.3 Manrope,sans-serif;color:var(--ink-72)">{{ r.forme }}</div>
@@ -2070,7 +2073,9 @@ class Component extends DCLogic {
             ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
             couleur: m.couleur || '—', matiere: m.matiere || '—',
             prix: this.fcfa(m.prix), uid: m.uid,
-            photoStyle: `width:46px;height:46px;border-radius:12px;flex:none;display:grid;place-items:center;background:${m.photo || 'linear-gradient(140deg,#9AA0AD,#5A6070)'};border:1px solid var(--ink-12);box-shadow:inset 0 1px 0 var(--srf-3)`
+            photoUrl: m.photo || '',
+            photoMissing: !m.photo,
+            photoStyle: `width:46px;height:46px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden;background:linear-gradient(140deg,#9AA0AD,#5A6070);border:1px solid var(--ink-12);box-shadow:inset 0 1px 0 var(--srf-3)`
           }))
         };
       })(),
