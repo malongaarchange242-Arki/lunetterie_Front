@@ -917,9 +917,9 @@ input::placeholder{color:var(--ink-34)}
         <div style="margin-bottom:30px;padding-right:238px">
           <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">LECTEUR DE CODES-BARRES</div>
           <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Scan</h1>
-          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Connectez votre téléphone comme lecteur, ou saisissez le code d'un carton à la main.</p>
+          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Connectez votre téléphone comme lecteur, ou saisissez le code d'une valise à la main.</p>
           <sc-if value="{{ scanTargetReady }}" hint-placeholder-val="{{ false }}">
-            <div style="display:inline-flex;align-items:center;gap:9px;margin-top:14px;padding:9px 13px;border-radius:12px;background:rgba(245,165,36,.14);border:1px solid rgba(166,106,5,.3);color:var(--warn-ink);font:600 12px/1.3 Manrope,sans-serif">Carton attendu : {{ scanTargetCode }}</div>
+            <div style="display:inline-flex;align-items:center;gap:9px;margin-top:14px;padding:9px 13px;border-radius:12px;background:rgba(245,165,36,.14);border:1px solid rgba(166,106,5,.3);color:var(--warn-ink);font:600 12px/1.3 Manrope,sans-serif">Valise attendue : {{ scanTargetCode }}</div>
           </sc-if>
         </div>
 
@@ -969,10 +969,10 @@ input::placeholder{color:var(--ink-34)}
               <span data-icon="keyboard" style="display:inline-grid;place-items:center;font-size:19px;color:var(--warn-ink);flex:none"></span>
               <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">Saisie manuelle</div>
             </div>
-            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Recours si le lecteur est en panne. Saisissez le code imprimé sur le carton.</div>
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:11px">CODE DU CARTON</div>
-            <input value="{{ manualCode }}" onChange="{{ setManualCode }}" placeholder="RO-1800-001" style="width:100%;padding:15px 17px;border-radius:16px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 16px/1.3 'JetBrains Mono',monospace;letter-spacing:.06em;margin-bottom:14px">
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">CARTONS À ENREGISTRER</div>
+            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Recours si le lecteur est en panne. Saisissez le code imprimé sur la valise.</div>
+            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:11px">CODE DE LA VALISE</div>
+            <input value="{{ manualCode }}" onChange="{{ setManualCode }}" placeholder="VAL-0101" style="width:100%;padding:15px 17px;border-radius:16px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 16px/1.3 'JetBrains Mono',monospace;letter-spacing:.06em;margin-bottom:14px">
+            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">VALISES À SCANNER</div>
             <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
               <sc-for list="{{ manualTargets }}" as="t" hint-placeholder-count="3">
                 <button onClick="{{ t.onFill }}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:14px;border:1px solid var(--ink-09);background:var(--srf-62);cursor:pointer;text-align:left;transition:all .24s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.16);border-color:rgba(51,135,156,.3)">
@@ -981,7 +981,7 @@ input::placeholder{color:var(--ink-34)}
                 </button>
               </sc-for>
             </div>
-            <button onClick="{{ submitManual }}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:auto;padding:14px 22px;border-radius:999px;border:1px solid rgba(166,106,5,.34);background:rgba(245,165,36,.16);color:var(--warn-ink);font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(245,165,36,.26);transform:translateY(-1px)"><span data-icon="check" style="display:grid;place-items:center;font-size:16px"></span>Ouvrir le carton</button>
+            <button onClick="{{ submitManual }}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:auto;padding:14px 22px;border-radius:999px;border:1px solid rgba(166,106,5,.34);background:rgba(245,165,36,.16);color:var(--warn-ink);font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(245,165,36,.26);transform:translateY(-1px)"><span data-icon="check" style="display:grid;place-items:center;font-size:16px"></span>Valider la valise</button>
           </div>
         </div>
       </div>
@@ -1272,8 +1272,14 @@ class Component extends DCLogic {
       } catch (_) { this.toast('triangle-alert', 'Photo non lisible', 'Réessayez depuis le téléphone.', 'warn'); }
     }
   }
+  async startValiseScan(command, valise) {
+    const code = String(valise && (valise.code || valise.couleur || valise.id || '')).toUpperCase();
+    this.setState({ screen: 'scan', scanTarget: { cmdId: command.id, valId: valise.id, kind: 'valise', code } });
+    await this.startMobilePairing();
+  }
+
   async startCartonScan(cmdId, valId, cartId, code) {
-    this.setState({ screen: 'scan', scanTarget: { cmdId, valId, cartId, code: String(code).toUpperCase() } });
+    this.setState({ screen: 'scan', scanTarget: { cmdId, valId, cartId, kind: 'carton', code: String(code).toUpperCase() } });
     await this.startMobilePairing();
   }
 
@@ -2611,18 +2617,18 @@ class Component extends DCLogic {
 
       manualCode: s.manualCode,
       setManualCode: e => this.setState({ manualCode: e.target.value }),
-      manualTargets: cartonsRestants.slice(0, 4).map(({ c, v, k }) => ({
-        code: k.code,
-        info: `${v.couleur} Â· ${k.saisies.length}/${k.qty}`,
-        onFill: () => this.setState({ manualCode: k.code })
-      })),
+      manualTargets: commandesDB.flatMap(c => c.valises.filter(v => !v.scanned).map(v => ({
+        code: String(v.couleur || v.id || '').toUpperCase(),
+        info: `${v.gamme} · ${v.montures} montures`,
+        onFill: () => this.setState({ manualCode: String(v.couleur || v.id || '').toUpperCase() })
+      }))).slice(0, 4),
       submitManual: () => {
-        const raw = normalizeCartonCode(s.manualCode);
-        if (!raw) { this.toast('triangle-alert', 'Code vide', 'Saisissez le code du carton', 'warn'); return; }
-        const hit = cartonsRestants.find(x => normalizeCartonCode(x.k.code) === raw);
-        if (!hit) { this.toast('triangle-alert', 'Code inconnu', `Aucun carton ouvert ne porte ${s.manualCode.trim() || raw}`, 'warn'); return; }
+        const raw = String(s.manualCode || '').trim().toUpperCase();
+        if (!raw) { this.toast('triangle-alert', 'Code vide', 'Saisissez le code de la valise', 'warn'); return; }
+        const hit = commandesDB.flatMap(c => c.valises.filter(v => !v.scanned).map(v => ({ c, v }))).find(({ v }) => String(v.couleur || v.id || '').toUpperCase() === raw);
+        if (!hit) { this.toast('triangle-alert', 'Valise inconnue', `Aucune valise non scannée ne porte ${s.manualCode.trim() || raw}`, 'warn'); return; }
         this.setState({ manualCode: '' });
-        this.openCarton(hit.c.id, hit.v.id, hit.k.id);
+        this.scanArrivalCase(hit.c, hit.v);
       },
 
       // âœ… MODIFICATION 5 : Ajout des variables photo dans renderVals
