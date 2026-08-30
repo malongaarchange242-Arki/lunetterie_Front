@@ -432,7 +432,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
     <sc-if value="{{ isExpediees }}" hint-placeholder-val="{{ false }}">
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
         <div style="margin-bottom:32px">
-          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">EN TRANSIT</div>
+          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">EN TRANSIT VERS LE STOCK GENERAL</div>
           <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande à expédié</h1>
           <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-7);margin:0;max-width:64ch;text-wrap:pretty">Les bons expédiés restent ici jusqu'à ce que le stock général ait scanné chaque valise à la réception. La commande passe alors dans l'historique.</p>
         </div>
@@ -476,7 +476,6 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
                         <div style="font:600 13px/1.25 Manrope,sans-serif">Valise {{ v.couleur }}</div>
                         <div style="font:400 11px/1.3 'JetBrains Mono',monospace;color:var(--ink-66);margin-top:5px">{{ v.gamme }} · {{ v.genre }} · {{ v.montures }} u. · {{ v.cartonCount }} cartons</div>
                       </div>
-                      <button onClick="{{ v.onScan }}" style="{{ v.btnStyle }}"><span data-icon="{{ v.btnIcon }}" style="display:grid;place-items:center;font-size:18px"></span></button>
                     </div>
                   </sc-for>
                 </div>
