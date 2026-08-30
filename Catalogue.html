@@ -347,16 +347,21 @@ class Component extends DCLogic {
       const token = localStorage.getItem('token');
       if (!token) {
         this._backendStock = [];
+        console.log('Catalogue: No token in localStorage');
         return;
       }
+      console.log('Catalogue: Loading backend stock with token...');
       const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/glasses?status=EN_STOCK_GENERAL`, {
         headers: this.apiHeaders()
       });
+      console.log('Catalogue API response:', response.status, response.ok);
       if (!response.ok) {
         this._backendStock = [];
+        console.error('Catalogue: API returned non-OK status', response.status);
         return;
       }
       const payload = await response.json();
+      console.log('Catalogue payload received:', Array.isArray(payload) ? `array(${payload.length})` : typeof payload, payload);
       const rawList = Array.isArray(payload)
         ? payload
         : (payload && Array.isArray(payload.glasses) ? payload.glasses : (payload && payload.data && Array.isArray(payload.data.glasses) ? payload.data.glasses : []));
@@ -383,9 +388,10 @@ class Component extends DCLogic {
           sorti: false,
           test: false
         }));
+      console.log('Catalogue: Loaded', this._backendStock.length, 'items');
       this.setState({ _tick: Date.now() });
     } catch (error) {
-      console.error('Catalogue:', error);
+      console.error('Catalogue error:', error);
       this._backendStock = [];
     }
   }
