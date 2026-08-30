@@ -353,9 +353,6 @@ input::placeholder{color:var(--ink-34)}
                     <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">RÉFÉRENCE DE LA MONTURE</div>
                     <input value="{{ fRef }}" onChange="{{ setRef }}" placeholder="Tapez ou scannez la référence depuis la photo de la branche" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 15px/1.3 'JetBrains Mono',monospace;letter-spacing:.04em;cursor:text">
                   </div>
-                  
-                    </sc-if>
-                  </div>
                 </div>
 
                 <div style="display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px">
@@ -370,19 +367,19 @@ input::placeholder{color:var(--ink-34)}
                   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
                     <div style="border-radius:12px;overflow:hidden;background:var(--srf-86);border:1px solid var(--ink-12)">
                       <sc-if value="{{ photoPreview }}" hint-placeholder-val="{{ false }}">
-                        <img src="{{ photoPreview }}" alt="Photo monture" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
+                        <img bindSrc="{{ photoPreview }}" alt="Photo monture" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
                         <div style="padding:8px;text-align:center;font:500 11px/1.3 Manrope,sans-serif;color:var(--ok-ink)">✓ Monture</div>
                       </sc-if>
                     </div>
                     <div style="border-radius:12px;overflow:hidden;background:var(--srf-86);border:1px solid var(--ink-12)">
                       <sc-if value="{{ branchPhotoData }}" hint-placeholder-val="{{ false }}">
-                        <img src="{{ branchPhotoData }}" alt="Photo branche" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
+                        <img bindSrc="{{ branchPhotoData }}" alt="Photo branche" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
                         <div style="padding:8px;text-align:center;font:500 11px/1.3 Manrope,sans-serif;color:var(--ok-ink)">✓ Branche</div>
                       </sc-if>
                     </div>
                     <div style="border-radius:12px;overflow:hidden;background:var(--srf-86);border:1px solid var(--ink-12)">
                       <sc-if value="{{ backPhotoData }}" hint-placeholder-val="{{ false }}">
-                        <img src="{{ backPhotoData }}" alt="Photo arrière" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
+                        <img bindSrc="{{ backPhotoData }}" alt="Photo arrière" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
                         <div style="padding:8px;text-align:center;font:500 11px/1.3 Manrope,sans-serif;color:var(--ok-ink)">✓ Arrière</div>
                       </sc-if>
                     </div>
@@ -2272,9 +2269,11 @@ class Component extends DCLogic {
       setMatiere: e => this.setState({ fMatiere: e.target.value }),
       setRef: e => this.setState({ fRef: e.target.value }),
       setQuantiteACreer: e => {
-        const val = Number.parseInt(String(e.target.value).trim(), 10);
+        const raw = String(e.target.value).trim();
+        if (!raw) return;
+        const val = Number.parseInt(raw, 10);
         if (!Number.isInteger(val) || val < 1) return;
-        const restantes = Math.max(0, cart.qty - cart.saisies.length);
+        const restantes = Math.max(0, (cart && cart.qty ? cart.qty : 0) - (cart && cart.saisies ? cart.saisies.length : 0));
         if (val > restantes) return;
         this.setState({ quantiteACreer: val });
       },
