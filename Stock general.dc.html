@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -309,7 +309,7 @@ input::placeholder{color:var(--ink-34)}
                 <div style="font:600 16px/1.3 Sora,sans-serif;letter-spacing:-.015em;margin-bottom:6px">Nouvelle monture</div>
                 <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:22px">L'identifiant est gÃ©nÃ©rÃ© Ã  la validation, il ne se saisit pas.</div>
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+                <div style="display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px">
                   <div>
                     <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">FORME</div>
                     <select value="{{ fForme }}" onChange="{{ setForme }}" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer">
@@ -328,7 +328,7 @@ input::placeholder{color:var(--ink-34)}
                   </div>
                 </div>
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+                <div style="display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px">
                   <div>
                     <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">COULEUR</div>
                     <select value="{{ fCouleur }}" onChange="{{ setCouleur }}" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer">
@@ -348,35 +348,12 @@ input::placeholder{color:var(--ink-34)}
                 </div>
 
                 <!-- âœ… MODIFICATION 2 : Section PHOTO remplacÃ©e -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+                <div style="display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px">
                   <div>
                     <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">RÃ‰FÃ‰RENCE DE LA MONTURE</div>
                     <input value="{{ fRef }}" onChange="{{ setRef }}" placeholder="OK-4482-NR" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 15px/1.3 'JetBrains Mono',monospace;letter-spacing:.04em">
                   </div>
-                  <div>
-                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">PHOTO DE LA MONTURE *</div>
-                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-                      <button onClick="{{ capturePhoto }}" style="display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:999px;border:1px solid rgba(95,194,217,.42);background:rgba(95,194,217,.14);color:var(--info-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .24s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.24)">
-                        <span data-icon="camera" style="display:grid;place-items:center;font-size:16px"></span>
-                        {{ captureLabel }}
-                      </button>
-                      <button onClick="{{ uploadPhoto }}" style="display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .24s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)">
-                        <span data-icon="upload" style="display:grid;place-items:center;font-size:16px"></span>
-                        Importer
-                      </button>
-                      <sc-if value="{{ photoData }}" hint-placeholder-val="{{ false }}">
-                        <button onClick="{{ clearPhoto }}" style="display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:999px;border:1px solid rgba(242,19,142,.3);background:rgba(242,19,142,.09);color:var(--acc-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .24s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(242,19,142,.18)">
-                          <span data-icon="x" style="display:grid;place-items:center;font-size:15px"></span>
-                          Retirer
-                        </button>
-                      </sc-if>
-                    </div>
-                    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onChange="{{ onPhotoSelected }}">
-                    <sc-if value="{{ photoPreview }}" hint-placeholder-val="{{ false }}">
-                      <div style="position:relative;border-radius:16px;overflow:hidden;background:var(--srf-74);border:1px solid var(--ink-12);margin-top:10px;max-width:400px">
-                        <img bindSrc="{{ photoPreview }}" alt="AperÃ§u" style="width:100%;max-height:240px;object-fit:contain;display:block">
-                        <div style="position:absolute;top:8px;right:8px;padding:4px 10px;border-radius:999px;background:rgba(52,201,141,.9);color:#fff;font:600 10px/1.3 Manrope,sans-serif">âœ“ Photo</div>
-                      </div>
+                  
                     </sc-if>
                   </div>
                 </div>
