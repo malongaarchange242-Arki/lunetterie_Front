@@ -1,5 +1,8 @@
 ﻿<!doctype html>
-<html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lecteur mobile - Lunetterie</title>
+<html lang="fr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lecteur mobile - Lunetterie</title>
 <style>
 * { box-sizing: border-box; }
 body {
@@ -127,10 +130,6 @@ input[type="text"], input[type="password"] {
   padding: 14px 16px;
 }
 
-input[type="file"] {
-  display: none;
-}
-
 video {
   width: 100%;
   aspect-ratio: 1;
@@ -216,6 +215,9 @@ small {
   font-family: 'JetBrains Mono', monospace;
   letter-spacing: 0.05em;
 }
+
+/* Cache le canvas utilisé pour la capture */
+.capture-canvas { display: none; }
 </style>
 
 <body>
@@ -269,8 +271,10 @@ small {
         <div class="video-overlay"></div>
       </div>
       
-      <input id="file-monture" type="file" accept="image/jpeg,image/png,image/webp" capture="environment">
-      <button class="btn-primary" id="btn-capture-monture">📸 Prendre la photo</button>
+      <!-- Canvas caché pour la capture -->
+      <canvas id="capture-canvas-monture" class="capture-canvas"></canvas>
+      
+      <button class="btn-primary" id="btn-capture-monture">📸 Capturer</button>
       <small>Positionnez la monture de face. La meilleure qualité garantit une lecture correcte.</small>
       
       <div id="monture-preview" style="margin-top: 16px; display: none;">
@@ -299,8 +303,9 @@ small {
         <div class="video-overlay"></div>
       </div>
       
-      <input id="file-branche" type="file" accept="image/jpeg,image/png,image/webp" capture="environment">
-      <button class="btn-primary" id="btn-capture-branche">📸 Prendre la photo</button>
+      <canvas id="capture-canvas-branche" class="capture-canvas"></canvas>
+      
+      <button class="btn-primary" id="btn-capture-branche">📸 Capturer</button>
       <small>Cadrez la branche pour que la référence soit bien lisible et nette.</small>
       
       <div id="branche-preview" style="margin-top: 16px; display: none;">
@@ -329,9 +334,10 @@ small {
         <div class="video-overlay"></div>
       </div>
       
-      <input id="file-arriere" type="file" accept="image/jpeg,image/png,image/webp" capture="environment">
-      <button class="btn-primary" id="btn-capture-arriere">📸 Prendre la photo</button>
-      <small>Le dos de la monture est capturé afin d’avoir un dossier complet pour le stock.</small>
+      <canvas id="capture-canvas-arriere" class="capture-canvas"></canvas>
+      
+      <button class="btn-primary" id="btn-capture-arriere">📸 Capturer</button>
+      <small>Le dos de la monture est capturé afin d'avoir un dossier complet pour le stock.</small>
       
       <div id="arriere-preview" style="margin-top: 16px; display: none;">
         <img id="arriere-preview-img" style="width: 100%; border-radius: 12px; max-height: 300px; object-fit: cover;">
@@ -381,6 +387,11 @@ const state = {
   qrStream: null,
   qrDetector: null,
   qrScanAnimation: null,
+  cameraStreams: {
+    monture: null,
+    branche: null,
+    arriere: null
+  }
 };
 
 // === INIT ===
@@ -416,7 +427,80 @@ const hideStatus = (elementId) => {
   document.getElementById(elementId).style.display = 'none';
 };
 
-// === LOGIN FLOW (Auto-connect via QR code) ===
+// === CAMERA FLOW ===
+const startCamera = async (videoId) => {
+  try {
+    // Arrêter toute caméra existante
+    if (state.cameraStreams[videoId]) {
+      state.cameraStreams[videoId].getTracks().forEach(track => track.stop());
+      state.cameraStreams[videoId] = null;
+    }
+    
+    const video = document.getElementById(videoId);
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
+      audio: false
+    });
+    state.cameraStreams[videoId] = stream;
+    video.srcObject = stream;
+    await video.play();
+    return true;
+  } catch (error) {
+    console.error('Caméra indisponible:', error);
+    return false;
+  }
+};
+
+const stopCamera = (videoId) => {
+  const video = document.getElementById(videoId);
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(track => track.stop());
+    video.srcObject = null;
+  }
+  if (state.cameraStreams[videoId]) {
+    state.cameraStreams[videoId] = null;
+  }
+};
+
+// === FONCTION DE CAPTURE UNIVERSELLE ===
+const captureFromVideo = (videoId, canvasId, previewImgId, stateKey, statusId) => {
+  try {
+    const video = document.getElementById(videoId);
+    const canvas = document.getElementById(canvasId);
+    
+    if (!video.srcObject || !video.videoWidth || !video.videoHeight) {
+      showStatus(statusId, 'La caméra n\'est pas prête', 'err');
+      return false;
+    }
+    
+    // Dimensions du canvas
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    // Capturer l'image du flux vidéo
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Convertir en data URL (qualité JPEG 92%)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    
+    // Stocker dans le state
+    state[stateKey] = dataUrl;
+    
+    // Afficher l'aperçu
+    document.getElementById(previewImgId).src = dataUrl;
+    document.getElementById(previewImgId.replace('-img', '')).style.display = 'block';
+    
+    showStatus(statusId, '✓ Photo capturée', 'ok');
+    return true;
+  } catch (error) {
+    console.error('Erreur capture:', error);
+    showStatus(statusId, 'Erreur de capture: ' + error.message, 'err');
+    return false;
+  }
+};
+
+// === LOGIN FLOW ===
 const initConnection = async () => {
   if (!state.sessionId || !state.sessionToken) {
     showStatus('login-status', 'Code de session invalide. Scannez le QR code depuis le PC.', 'err');
@@ -493,7 +577,7 @@ const stopQrScan = () => {
 const startQrScan = async () => {
   const video = document.getElementById('video-qr');
   if (!('BarcodeDetector' in window)) {
-    showStatus('login-status', 'Le scan QR n’est pas supporté sur cet appareil. Utilisez la saisie manuelle.', 'info');
+    showStatus('login-status', 'Le scan QR n\'est pas supporté sur cet appareil. Utilisez la saisie manuelle.', 'info');
     document.getElementById('manual-entry-panel').style.display = 'block';
     return;
   }
@@ -549,49 +633,20 @@ document.getElementById('btn-manual-entry').addEventListener('click', () => {
   showStatus('login-status', 'Saisie manuelle activée', 'info');
 });
 
-// === CAMERA FLOW ===
-const startCamera = async (videoId) => {
-  try {
-    const video = document.getElementById(videoId);
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
-      audio: false
-    });
-    video.srcObject = stream;
-  } catch (error) {
-    console.error('Caméra indisponible:', error);
-  }
-};
-
-const stopCamera = (videoId) => {
-  const video = document.getElementById(videoId);
-  if (video.srcObject) {
-    video.srcObject.getTracks().forEach(track => track.stop());
-  }
-};
-
-// === MONTURE CAPTURE ===
+// === CAPTURE MONTURE ===
 document.getElementById('btn-capture-monture').addEventListener('click', () => {
-  document.getElementById('file-monture').click();
-});
-
-document.getElementById('file-monture').addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    state.montureBlobData = event.target.result;
-    document.getElementById('monture-preview-img').src = event.target.result;
-    document.getElementById('monture-preview').style.display = 'block';
-    showStatus('monture-status', '✓ Photo capturée', 'ok');
-  };
-  reader.readAsDataURL(file);
+  captureFromVideo(
+    'video-monture',
+    'capture-canvas-monture',
+    'monture-preview-img',
+    'montureBlobData',
+    'monture-status'
+  );
 });
 
 document.getElementById('btn-next-branche').addEventListener('click', () => {
   if (!state.montureBlobData) {
-    showStatus('monture-status', 'Prenez d\'abord la photo', 'err');
+    showStatus('monture-status', 'Capturez d\'abord la photo', 'err');
     return;
   }
   stopCamera('video-monture');
@@ -604,28 +659,20 @@ document.getElementById('btn-back-login').addEventListener('click', () => {
   showScreen('login');
 });
 
-// === BRANCHE CAPTURE ===
+// === CAPTURE BRANCHE ===
 document.getElementById('btn-capture-branche').addEventListener('click', () => {
-  document.getElementById('file-branche').click();
-});
-
-document.getElementById('file-branche').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  
-  const reader = new FileReader();
-  reader.onload = async (event) => {
-    state.brancheBlobData = event.target.result;
-    document.getElementById('branche-preview-img').src = event.target.result;
-    document.getElementById('branche-preview').style.display = 'block';
-    showStatus('branche-status', '✓ Photo branche capturée', 'ok');
-  };
-  reader.readAsDataURL(file);
+  captureFromVideo(
+    'video-branche',
+    'capture-canvas-branche',
+    'branche-preview-img',
+    'brancheBlobData',
+    'branche-status'
+  );
 });
 
 document.getElementById('btn-next-arriere').addEventListener('click', () => {
   if (!state.brancheBlobData) {
-    showStatus('branche-status', 'Prenez d\'abord la photo de la branche', 'err');
+    showStatus('branche-status', 'Capturez d\'abord la photo de la branche', 'err');
     return;
   }
   stopCamera('video-branche');
@@ -636,28 +683,26 @@ document.getElementById('btn-next-arriere').addEventListener('click', () => {
 document.getElementById('btn-back-monture').addEventListener('click', () => {
   stopCamera('video-branche');
   document.getElementById('branche-preview').style.display = 'none';
-  document.getElementById('file-branche').value = '';
   showScreen('capture-monture');
+  // Relancer la caméra monture si nécessaire
+  if (!document.getElementById('video-monture').srcObject) {
+    startCamera('video-monture');
+  }
 });
 
-// === ARRIÈRE CAPTURE ===
+// === CAPTURE ARRIÈRE ===
 document.getElementById('btn-capture-arriere').addEventListener('click', () => {
-  document.getElementById('file-arriere').click();
-});
-
-document.getElementById('file-arriere').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  
-  const reader = new FileReader();
-  reader.onload = async (event) => {
-    state.arriereBlobData = event.target.result;
-    document.getElementById('arriere-preview-img').src = event.target.result;
-    document.getElementById('arriere-preview').style.display = 'block';
+  const success = captureFromVideo(
+    'video-arriere',
+    'capture-canvas-arriere',
+    'arriere-preview-img',
+    'arriereBlobData',
+    'arriere-status'
+  );
+  if (success) {
     showStatus('arriere-status', '✓ Photo arrière capturée - Envoi automatique...', 'info');
     setTimeout(() => sendAllPhotosToPC(), 800);
-  };
-  reader.readAsDataURL(file);
+  }
 });
 
 const uploadSinglePhoto = async (kind, dataUrl, filename) => {
@@ -697,9 +742,11 @@ document.getElementById('btn-send-all').addEventListener('click', sendAllPhotosT
 document.getElementById('btn-back-branche').addEventListener('click', () => {
   stopCamera('video-arriere');
   document.getElementById('arriere-preview').style.display = 'none';
-  document.getElementById('file-arriere').value = '';
   showScreen('capture-branche');
-  startCamera('video-branche');
+  // Relancer la caméra branche si nécessaire
+  if (!document.getElementById('video-branche').srcObject) {
+    startCamera('video-branche');
+  }
 });
 
 // === RESULTS FLOW ===
@@ -710,9 +757,6 @@ document.getElementById('btn-next-capture').addEventListener('click', () => {
   document.getElementById('monture-preview').style.display = 'none';
   document.getElementById('branche-preview').style.display = 'none';
   document.getElementById('arriere-preview').style.display = 'none';
-  document.getElementById('file-monture').value = '';
-  document.getElementById('file-branche').value = '';
-  document.getElementById('file-arriere').value = '';
   showScreen('capture-monture');
   startCamera('video-monture');
 });
@@ -725,6 +769,13 @@ document.getElementById('btn-logout').addEventListener('click', () => {
   state.arriereBlobData = null;
   document.getElementById('session-code').value = '';
   document.getElementById('password').value = '';
+  // Arrêter toutes les caméras
+  Object.keys(state.cameraStreams).forEach(key => {
+    if (state.cameraStreams[key]) {
+      state.cameraStreams[key].getTracks().forEach(track => track.stop());
+      state.cameraStreams[key] = null;
+    }
+  });
   showScreen('login');
 });
 
