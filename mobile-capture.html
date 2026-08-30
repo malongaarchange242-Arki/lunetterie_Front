@@ -449,11 +449,6 @@ const initConnection = async () => {
 };
 
 document.getElementById('btn-login').addEventListener('click', initConnection);
-document.getElementById('btn-scan-qr').addEventListener('click', startQrScan);
-document.getElementById('btn-manual-entry').addEventListener('click', () => {
-  document.getElementById('manual-entry-panel').style.display = 'block';
-  showStatus('login-status', 'Saisie manuelle activée', 'info');
-});
 
 const parseSessionFromQrText = (text) => {
   if (!text) return null;
@@ -547,6 +542,12 @@ const startQrScan = async () => {
     document.getElementById('manual-entry-panel').style.display = 'block';
   }
 };
+
+document.getElementById('btn-scan-qr').addEventListener('click', startQrScan);
+document.getElementById('btn-manual-entry').addEventListener('click', () => {
+  document.getElementById('manual-entry-panel').style.display = 'block';
+  showStatus('login-status', 'Saisie manuelle activée', 'info');
+});
 
 // === CAMERA FLOW ===
 const startCamera = async (videoId) => {
