@@ -224,20 +224,31 @@ small {
   <div id="screen-login" class="screen active">
     <div class="card">
       <h1>📱 Lecteur mobile</h1>
-      <p>Connectez-vous au poste PC via le QR code</p>
+      <p>Scannez le QR code du poste pour démarrer</p>
       
       <div id="login-status" class="status info" style="display:none;">
         <span id="login-status-text">Attente d'entrée...</span>
       </div>
-      
-      <label class="section-label"><span class="step-indicator">1</span>Session (depuis QR code)</label>
-      <input id="session-code" type="text" placeholder="Code de session" autocomplete="off" disabled style="opacity: 0.7;">
-      
-      <label class="section-label" style="margin-top: 20px;">Mot de passe (optionnel)</label>
-      <input id="password" type="password" placeholder="Mot de passe si requis">
-      
-      <button class="btn-primary" id="btn-login">Connecter au PC</button>
-      <small>ℹ️ Scannez d'abord le QR code 🔲 généré depuis le poste PC. La connexion se fera automatiquement.</small>
+
+      <div class="video-container" style="margin-top: 16px;">
+        <video id="video-qr" playsinline muted autoplay></video>
+        <div class="video-overlay"></div>
+      </div>
+
+      <button class="btn-primary" id="btn-scan-qr">🔲 Scanner le QR</button>
+      <button class="btn-secondary" id="btn-manual-entry">Saisir manuellement</button>
+
+      <div id="manual-entry-panel" style="display:none; margin-top: 12px;">
+        <label class="section-label"><span class="step-indicator">1</span>Session (depuis QR code)</label>
+        <input id="session-code" type="text" placeholder="Code de session" autocomplete="off" style="opacity: 0.9;">
+        
+        <label class="section-label" style="margin-top: 20px;">Mot de passe (optionnel)</label>
+        <input id="password" type="password" placeholder="Mot de passe si requis">
+        
+        <button class="btn-primary" id="btn-login">Connecter au PC</button>
+      </div>
+
+      <small>ℹ️ Le scan QR est la méthode principale. La saisie manuelle reste disponible en secours.</small>
     </div>
   </div>
 
@@ -296,27 +307,57 @@ small {
         <img id="branche-preview-img" style="width: 100%; border-radius: 12px; max-height: 300px; object-fit: cover;">
       </div>
       
-      <p style="text-align: center; margin-top: 16px; color: #7a7e8a; font-size: 13px;">
-        <strong>L'envoi se fera automatiquement</strong> après la capture 📤
-      </p>
-      
-      <button class="btn-secondary" id="btn-send-branche" style="display:none;">✓ Envoyer au PC</button>
+      <button class="btn-secondary" id="btn-next-arriere">Suivant → Arrière</button>
       <button class="btn-back" id="btn-back-monture">← Retour</button>
     </div>
   </div>
 
-  <!-- ÉCRAN 4 : RÉSULTATS -->
+  <!-- ÉCRAN 4 : CAPTURE ARRIÈRE -->
+  <div id="screen-capture-arriere" class="screen">
+    <div class="card">
+      <h1>Photo arrière</h1>
+      <p>Capturez le dos de la monture pour compléter le dossier</p>
+      
+      <div id="arriere-status" class="status info" style="display:none;">
+        <span id="arriere-status-text">Prêt</span>
+      </div>
+      
+      <label class="section-label"><span class="step-indicator">4</span>Arrière</label>
+      
+      <div class="video-container">
+        <video id="video-arriere" playsinline muted autoplay></video>
+        <div class="video-overlay"></div>
+      </div>
+      
+      <input id="file-arriere" type="file" accept="image/jpeg,image/png,image/webp" capture="environment">
+      <button class="btn-primary" id="btn-capture-arriere">📸 Prendre la photo</button>
+      <small>Le dos de la monture est capturé afin d’avoir un dossier complet pour le stock.</small>
+      
+      <div id="arriere-preview" style="margin-top: 16px; display: none;">
+        <img id="arriere-preview-img" style="width: 100%; border-radius: 12px; max-height: 300px; object-fit: cover;">
+      </div>
+      
+      <p style="text-align: center; margin-top: 16px; color: #7a7e8a; font-size: 13px;">
+        <strong>L'envoi des 3 photos se fera automatiquement</strong> après la capture 📤
+      </p>
+      
+      <button class="btn-secondary" id="btn-send-all" style="display:none;">✓ Envoyer au PC</button>
+      <button class="btn-back" id="btn-back-branche">← Retour</button>
+    </div>
+  </div>
+
+  <!-- ÉCRAN 5 : RÉSULTATS -->
   <div id="screen-results" class="screen">
     <div class="card">
       <h1>Envoi réussi ✓</h1>
-      <p>Les photos ont été envoyées au poste PC</p>
+      <p>Les 3 photos ont été envoyées au poste PC</p>
       
       <div id="results-status" class="status ok" style="display:none;">
         <span id="results-status-text">Succès !</span>
       </div>
       
       <p style="text-align: center; margin-top: 24px; color: #7a7e8a; line-height: 1.6;">
-        <strong>Les deux photos sont en cours de traitement au poste PC.</strong><br><br>
+        <strong>Les 3 photos sont en cours de traitement au poste PC.</strong><br><br>
         La référence sera lue automatiquement depuis la branche et s'affichera dans la page Stock Général.<br><br>
         <strong style="color: #5fc2d9;">Vous pouvez continuer à capturer d'autres montures.</strong>
       </p>
@@ -335,7 +376,11 @@ const state = {
   sessionToken: null,
   montureBlobData: null,
   brancheBlobData: null,
+  arriereBlobData: null,
   apiBase: 'https://api-lunetterie.universearch.com/api/v1/inventory/mobile-capture',
+  qrStream: null,
+  qrDetector: null,
+  qrScanAnimation: null,
 };
 
 // === INIT ===
@@ -404,6 +449,104 @@ const initConnection = async () => {
 };
 
 document.getElementById('btn-login').addEventListener('click', initConnection);
+document.getElementById('btn-scan-qr').addEventListener('click', startQrScan);
+document.getElementById('btn-manual-entry').addEventListener('click', () => {
+  document.getElementById('manual-entry-panel').style.display = 'block';
+  showStatus('login-status', 'Saisie manuelle activée', 'info');
+});
+
+const parseSessionFromQrText = (text) => {
+  if (!text) return null;
+
+  const trimmed = text.trim();
+  const url = new URL(trimmed, location.href);
+  const params = new URLSearchParams(url.hash.startsWith('#') ? url.hash.slice(1) : url.search);
+
+  const sessionId = params.get('session');
+  const token = params.get('token');
+
+  if (sessionId && token) {
+    return { sessionId, token };
+  }
+
+  const searchParams = new URLSearchParams(trimmed.includes('?') ? trimmed.split('?')[1] : trimmed);
+  const sessionFromSearch = searchParams.get('session');
+  const tokenFromSearch = searchParams.get('token');
+
+  if (sessionFromSearch && tokenFromSearch) {
+    return { sessionId: sessionFromSearch, token: tokenFromSearch };
+  }
+
+  return null;
+};
+
+const stopQrScan = () => {
+  if (state.qrScanAnimation) {
+    cancelAnimationFrame(state.qrScanAnimation);
+    state.qrScanAnimation = null;
+  }
+  if (state.qrStream) {
+    state.qrStream.getTracks().forEach(track => track.stop());
+    state.qrStream = null;
+  }
+  const video = document.getElementById('video-qr');
+  if (video) {
+    video.srcObject = null;
+  }
+};
+
+const startQrScan = async () => {
+  const video = document.getElementById('video-qr');
+  if (!('BarcodeDetector' in window)) {
+    showStatus('login-status', 'Le scan QR n’est pas supporté sur cet appareil. Utilisez la saisie manuelle.', 'info');
+    document.getElementById('manual-entry-panel').style.display = 'block';
+    return;
+  }
+
+  try {
+    showStatus('login-status', 'Scan du QR code...', 'info');
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
+      audio: false
+    });
+    state.qrStream = stream;
+    video.srcObject = stream;
+    await video.play();
+
+    state.qrDetector = new BarcodeDetector({ formats: ['qr_code'] });
+
+    const detectLoop = async () => {
+      if (!state.qrDetector || !video.videoWidth || !video.videoHeight) {
+        state.qrScanAnimation = requestAnimationFrame(detectLoop);
+        return;
+      }
+
+      try {
+        const codes = await state.qrDetector.detect(video);
+        if (codes && codes.length > 0) {
+          const detected = parseSessionFromQrText(codes[0].rawValue);
+          if (detected) {
+            state.sessionId = detected.sessionId;
+            state.sessionToken = detected.token;
+            stopQrScan();
+            showStatus('login-status', 'QR détecté : connexion au poste PC...', 'ok');
+            setTimeout(initConnection, 400);
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn('Scan QR non valide:', error);
+      }
+      state.qrScanAnimation = requestAnimationFrame(detectLoop);
+    };
+
+    state.qrScanAnimation = requestAnimationFrame(detectLoop);
+  } catch (error) {
+    console.error('Scanner QR indisponible:', error);
+    showStatus('login-status', 'Caméra QR indisponible. Utilisez la saisie manuelle.', 'err');
+    document.getElementById('manual-entry-panel').style.display = 'block';
+  }
+};
 
 // === CAMERA FLOW ===
 const startCamera = async (videoId) => {
@@ -474,58 +617,20 @@ document.getElementById('file-branche').addEventListener('change', async (e) => 
     state.brancheBlobData = event.target.result;
     document.getElementById('branche-preview-img').src = event.target.result;
     document.getElementById('branche-preview').style.display = 'block';
-    showStatus('branche-status', '✓ Photo capturée - Envoi automatique...', 'info');
-    
-    // Envoi automatique après un court délai
-    setTimeout(() => sendBranchePhotoToPC(), 800);
+    showStatus('branche-status', '✓ Photo branche capturée', 'ok');
   };
   reader.readAsDataURL(file);
 });
 
-const sendBranchePhotoToPC = async () => {
-  if (!state.montureBlobData) {
-    showStatus('branche-status', 'Photo monture manquante', 'err');
-    return;
-  }
+document.getElementById('btn-next-arriere').addEventListener('click', () => {
   if (!state.brancheBlobData) {
-    showStatus('branche-status', 'Prenez d\'abord la photo', 'err');
+    showStatus('branche-status', 'Prenez d\'abord la photo de la branche', 'err');
     return;
   }
-  
-  try {
-    showStatus('branche-status', 'Envoi au poste PC...', 'info');
-    
-    // Upload monture
-    const montureFd = new FormData();
-    montureFd.append('image', await dataUrlToBlob(state.montureBlobData), 'monture.jpg');
-    
-    const montureResponse = await fetch(
-      `${state.apiBase}/sessions/${encodeURIComponent(state.sessionId)}/photo?kind=monture&token=${encodeURIComponent(state.sessionToken)}`,
-      { method: 'POST', body: montureFd }
-    );
-    
-    if (!montureResponse.ok) throw new Error('Envoi photo monture échoué');
-    
-    // Upload branche
-    const brancheFd = new FormData();
-    brancheFd.append('image', await dataUrlToBlob(state.brancheBlobData), 'branche.jpg');
-    
-    const brancheResponse = await fetch(
-      `${state.apiBase}/sessions/${encodeURIComponent(state.sessionId)}/photo?kind=branche&token=${encodeURIComponent(state.sessionToken)}`,
-      { method: 'POST', body: brancheFd }
-    );
-    
-    if (!brancheResponse.ok) throw new Error('Envoi photo branche échoué');
-    
-    stopCamera('video-branche');
-    showScreen('results');
-    showStatus('results-status', '✓ Photos envoyées au poste PC - La référence s\'affichera automatiquement', 'ok');
-  } catch (error) {
-    showStatus('branche-status', 'Erreur : ' + error.message, 'err');
-  }
-};
-
-document.getElementById('btn-send-branche').addEventListener('click', sendBranchePhotoToPC);
+  stopCamera('video-branche');
+  showScreen('capture-arriere');
+  startCamera('video-arriere');
+});
 
 document.getElementById('btn-back-monture').addEventListener('click', () => {
   stopCamera('video-branche');
@@ -534,12 +639,79 @@ document.getElementById('btn-back-monture').addEventListener('click', () => {
   showScreen('capture-monture');
 });
 
+// === ARRIÈRE CAPTURE ===
+document.getElementById('btn-capture-arriere').addEventListener('click', () => {
+  document.getElementById('file-arriere').click();
+});
+
+document.getElementById('file-arriere').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    state.arriereBlobData = event.target.result;
+    document.getElementById('arriere-preview-img').src = event.target.result;
+    document.getElementById('arriere-preview').style.display = 'block';
+    showStatus('arriere-status', '✓ Photo arrière capturée - Envoi automatique...', 'info');
+    setTimeout(() => sendAllPhotosToPC(), 800);
+  };
+  reader.readAsDataURL(file);
+});
+
+const uploadSinglePhoto = async (kind, dataUrl, filename) => {
+  const formData = new FormData();
+  formData.append('image', await dataUrlToBlob(dataUrl), filename);
+  const response = await fetch(
+    `${state.apiBase}/sessions/${encodeURIComponent(state.sessionId)}/photo?kind=${encodeURIComponent(kind)}&token=${encodeURIComponent(state.sessionToken)}`,
+    { method: 'POST', body: formData }
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(payload.error || `Envoi photo ${kind} échoué`);
+  }
+};
+
+const sendAllPhotosToPC = async () => {
+  if (!state.montureBlobData || !state.brancheBlobData || !state.arriereBlobData) {
+    showStatus('arriere-status', 'Les 3 photos sont nécessaires avant l\'envoi.', 'err');
+    return;
+  }
+  try {
+    showStatus('arriere-status', 'Envoi des 3 photos au poste PC...', 'info');
+    await uploadSinglePhoto('monture', state.montureBlobData, 'monture.jpg');
+    await uploadSinglePhoto('branche', state.brancheBlobData, 'branche.jpg');
+    await uploadSinglePhoto('arriere', state.arriereBlobData, 'arriere.jpg');
+
+    stopCamera('video-arriere');
+    showScreen('results');
+    showStatus('results-status', '✓ Les 3 photos ont été envoyées au poste PC - La référence s\'affichera automatiquement', 'ok');
+  } catch (error) {
+    showStatus('arriere-status', 'Erreur : ' + error.message, 'err');
+  }
+};
+
+document.getElementById('btn-send-all').addEventListener('click', sendAllPhotosToPC);
+
+document.getElementById('btn-back-branche').addEventListener('click', () => {
+  stopCamera('video-arriere');
+  document.getElementById('arriere-preview').style.display = 'none';
+  document.getElementById('file-arriere').value = '';
+  showScreen('capture-branche');
+  startCamera('video-branche');
+});
+
 // === RESULTS FLOW ===
 document.getElementById('btn-next-capture').addEventListener('click', () => {
   state.montureBlobData = null;
   state.brancheBlobData = null;
+  state.arriereBlobData = null;
   document.getElementById('monture-preview').style.display = 'none';
+  document.getElementById('branche-preview').style.display = 'none';
+  document.getElementById('arriere-preview').style.display = 'none';
   document.getElementById('file-monture').value = '';
+  document.getElementById('file-branche').value = '';
+  document.getElementById('file-arriere').value = '';
   showScreen('capture-monture');
   startCamera('video-monture');
 });
@@ -549,6 +721,7 @@ document.getElementById('btn-logout').addEventListener('click', () => {
   state.sessionToken = null;
   state.montureBlobData = null;
   state.brancheBlobData = null;
+  state.arriereBlobData = null;
   document.getElementById('session-code').value = '';
   document.getElementById('password').value = '';
   showScreen('login');
@@ -569,15 +742,13 @@ const dataUrlToBlob = (dataUrl) => {
 // === AUTO-INIT ===
 window.addEventListener('load', () => {
   const hasParams = initFromURL();
-  
+
   if (hasParams) {
-    // Auto-connect si on vient du QR code
-    showStatus('login-status', 'Session détectée : cliquez sur Connecter ou attendez...', 'info');
+    showStatus('login-status', 'Session détectée : connexion en cours...', 'info');
     document.getElementById('session-code').value = `session: ${state.sessionId.slice(0, 8)}...`;
     document.getElementById('session-code').disabled = true;
     document.getElementById('password').style.display = 'none';
-    
-    // Auto-connect après 1 sec
+
     setTimeout(() => {
       if (state.sessionId && state.sessionToken) {
         initConnection();
@@ -585,6 +756,7 @@ window.addEventListener('load', () => {
     }, 500);
   } else {
     showStatus('login-status', 'Scannez le QR code généré depuis le poste PC', 'info');
+    startQrScan();
   }
 });
 </script>
