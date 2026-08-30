@@ -351,7 +351,7 @@ input::placeholder{color:var(--ink-34)}
                 <div style="display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px">
                   <div>
                     <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">RÉFÉRENCE DE LA MONTURE</div>
-                    <input value="{{ fRef }}" onChange="{{ setRef }}" placeholder="OK-4482-NR" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 15px/1.3 'JetBrains Mono',monospace;letter-spacing:.04em">
+                    <input value="{{ fRef }}" readonly placeholder="Référence détectée automatiquement depuis la branche" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 15px/1.3 'JetBrains Mono',monospace;letter-spacing:.04em;cursor:default">
                   </div>
                   
                     </sc-if>
@@ -1492,8 +1492,8 @@ class Component extends DCLogic {
         intro: "La colonne de gauche est la fiche du carton : gamme, type, prix, genre, formes et marques sont hérités et non modifiables. Vous ne saisissez que ce qui est propre à chaque monture.",
         actions: [
           "Choisissez la forme, la marque, la couleur et la matière dans les listes du carton.",
-          "Saisissez la référence imprimée sur la branche de la monture.",
-          "Prenez la photo — elle est obligatoire pour valider.",
+          "La référence est lue automatiquement depuis la photo de la branche.",
+          "Le formulaire n'exige pas de saisie manuelle de référence pour valider.",
           "« Créer l'identifiant » génère un ID unique et met la monture en stock.",
           "Une référence déjà utilisée dans ce carton est refusée."
         ]
@@ -1904,23 +1904,18 @@ class Component extends DCLogic {
         : `display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13.5px/1.3 Manrope,sans-serif;cursor:not-allowed;white-space:nowrap`,
       formHint: plein ? 'Carton complet.'
         : dejaVu ? 'Cette monture existe déjà : utilisez « Dupliquer » sur sa fiche pour en ajouter un exemplaire.'
-        : refTrim.length < 3 ? 'Saisissez la référence imprimée sur la monture.'
+        : refTrim.length < 3 ? 'La référence est détectée automatiquement depuis la photo de la branche.'
         : !s.fCouleur ? 'Choisissez la couleur de la monture.'
         : !s.fMatiere ? 'Choisissez la matière de la monture.'
-        : !s.photoData ? 'La photo est obligatoire avant de créer l\'identifiant.'
         : 'Prêt. L\'identifiant sera généré automatiquement.',
       hintColor: dejaVu ? 'var(--acc-ink)' : (canCreate ? 'var(--ok-ink)' : 'var(--ink-6)'),
       
-      // ✅ MODIFICATION 7 & 8 : createMonture avec vérification photo et stockage base64
+      // ✅ MODIFICATION 7 & 8 : createMonture sans vérification photo
       createMonture: () => {
         if (!cart) return;
         if (plein) { this.toast('triangle-alert', 'Carton complet', `${kQty} montures déjà créées`, 'warn'); return; }
-        if (refTrim.length < 3) { this.toast('triangle-alert', 'Référence manquante', 'Au moins 3 caractères', 'warn'); return; }
+        if (refTrim.length < 3) { this.toast('triangle-alert', 'Référence manquante', 'La référence est lue automatiquement depuis la photo de la branche.', 'warn'); return; }
         if (dejaVu) { this.toast('triangle-alert', 'Référence en double', refTrim, 'warn'); return; }
-        if (!s.photoData) {
-          this.toast('triangle-alert', 'Photo manquante', 'Prenez ou importez une photo', 'warn');
-          return;
-        }
         const uid = saved && saved.barcode ? saved.barcode : null;
         if (!uid) {
           this.toast('triangle-alert', 'Identifiant non reçu', 'Le backend n’a pas renvoyé de code-barres valide.', 'warn');
