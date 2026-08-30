@@ -922,25 +922,36 @@ class Component extends DCLogic {
   downloadBarcodePNG(barcodeNum, ref) {
     try {
       const canvas = this.generateBarcodeAsCanvas(barcodeNum, 500, 88);
+      const safeRef = String(ref || barcodeNum || 'barcode').replace(/[^a-zA-Z0-9-_]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'barcode';
+      const dataUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
-      link.href = canvas.toDataURL('image/png');
-      link.download = `barcode-${ref}-${Date.now()}.png`;
+      link.style.display = 'none';
+      link.rel = 'noopener';
+      link.href = dataUrl;
+      link.download = `${safeRef}.png`;
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      this.toast('check', 'Code barre téléchargé', `${ref}.png`, 'ok');
+      link.remove();
+      this.toast('check', 'Code barre téléchargé', `${safeRef}.png`, 'ok');
+      return true;
     } catch (error) {
       console.error('Erreur téléchargement code barre:', error);
       this.toast('triangle-alert', 'Téléchargement échoué', 'Impossible de générer le PNG', 'warn');
+      return false;
     }
   }
 
   printBonDeCommande(bon) {
     try {
+      const ok = this.downloadBarcodePNG(bon.barcodeNum || bon.ref, bon.ref);
+      if (!ok) return;
       const printWindow = window.open('', '_blank');
-      const barcodeCanvas = this.generateBarcodeAsCanvas(bon.barcodeNum, 600, 100);
+      if (!printWindow) {
+        this.toast('triangle-alert', 'Téléchargement OK', 'Le PNG a bien été généré, mais la fenêtre d’impression a été bloquée par le navigateur.', 'info');
+        return;
+      }
+      const barcodeCanvas = this.generateBarcodeAsCanvas(bon.barcodeNum || bon.ref, 600, 100);
       const barcodePNG = barcodeCanvas.toDataURL('image/png');
-      
       printWindow.document.write(`
         <!DOCTYPE html>
         <html>
@@ -986,7 +997,7 @@ class Component extends DCLogic {
           
           <div class="barcode">
             <img src="${barcodePNG}" alt="Code barre">
-            <div>${bon.barcodeNum}</div>
+            <div>${bon.barcodeNum || bon.ref}</div>
           </div>
           
           <div class="footer">
@@ -1322,7 +1333,7 @@ class Component extends DCLogic {
       barcodeStyle: this.barcode(b.barcodeNum || b.ref, 44),
       statutLabel: (bonStatuts[b.statut] || bonStatuts.attente).label, statutStyle: (bonStatuts[b.statut] || bonStatuts.attente).style,
       cardStyle: `padding:22px 24px;border-radius:22px;background:${glass};border:1px solid ${b.statut === 'arrive' ? 'rgba(30,143,99,.24)' : 'var(--ink-09)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9)`,
-      onImprimer: () => this.printBonDeCommande({ ref: b.ref, fournisseur: b.fournisseur, provenance: b.provenance, unites: b.unites.toLocaleString('fr-FR'), date: b.date, barcodeNum: b.barcodeNum || b.ref })
+      onImprimer: () => this.downloadBarcodePNG(b.barcodeNum || b.ref, b.ref)
     }));
 
     // --- validations ---
