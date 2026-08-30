@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -57,7 +57,7 @@ input::placeholder{color:var(--ink-34)}
       <div style="{{ avatarStyle }}"><span data-icon="glasses" style="display:grid;place-items:center;font-size:22px;color:#fff"></span></div>
       <div style="min-width:0">
         <div style="font:600 12.5px/1.3 Manrope,sans-serif;margin-bottom:5px">{{ userName }}</div>
-        <div style="font:500 9px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink)">STOCK GÉNÉRAL</div>
+        <div style="font:500 9px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink)">STOCK GÃ‰NÃ‰RAL</div>
       </div>
     </div>
 
@@ -78,7 +78,7 @@ input::placeholder{color:var(--ink-34)}
         <span data-icon="{{ themeIcon }}" style="display:grid;place-items:center;font-size:16px;flex:none"></span>{{ themeLabel }}
       </button>
       <button onClick="{{ logout }}" style="display:flex;align-items:center;gap:11px;width:100%;padding:13px 15px;border-radius:999px;border:1px solid rgba(242,19,142,.28);background:rgba(242,19,142,.09);color:var(--acc-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;text-align:left;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:#D3117C;color:#fff;border-color:var(--acc-strong)">
-        <span data-icon="log-out" style="display:grid;place-items:center;font-size:16px;flex:none"></span>Déconnexion
+        <span data-icon="log-out" style="display:grid;place-items:center;font-size:16px;flex:none"></span>DÃ©connexion
       </button>
     </div>
   </aside>
@@ -99,16 +99,16 @@ input::placeholder{color:var(--ink-34)}
     <sc-if value="{{ isCommandes }}" hint-placeholder-val="{{ true }}">
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
         <div style="margin-bottom:30px;padding-right:238px">
-          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">ÉTAPE 1 · RÉCEPTION</div>
-          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande à enregistrer</h1>
-          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Commandes arrivées du pré-enregistrement. Tout est déjà décrit au niveau du carton : il reste à créer chaque monture, une par une, avec sa référence et sa photo.</p>
+          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">Ã‰TAPE 1 Â· RÃ‰CEPTION</div>
+          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande Ã  enregistrer</h1>
+          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Commandes arrivÃ©es du prÃ©-enregistrement. Tout est dÃ©jÃ  dÃ©crit au niveau du carton : il reste Ã  crÃ©er chaque monture, une par une, avec sa rÃ©fÃ©rence et sa photo.</p>
         </div>
 
         <sc-if value="{{ cmdAucune }}" hint-placeholder-val="{{ false }}">
           <div style="padding:52px 32px;border-radius:24px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
             <span data-icon="clipboard-list" style="display:grid;place-items:center;font-size:30px;color:var(--ink-3);margin:0 auto 14px"></span>
-            <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Aucune commande arrivée</div>
-            <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56);max-width:52ch;margin:0 auto;text-wrap:pretty">Une commande apparaît ici quand la station de pré-enregistrement expédie un bon vers le stock général.</div>
+            <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Aucune commande arrivÃ©e</div>
+            <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56);max-width:52ch;margin:0 auto;text-wrap:pretty">Une commande apparaÃ®t ici quand la station de prÃ©-enregistrement expÃ©die un bon vers le stock gÃ©nÃ©ral.</div>
           </div>
         </sc-if>
 
@@ -123,7 +123,7 @@ input::placeholder{color:var(--ink-34)}
                 <span style="{{ c.statutStyle }}">{{ c.statutLabel }}</span>
                 <div style="margin-left:auto;display:flex;gap:26px;flex-wrap:wrap">
                   <div><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:6px">PROVENANCE</div><div style="font:600 13px/1.2 Manrope,sans-serif">{{ c.provenance }}</div></div>
-                  <div><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:6px">ARRIVÉE</div><div style="font:500 12.5px/1.2 'JetBrains Mono',monospace">{{ c.dateArr }}</div></div>
+                  <div><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:6px">ARRIVÃ‰E</div><div style="font:500 12.5px/1.2 'JetBrains Mono',monospace">{{ c.dateArr }}</div></div>
                   <div><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:6px">MONTURES</div><div style="font:500 12.5px/1.2 'JetBrains Mono',monospace;color:var(--acc-strong)">{{ c.total }}</div></div>
                 </div>
               </div>
@@ -139,13 +139,13 @@ input::placeholder{color:var(--ink-34)}
                 <sc-if value="{{ c.pasRecu }}" hint-placeholder-val="{{ true }}">
                   <div style="padding:18px 20px;border-radius:20px;background:rgba(95,194,217,.1);border:1px solid rgba(51,135,156,.22);margin-bottom:18px">
                     <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px">
-                      <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68)">CONFIRMER L'ARRIVÉE DES VALISES</span>
+                      <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68)">CONFIRMER L'ARRIVÃ‰E DES VALISES</span>
                       <span style="margin-left:auto;font:600 11.5px/1.3 'JetBrains Mono',monospace;color:var(--info-ink);white-space:nowrap">{{ c.receptionLabel }}</span>
                     </div>
                     <div style="height:6px;border-radius:999px;background:var(--ink-08);overflow:hidden;margin-bottom:16px">
                       <div style="{{ c.receptionStyle }}"></div>
                     </div>
-                    <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-68);margin-bottom:14px;text-wrap:pretty">Scannez chaque valise pour confirmer sa réception. Le bon passera de « en transit » à « réceptionné » côté pré-enregistrement.</div>
+                    <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-68);margin-bottom:14px;text-wrap:pretty">Scannez chaque valise pour confirmer sa rÃ©ception. Le bon passera de Â« en transit Â» Ã  Â« rÃ©ceptionnÃ© Â» cÃ´tÃ© prÃ©-enregistrement.</div>
                     <div style="display:flex;flex-direction:column;gap:9px">
                       <sc-for list="{{ c.scanRows }}" as="v" hint-placeholder-count="2">
                         <div style="{{ v.rowStyle }}">
@@ -180,7 +180,7 @@ input::placeholder{color:var(--ink-34)}
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:26px;flex-wrap:wrap;padding-right:238px">
           <button onClick="{{ backToCommandes }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 16px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:15px"></span>Retour</button>
           <div style="padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap">{{ activeRef }}</div>
-          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(95,194,217,.22);border:1px solid rgba(51,135,156,.3);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">Étape 2 · choix de la valise</div>
+          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(95,194,217,.22);border:1px solid rgba(51,135,156,.3);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">Ã‰tape 2 Â· choix de la valise</div>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px">
@@ -212,11 +212,11 @@ input::placeholder{color:var(--ink-34)}
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:26px;flex-wrap:wrap;padding-right:238px">
           <button onClick="{{ backToValises }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 16px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:15px"></span>Retour</button>
           <div style="display:inline-flex;align-items:center;gap:10px;padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap"><span style="{{ curSwatchStyle }}"></span>Valise {{ curCouleur }}</div>
-          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(95,194,217,.22);border:1px solid rgba(51,135,156,.3);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">Étape 3 · scan du carton</div>
+          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(95,194,217,.22);border:1px solid rgba(51,135,156,.3);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">Ã‰tape 3 Â· scan du carton</div>
         </div>
 
         <div style="padding:16px 20px;border-radius:18px;background:rgba(95,194,217,.12);border:1px solid rgba(51,135,156,.22);font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-72);margin-bottom:24px;text-wrap:pretty">
-          Scannez le code-barres d'un carton pour ouvrir sa fiche. Les caractéristiques saisies au pré-enregistrement s'affichent automatiquement.
+          Scannez le code-barres d'un carton pour ouvrir sa fiche. Les caractÃ©ristiques saisies au prÃ©-enregistrement s'affichent automatiquement.
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:18px">
@@ -227,7 +227,7 @@ input::placeholder{color:var(--ink-34)}
                 <div style="font:600 13.5px/1.3 Sora,sans-serif;flex:1">Carton {{ k.n }}</div>
                 <span style="{{ k.tagStyle }}">{{ k.tagLabel }}</span>
               </div>
-              <div style="font:500 11.5px/1.5 Manrope,sans-serif;color:var(--ink-68);margin-bottom:14px">{{ k.gamme }} · {{ k.type }}</div>
+              <div style="font:500 11.5px/1.5 Manrope,sans-serif;color:var(--ink-68);margin-bottom:14px">{{ k.gamme }} Â· {{ k.type }}</div>
               <div style="padding:12px 12px 10px;border-radius:12px;background:var(--card);border:1px solid var(--ink-1);margin-bottom:14px">
                 <div style="{{ k.barcodeStyle }}"></div>
                 <div style="font:500 9.5px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ink-68);margin-top:7px;text-align:center">{{ k.code }}</div>
@@ -243,22 +243,22 @@ input::placeholder{color:var(--ink-34)}
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:26px;flex-wrap:wrap;padding-right:238px">
           <button onClick="{{ backToCartons }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 16px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:15px"></span>Retour</button>
-          <div style="display:inline-flex;align-items:center;gap:10px;padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap"><span style="{{ curSwatchStyle }}"></span>Carton {{ kNum }} · Valise {{ curCouleur }}</div>
-          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(242,19,142,.14);border:1px solid rgba(191,33,120,.32);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">Étape 4 · création des montures</div>
+          <div style="display:inline-flex;align-items:center;gap:10px;padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap"><span style="{{ curSwatchStyle }}"></span>Carton {{ kNum }} Â· Valise {{ curCouleur }}</div>
+          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(242,19,142,.14);border:1px solid rgba(191,33,120,.32);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">Ã‰tape 4 Â· crÃ©ation des montures</div>
         </div>
 
         <div style="display:grid;grid-template-columns:340px 1fr;gap:22px;align-items:start">
 
           <div style="padding:24px;border-radius:24px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:0 20px 46px -26px var(--ink-22),inset 0 1px 0 var(--srf-9);position:sticky;top:34px">
             <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--info-ink);margin-bottom:12px">FICHE DU CARTON</div>
-            <div style="font:600 18px/1.3 Sora,sans-serif;letter-spacing:-.02em;margin-bottom:8px">{{ kGamme }} · {{ kType }}</div>
-            <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:20px;text-wrap:pretty">Renseigné au pré-enregistrement. Ces valeurs s'appliquent à chaque monture du carton.</div>
+            <div style="font:600 18px/1.3 Sora,sans-serif;letter-spacing:-.02em;margin-bottom:8px">{{ kGamme }} Â· {{ kType }}</div>
+            <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:20px;text-wrap:pretty">RenseignÃ© au prÃ©-enregistrement. Ces valeurs s'appliquent Ã  chaque monture du carton.</div>
 
             <div style="display:flex;flex-direction:column;gap:0;margin-bottom:20px">
               <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--ink-08)"><span style="font:400 12.5px/1.4 Manrope,sans-serif;color:var(--ink-66)">Valise</span><span style="font:600 12.5px/1.4 Manrope,sans-serif">{{ curCouleur }}</span></div>
               <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--ink-08)"><span style="font:400 12.5px/1.4 Manrope,sans-serif;color:var(--ink-66)">Genre</span><span style="font:600 12.5px/1.4 Manrope,sans-serif">{{ curGenre }}</span></div>
               <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--ink-08)"><span style="font:400 12.5px/1.4 Manrope,sans-serif;color:var(--ink-66)">Prix unitaire</span><span style="font:600 12.5px/1.4 'JetBrains Mono',monospace;color:var(--ok-ink)">{{ kPrix }}</span></div>
-              <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 0"><span style="font:400 12.5px/1.4 Manrope,sans-serif;color:var(--ink-66)">Quantité</span><span style="font:600 12.5px/1.4 'JetBrains Mono',monospace">{{ kQty }} montures</span></div>
+              <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 0"><span style="font:400 12.5px/1.4 Manrope,sans-serif;color:var(--ink-66)">QuantitÃ©</span><span style="font:600 12.5px/1.4 'JetBrains Mono',monospace">{{ kQty }} montures</span></div>
             </div>
 
             <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">FORMES DU CARTON</div>
@@ -279,7 +279,7 @@ input::placeholder{color:var(--ink-34)}
                 <span style="{{ c.style }}">{{ c.label }}</span>
               </sc-for>
             </div>
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">MATIÈRES DU CARTON</div>
+            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">MATIÃˆRES DU CARTON</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">
               <sc-for list="{{ kMatieresList }}" as="m" hint-placeholder-count="2">
                 <span style="{{ m.style }}">{{ m.label }}</span>
@@ -295,7 +295,7 @@ input::placeholder{color:var(--ink-34)}
           <div>
             <div style="padding:22px 24px;border-radius:24px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9);margin-bottom:20px">
               <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
-                <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-66)">MONTURES ENREGISTRÉES</span>
+                <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-66)">MONTURES ENREGISTRÃ‰ES</span>
                 <span style="margin-left:auto;font:500 22px/1 'JetBrains Mono',monospace;letter-spacing:-.02em;color:var(--acc-strong)">{{ saisiesCount }}</span>
                 <span style="font:500 13px/1.3 'JetBrains Mono',monospace;color:var(--ink-66)">/ {{ kQty }}</span>
               </div>
@@ -307,7 +307,7 @@ input::placeholder{color:var(--ink-34)}
             <sc-if value="{{ cartonOuvert }}" hint-placeholder-val="{{ true }}">
               <div style="padding:26px;border-radius:24px;background:linear-gradient(150deg,var(--srf-94),var(--srf-7));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:0 20px 46px -26px var(--ink-2),inset 0 1px 0 var(--srf-9);margin-bottom:20px">
                 <div style="font:600 16px/1.3 Sora,sans-serif;letter-spacing:-.015em;margin-bottom:6px">Nouvelle monture</div>
-                <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:22px">L'identifiant est généré à la validation, il ne se saisit pas.</div>
+                <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:22px">L'identifiant est gÃ©nÃ©rÃ© Ã  la validation, il ne se saisit pas.</div>
 
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
                   <div>
@@ -338,7 +338,7 @@ input::placeholder{color:var(--ink-34)}
                     </select>
                   </div>
                   <div>
-                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">MATIÈRE</div>
+                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">MATIÃˆRE</div>
                     <select value="{{ fMatiere }}" onChange="{{ setMatiere }}" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer">
                       <sc-for list="{{ matiereOpts }}" as="o" hint-placeholder-count="2">
                         <option value="{{ o.value }}">{{ o.label }}</option>
@@ -347,10 +347,10 @@ input::placeholder{color:var(--ink-34)}
                   </div>
                 </div>
 
-                <!-- ✅ MODIFICATION 2 : Section PHOTO remplacée -->
+                <!-- âœ… MODIFICATION 2 : Section PHOTO remplacÃ©e -->
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
                   <div>
-                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">RÉFÉRENCE DE LA MONTURE</div>
+                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">RÃ‰FÃ‰RENCE DE LA MONTURE</div>
                     <input value="{{ fRef }}" onChange="{{ setRef }}" placeholder="OK-4482-NR" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 15px/1.3 'JetBrains Mono',monospace;letter-spacing:.04em">
                   </div>
                   <div>
@@ -374,15 +374,15 @@ input::placeholder{color:var(--ink-34)}
                     <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onChange="{{ onPhotoSelected }}">
                     <sc-if value="{{ photoPreview }}" hint-placeholder-val="{{ false }}">
                       <div style="position:relative;border-radius:16px;overflow:hidden;background:var(--srf-74);border:1px solid var(--ink-12);margin-top:10px;max-width:400px">
-                        <img bindSrc="{{ photoPreview }}" alt="Aperçu" style="width:100%;max-height:240px;object-fit:contain;display:block">
-                        <div style="position:absolute;top:8px;right:8px;padding:4px 10px;border-radius:999px;background:rgba(52,201,141,.9);color:#fff;font:600 10px/1.3 Manrope,sans-serif">✓ Photo</div>
+                        <img bindSrc="{{ photoPreview }}" alt="AperÃ§u" style="width:100%;max-height:240px;object-fit:contain;display:block">
+                        <div style="position:absolute;top:8px;right:8px;padding:4px 10px;border-radius:999px;background:rgba(52,201,141,.9);color:#fff;font:600 10px/1.3 Manrope,sans-serif">âœ“ Photo</div>
                       </div>
                     </sc-if>
                   </div>
                 </div>
 
                 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                  <button onClick="{{ createMonture }}" style="{{ createStyle }}"><span data-icon="fingerprint" style="display:grid;place-items:center;font-size:17px"></span>Créer l'identifiant</button>
+                  <button onClick="{{ createMonture }}" style="{{ createStyle }}"><span data-icon="fingerprint" style="display:grid;place-items:center;font-size:17px"></span>CrÃ©er l'identifiant</button>
                   <span style="font:400 12px/1.5 Manrope,sans-serif;color:{{ hintColor }};flex:1;min-width:180px;text-wrap:pretty">{{ formHint }}</span>
                 </div>
               </div>
@@ -392,19 +392,19 @@ input::placeholder{color:var(--ink-34)}
               <div style="padding:26px;border-radius:24px;background:rgba(52,201,141,.1);border:1px solid rgba(30,143,99,.28);backdrop-filter:blur(20px);margin-bottom:20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
                 <span data-icon="package-check" style="display:inline-grid;place-items:center;font-size:26px;color:var(--ok-ink);flex:none"></span>
                 <div style="flex:1;min-width:200px">
-                  <div style="font:600 15px/1.3 Sora,sans-serif;margin-bottom:7px">Carton entièrement enregistré</div>
+                  <div style="font:600 15px/1.3 Sora,sans-serif;margin-bottom:7px">Carton entiÃ¨rement enregistrÃ©</div>
                   <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-68)">Les {{ kQty }} montures sont en stock avec leur identifiant.</div>
                 </div>
                 <button onClick="{{ backToCartons }}" style="display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border-radius:999px;border:1px solid rgba(30,143,99,.34);background:rgba(52,201,141,.16);color:var(--ok-ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap;flex:none;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(52,201,141,.26)"><span data-icon="arrow-right" style="display:grid;place-items:center;font-size:15px"></span>Carton suivant</button>
               </div>
             </sc-if>
 
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-66);margin-bottom:14px">DERNIÈRES MONTURES CRÉÉES</div>
+            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-66);margin-bottom:14px">DERNIÃˆRES MONTURES CRÃ‰Ã‰ES</div>
             <sc-if value="{{ aucuneSaisie }}" hint-placeholder-val="{{ true }}">
               <div style="padding:40px 28px;border-radius:22px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
                 <span data-icon="glasses" style="display:grid;place-items:center;font-size:28px;color:var(--ink-3);margin:0 auto 14px"></span>
-                <div style="font:600 14px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:7px">Aucune monture enregistrée</div>
-                <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-56)">Saisissez la référence de la première monture du carton.</div>
+                <div style="font:600 14px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:7px">Aucune monture enregistrÃ©e</div>
+                <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-56)">Saisissez la rÃ©fÃ©rence de la premiÃ¨re monture du carton.</div>
               </div>
             </sc-if>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:14px">
@@ -414,7 +414,7 @@ input::placeholder{color:var(--ink-34)}
                     <div style="{{ m.photoStyle }}"><span data-icon="glasses" style="display:grid;place-items:center;font-size:20px;color:var(--srf-9)"></span></div>
                     <div style="flex:1;min-width:0">
                       <div style="font:600 13px/1.3 'JetBrains Mono',monospace;margin-bottom:7px">{{ m.ref }}</div>
-                      <div style="font:500 11px/1.4 Manrope,sans-serif;color:var(--ink-66);margin-bottom:9px">{{ m.marque }} · {{ m.forme }}<br>{{ m.couleur }} · {{ m.matiere }}</div>
+                      <div style="font:500 11px/1.4 Manrope,sans-serif;color:var(--ink-66);margin-bottom:9px">{{ m.marque }} Â· {{ m.forme }}<br>{{ m.couleur }} Â· {{ m.matiere }}</div>
                       <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--info-ink);word-break:break-all;margin-bottom:10px">{{ m.uid }}</div>
                       <span style="{{ m.exemplairesStyle }}">{{ m.exemplaires }}</span>
                     </div>
@@ -436,7 +436,7 @@ input::placeholder{color:var(--ink-34)}
         <div style="margin-bottom:26px;padding-right:238px">
           <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">INVENTAIRE</div>
           <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Gestion du stock</h1>
-          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Toutes les montures enregistrées, avec leur identifiant unique et leur provenance.</p>
+          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Toutes les montures enregistrÃ©es, avec leur identifiant unique et leur provenance.</p>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:14px;margin-bottom:24px">
@@ -452,12 +452,12 @@ input::placeholder{color:var(--ink-34)}
           <div style="padding:56px 32px;border-radius:24px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
             <span data-icon="glasses" style="display:grid;place-items:center;font-size:32px;color:var(--ink-3);margin:0 auto 16px"></span>
             <sc-if value="{{ stockToutExpedie }}" hint-placeholder-val="{{ false }}">
-              <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Tout a été expédié</div>
-              <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56);max-width:46ch;margin:0 auto;text-wrap:pretty">Plus aucune monture disponible : les sorties sont suivies dans l'historique des expéditions.</div>
+              <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Tout a Ã©tÃ© expÃ©diÃ©</div>
+              <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56);max-width:46ch;margin:0 auto;text-wrap:pretty">Plus aucune monture disponible : les sorties sont suivies dans l'historique des expÃ©ditions.</div>
             </sc-if>
             <sc-if value="{{ stockJamaisEnregistre }}" hint-placeholder-val="{{ true }}">
               <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Stock vide</div>
-              <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56)">Enregistrez des montures depuis une commande arrivée.</div>
+              <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56)">Enregistrez des montures depuis une commande arrivÃ©e.</div>
             </sc-if>
           </div>
         </sc-if>
@@ -469,7 +469,7 @@ input::placeholder{color:var(--ink-34)}
               <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">Composition du stock</div>
               <span style="font:500 11.5px/1.3 'JetBrains Mono',monospace;color:var(--ink-66);white-space:nowrap">{{ compoTotalLabel }}</span>
             </div>
-            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-64);margin-bottom:18px;text-wrap:pretty">Répartition des montures présentes dans le stock, en nombre et en pourcentage.</div>
+            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-64);margin-bottom:18px;text-wrap:pretty">RÃ©partition des montures prÃ©sentes dans le stock, en nombre et en pourcentage.</div>
             <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:20px">
               <sc-for list="{{ compoOngletOpts }}" as="o" hint-placeholder-count="6">
                 <button onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</button>
@@ -496,10 +496,10 @@ input::placeholder{color:var(--ink-34)}
           <div style="padding:22px 24px;border-radius:24px;background:rgba(242,19,142,.07);border:1px solid rgba(191,33,120,.24);backdrop-filter:blur(22px);margin-bottom:20px">
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">
               <span data-icon="clipboard-list" style="display:inline-grid;place-items:center;font-size:18px;color:var(--acc-ink);flex:none"></span>
-              <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">Besoins à commander chez le fournisseur</div>
+              <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">Besoins Ã  commander chez le fournisseur</div>
               <span style="font:600 12.5px/1.3 'JetBrains Mono',monospace;color:var(--acc-strong);white-space:nowrap">{{ besoinTotalLabel }}</span>
             </div>
-            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Liste calculée à partir des catégories sous leur minimum. Genre, type et gamme décrivent le même volume vu sous trois angles : le total à commander correspond à un seul axe, les lignes indiquent comment le répartir. Envoyée à l'administrateur, elle sert de base au bon de commande fournisseur.</div>
+            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Liste calculÃ©e Ã  partir des catÃ©gories sous leur minimum. Genre, type et gamme dÃ©crivent le mÃªme volume vu sous trois angles : le total Ã  commander correspond Ã  un seul axe, les lignes indiquent comment le rÃ©partir. EnvoyÃ©e Ã  l'administrateur, elle sert de base au bon de commande fournisseur.</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:20px">
               <sc-for list="{{ besoinLignes }}" as="b" hint-placeholder-count="3">
                 <div style="{{ b.style }}">
@@ -508,18 +508,18 @@ input::placeholder{color:var(--ink-34)}
                 </div>
               </sc-for>
             </div>
-            <button onClick="{{ envoyerBesoins }}" style="{{ besoinStyle }}"><span data-icon="send" style="display:grid;place-items:center;font-size:17px"></span>Envoyer la liste à l'administrateur</button>
+            <button onClick="{{ envoyerBesoins }}" style="{{ besoinStyle }}"><span data-icon="send" style="display:grid;place-items:center;font-size:17px"></span>Envoyer la liste Ã  l'administrateur</button>
           </div>
         </sc-if>
 
         <sc-if value="{{ approSuiviVisible }}" hint-placeholder-val="{{ false }}">
           <div style="padding:20px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-88),var(--srf-6));border:1px solid var(--ink-09);backdrop-filter:blur(22px);box-shadow:inset 0 1px 0 var(--srf-9);margin-bottom:20px">
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:14px">MES LISTES ENVOYÉES À L'ADMINISTRATEUR</div>
+            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:14px">MES LISTES ENVOYÃ‰ES Ã€ L'ADMINISTRATEUR</div>
             <div style="display:flex;flex-direction:column;gap:9px">
               <sc-for list="{{ approSuivi }}" as="a" hint-placeholder-count="0">
                 <div style="{{ a.style }}">
                   <span style="font:700 12.5px/1.3 'JetBrains Mono',monospace;white-space:nowrap">{{ a.ref }}</span>
-                  <span style="font:500 11.5px/1.4 Manrope,sans-serif;color:var(--ink-66);flex:1;min-width:120px">{{ a.total }} · {{ a.date }}</span>
+                  <span style="font:500 11.5px/1.4 Manrope,sans-serif;color:var(--ink-66);flex:1;min-width:120px">{{ a.total }} Â· {{ a.date }}</span>
                   <span style="{{ a.statutStyle }}">{{ a.statutLabel }}</span>
                 </div>
               </sc-for>
@@ -531,11 +531,11 @@ input::placeholder{color:var(--ink-34)}
           <div style="padding:22px 24px;border-radius:24px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9);margin-bottom:20px">
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">
               <span data-icon="heart-pulse" style="display:inline-grid;place-items:center;font-size:18px;color:var(--acc-ink);flex:none"></span>
-              <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">Santé du stock</div>
+              <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">SantÃ© du stock</div>
               <span style="{{ santeAlerteStyle }}">{{ santeResume }}</span>
               <span style="{{ santeFormesStyle }}">{{ santeFormes }}</span>
             </div>
-            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-64);margin-bottom:20px;text-wrap:pretty">Le seuil se définit par genre, par type et par gamme — pas par forme, qui relève de la variété. {{ santeRegle }}</div>
+            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-64);margin-bottom:20px;text-wrap:pretty">Le seuil se dÃ©finit par genre, par type et par gamme â€” pas par forme, qui relÃ¨ve de la variÃ©tÃ©. {{ santeRegle }}</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px">
               <sc-for list="{{ santeGroupes }}" as="g" hint-placeholder-count="3">
                 <div>
@@ -566,11 +566,11 @@ input::placeholder{color:var(--ink-34)}
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
             <div style="display:flex;align-items:center;gap:11px;flex:1;min-width:240px;padding:12px 16px;border-radius:999px;background:var(--srf-9);border:1.5px solid var(--ink-12)">
               <span data-icon="search" style="display:grid;place-items:center;font-size:16px;color:var(--ink-5);flex:none"></span>
-              <input value="{{ stockQ }}" onChange="{{ setStockQ }}" placeholder="Référence, identifiant, couleur, matière…" style="flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:500 13.5px/1.3 Manrope,sans-serif">
+              <input value="{{ stockQ }}" onChange="{{ setStockQ }}" placeholder="RÃ©fÃ©rence, identifiant, couleur, matiÃ¨reâ€¦" style="flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:500 13.5px/1.3 Manrope,sans-serif">
             </div>
             <span style="font:500 11.5px/1.3 'JetBrains Mono',monospace;color:var(--ink-66);white-space:nowrap">{{ stockViewLabel }}</span>
             <sc-if value="{{ stockFiltre }}" hint-placeholder-val="{{ false }}">
-              <button onClick="{{ resetStockFiltres }}" style="display:inline-flex;align-items:center;gap:8px;padding:10px 15px;border-radius:999px;border:1px solid rgba(191,33,120,.3);background:rgba(242,19,142,.1);color:var(--acc-ink);font:600 11.5px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap"><span data-icon="x" style="display:grid;place-items:center;font-size:14px"></span>Réinitialiser</button>
+              <button onClick="{{ resetStockFiltres }}" style="display:inline-flex;align-items:center;gap:8px;padding:10px 15px;border-radius:999px;border:1px solid rgba(191,33,120,.3);background:rgba(242,19,142,.1);color:var(--acc-ink);font:600 11.5px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap"><span data-icon="x" style="display:grid;place-items:center;font-size:14px"></span>RÃ©initialiser</button>
             </sc-if>
           </div>
           <div style="display:flex;flex-direction:column;gap:11px">
@@ -600,7 +600,7 @@ input::placeholder{color:var(--ink-34)}
           <div style="padding:44px 32px;border-radius:24px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
             <span data-icon="search-x" style="display:grid;place-items:center;font-size:28px;color:var(--ink-3);margin:0 auto 14px"></span>
             <div style="font:600 14px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:7px">Aucune monture ne correspond</div>
-            <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-56)">Élargissez les filtres ou effacez la recherche.</div>
+            <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-56)">Ã‰largissez les filtres ou effacez la recherche.</div>
           </div>
         </sc-if>
 
@@ -608,7 +608,7 @@ input::placeholder{color:var(--ink-34)}
         <div style="border-radius:24px;overflow:hidden;border:1px solid var(--ink-09);background:linear-gradient(160deg,var(--srf-9),var(--srf-64));backdrop-filter:blur(24px);box-shadow:0 24px 56px -30px var(--ink-2)">
          <div style="overflow-x:auto"><div style="min-width:960px">
           <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(140px,1.1fr);gap:14px;padding:14px 22px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
-            <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>COULEUR</div><div>MATIÈRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div style="text-align:right">IDENTIFIANT</div>
+            <div>PHOTO</div><div>RÃ‰FÃ‰RENCE</div><div>MARQUE</div><div>FORME</div><div>COULEUR</div><div>MATIÃˆRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div style="text-align:right">IDENTIFIANT</div>
           </div>
           <sc-for list="{{ stockRows }}" as="r" hint-placeholder-count="0">
             <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(140px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
@@ -633,8 +633,8 @@ input::placeholder{color:var(--ink-34)}
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
         <div style="margin-bottom:24px;padding-right:238px">
           <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">SORTIES VERS BOUTIQUES</div>
-          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande à expédier</h1>
-          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:70ch;text-wrap:pretty">Trois origines : l'envoi automatique déclenché quand une catégorie passe sous son minimum, la demande d'un responsable de magasin, et la liste créée par l'administrateur.</p>
+          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande Ã  expÃ©dier</h1>
+          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:70ch;text-wrap:pretty">Trois origines : l'envoi automatique dÃ©clenchÃ© quand une catÃ©gorie passe sous son minimum, la demande d'un responsable de magasin, et la liste crÃ©Ã©e par l'administrateur.</p>
         </div>
 
         <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px">
@@ -654,7 +654,7 @@ input::placeholder{color:var(--ink-34)}
           <div style="padding:56px 32px;border-radius:24px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
             <span data-icon="truck" style="display:grid;place-items:center;font-size:32px;color:var(--ink-3);margin:0 auto 16px"></span>
             <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Aucune demande pour {{ magasinActif }}</div>
-            <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56)">Les seuils bas déclencheront un envoi automatique.</div>
+            <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56)">Les seuils bas dÃ©clencheront un envoi automatique.</div>
           </div>
         </sc-if>
 
@@ -675,7 +675,7 @@ input::placeholder{color:var(--ink-34)}
               <div style="height:6px;border-radius:999px;background:var(--ink-08);overflow:hidden;margin-bottom:16px">
                 <div style="{{ d.barStyle }}"></div>
               </div>
-              <div style="display:inline-flex;align-items:center;gap:8px;font:600 11.5px/1.3 Manrope,sans-serif;color:var(--info-ink)"><span data-icon="arrow-right" style="display:grid;place-items:center;font-size:14px"></span>Préparer l'expédition</div>
+              <div style="display:inline-flex;align-items:center;gap:8px;font:600 11.5px/1.3 Manrope,sans-serif;color:var(--info-ink)"><span data-icon="arrow-right" style="display:grid;place-items:center;font-size:14px"></span>PrÃ©parer l'expÃ©dition</div>
             </button>
           </sc-for>
         </div>
@@ -686,7 +686,7 @@ input::placeholder{color:var(--ink-34)}
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px;flex-wrap:wrap;padding-right:238px">
           <button onClick="{{ backToExpedier }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 16px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:15px"></span>Retour</button>
-          <div style="padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap">{{ demRef }} · {{ demMagasin }}</div>
+          <div style="padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap">{{ demRef }} Â· {{ demMagasin }}</div>
           <span style="{{ demOrigStyle }}">{{ demOrigLabel }}</span>
         </div>
 
@@ -694,7 +694,7 @@ input::placeholder{color:var(--ink-34)}
           <div>
             <div style="padding:20px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-88),var(--srf-6));border:1px solid var(--ink-09);backdrop-filter:blur(22px);box-shadow:inset 0 1px 0 var(--srf-9);margin-bottom:20px">
               <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-                <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66)">MONTURES PRÉLEVÉES</span>
+                <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66)">MONTURES PRÃ‰LEVÃ‰ES</span>
                 <span style="margin-left:auto;font:500 18px/1.2 'JetBrains Mono',monospace;letter-spacing:-.02em;color:var(--acc-strong);white-space:nowrap">{{ demCountLabel }}</span>
               </div>
               <sc-if value="{{ demListeVisible }}" hint-placeholder-val="{{ true }}">
@@ -702,14 +702,14 @@ input::placeholder{color:var(--ink-34)}
                   <div style="{{ demBarStyle }}"></div>
                 </div>
               </sc-if>
-              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-68);text-wrap:pretty">Les lignes sont grisées jusqu'au scan. Chaque scan confirme que la monture a bien été prélevée à l'emplacement indiqué.</div>
+              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-68);text-wrap:pretty">Les lignes sont grisÃ©es jusqu'au scan. Chaque scan confirme que la monture a bien Ã©tÃ© prÃ©levÃ©e Ã  l'emplacement indiquÃ©.</div>
             </div>
 
             <sc-if value="{{ demStockVide }}" hint-placeholder-val="{{ false }}">
               <div style="padding:48px 32px;border-radius:24px;border:1.5px dashed rgba(191,33,120,.3);background:rgba(242,19,142,.07);text-align:center">
                 <span data-icon="triangle-alert" style="display:grid;place-items:center;font-size:30px;color:var(--acc-ink);margin:0 auto 16px"></span>
                 <div style="font:600 15px/1.3 Sora,sans-serif;margin-bottom:8px">Stock insuffisant</div>
-                <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);max-width:46ch;margin:0 auto;text-wrap:pretty">{{ demBesoin }} monture(s) demandée(s), aucune disponible. Enregistrez des montures depuis une commande arrivée avant de préparer cette expédition.</div>
+                <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);max-width:46ch;margin:0 auto;text-wrap:pretty">{{ demBesoin }} monture(s) demandÃ©e(s), aucune disponible. Enregistrez des montures depuis une commande arrivÃ©e avant de prÃ©parer cette expÃ©dition.</div>
               </div>
             </sc-if>
 
@@ -718,7 +718,7 @@ input::placeholder{color:var(--ink-34)}
               <div style="overflow-x:auto">
                 <div style="min-width:660px">
                   <div style="display:grid;grid-template-columns:minmax(120px,1.2fr) minmax(96px,.9fr) minmax(88px,.8fr) minmax(104px,.9fr) minmax(150px,1.2fr) 52px;gap:14px;padding:14px 20px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
-                    <div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>EMPLACEMENT</div><div>IDENTIFIANT</div><div></div>
+                    <div>RÃ‰FÃ‰RENCE</div><div>MARQUE</div><div>FORME</div><div>EMPLACEMENT</div><div>IDENTIFIANT</div><div></div>
                   </div>
                   <sc-for list="{{ demLignes }}" as="l" hint-placeholder-count="4">
                     <div style="{{ l.rowStyle }}">
@@ -745,14 +745,14 @@ input::placeholder{color:var(--ink-34)}
               <div style="font:600 14px/1.35 Sora,sans-serif;letter-spacing:-.01em;margin-bottom:9px">{{ demOrigLabel }}</div>
               <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-68);margin-bottom:16px;text-wrap:pretty">{{ demMotif }}</div>
               <div style="display:flex;justify-content:space-between;gap:12px;padding-top:14px;border-top:1px solid var(--ink-08)">
-                <span style="font:400 12px/1.4 Manrope,sans-serif;color:var(--ink-66)">Reçue le</span>
+                <span style="font:400 12px/1.4 Manrope,sans-serif;color:var(--ink-66)">ReÃ§ue le</span>
                 <span style="font:600 12px/1.4 'JetBrains Mono',monospace">{{ demDate }}</span>
               </div>
             </div>
 
             <sc-if value="{{ demExpedie }}" hint-placeholder-val="{{ false }}">
               <div style="padding:24px;border-radius:22px;background:rgba(52,201,141,.1);border:1px solid rgba(30,143,99,.28);backdrop-filter:blur(20px);text-align:center">
-                <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ok-ink);margin-bottom:14px">CARTON CRÉÉ</div>
+                <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ok-ink);margin-bottom:14px">CARTON CRÃ‰Ã‰</div>
                 <div style="padding:16px;border-radius:16px;background:var(--card);border:1px solid var(--ink-1);margin-bottom:14px">
                   <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:2px">
                     <sc-for list="{{ demQrBlocks }}" as="b" hint-placeholder-count="144">
@@ -761,7 +761,7 @@ input::placeholder{color:var(--ink-34)}
                   </div>
                 </div>
                 <div style="font:600 13px/1.4 'JetBrains Mono',monospace;letter-spacing:.1em;margin-bottom:12px">{{ demCartonCode }}</div>
-                <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-68);text-wrap:pretty">Le responsable de {{ demMagasin }} scannera ce QR code pour confirmer la réception du carton.</div>
+                <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-68);text-wrap:pretty">Le responsable de {{ demMagasin }} scannera ce QR code pour confirmer la rÃ©ception du carton.</div>
               </div>
             </sc-if>
 
@@ -769,13 +769,13 @@ input::placeholder{color:var(--ink-34)}
               <div style="padding:22px 24px;border-radius:22px;background:rgba(95,194,217,.1);border:1px solid rgba(51,135,156,.22);backdrop-filter:blur(20px)">
                 <div style="display:flex;align-items:center;gap:11px;margin-bottom:12px">
                   <span data-icon="scan-barcode" style="display:inline-grid;place-items:center;font-size:19px;color:var(--info-ink);flex:none"></span>
-                  <div style="font:600 13.5px/1.3 Sora,sans-serif;flex:1">{{ demRestant }} à scanner</div>
+                  <div style="font:600 13.5px/1.3 Sora,sans-serif;flex:1">{{ demRestant }} Ã  scanner</div>
                 </div>
-                <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-68);text-wrap:pretty">Le carton et son QR code ne seront générés qu'une fois toutes les lignes dégrisées.</div>
+                <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-68);text-wrap:pretty">Le carton et son QR code ne seront gÃ©nÃ©rÃ©s qu'une fois toutes les lignes dÃ©grisÃ©es.</div>
               </div>
             </sc-if>
 
-            <button onClick="{{ createCarton }}" style="{{ demCreateStyle }};justify-content:center"><span data-icon="qr-code" style="display:grid;place-items:center;font-size:17px"></span>Créer le carton et le QR</button>
+            <button onClick="{{ createCarton }}" style="{{ demCreateStyle }};justify-content:center"><span data-icon="qr-code" style="display:grid;place-items:center;font-size:17px"></span>CrÃ©er le carton et le QR</button>
           </div>
         </div>
       </div>
@@ -785,15 +785,15 @@ input::placeholder{color:var(--ink-34)}
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
         <div style="margin-bottom:26px;padding-right:238px">
           <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ok-ink);margin-bottom:12px">SUIVI DES ENVOIS</div>
-          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Historique des expéditions</h1>
-          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:70ch;text-wrap:pretty">Chaque carton créé arrive ici en transit, passe en réception quand la boutique scanne son code-barres, puis en montures enregistrées quand tout a été scanné sur place.</p>
+          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Historique des expÃ©ditions</h1>
+          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:70ch;text-wrap:pretty">Chaque carton crÃ©Ã© arrive ici en transit, passe en rÃ©ception quand la boutique scanne son code-barres, puis en montures enregistrÃ©es quand tout a Ã©tÃ© scannÃ© sur place.</p>
         </div>
 
         <sc-if value="{{ expAucun }}" hint-placeholder-val="{{ true }}">
           <div style="padding:56px 32px;border-radius:24px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
             <span data-icon="history" style="display:grid;place-items:center;font-size:32px;color:var(--ink-3);margin:0 auto 16px"></span>
-            <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Aucune expédition</div>
-            <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56)">Créez un carton depuis « Commande à expédier » pour le voir apparaître ici.</div>
+            <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Aucune expÃ©dition</div>
+            <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56)">CrÃ©ez un carton depuis Â« Commande Ã  expÃ©dier Â» pour le voir apparaÃ®tre ici.</div>
           </div>
         </sc-if>
 
@@ -802,7 +802,7 @@ input::placeholder{color:var(--ink-34)}
             <button onClick="{{ e.onOpen }}" style="{{ e.cardStyle }}">
               <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
                 <div style="min-width:0;flex:1">
-                  <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-64);margin-bottom:6px">BON D'EXPÉDITION</div>
+                  <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-64);margin-bottom:6px">BON D'EXPÃ‰DITION</div>
                   <div style="font:700 14px/1.2 'JetBrains Mono',monospace">{{ e.ref }}</div>
                 </div>
                 <span style="{{ e.statutStyle }}">{{ e.statutLabel }}</span>
@@ -836,10 +836,10 @@ input::placeholder{color:var(--ink-34)}
                   <div style="font:700 13.5px/1.2 'JetBrains Mono',monospace;flex:1;min-width:0">{{ e.ref }}</div>
                   <span style="{{ e.statutStyle }}">{{ e.statutLabel }}</span>
                 </div>
-                <div style="font:500 12px/1.4 Manrope,sans-serif;color:var(--ink-66);margin-bottom:12px">{{ e.magasin }} · {{ e.count }}</div>
+                <div style="font:500 12px/1.4 Manrope,sans-serif;color:var(--ink-66);margin-bottom:12px">{{ e.magasin }} Â· {{ e.count }}</div>
                 <div style="display:flex;gap:14px;flex-wrap:wrap;font:500 11px/1.4 'JetBrains Mono',monospace;color:var(--ink-62)">
                   <span style="white-space:nowrap">Envoi {{ e.date }}</span>
-                  <span style="white-space:nowrap;color:var(--ok-ink)">Reçu {{ e.recuDate }}</span>
+                  <span style="white-space:nowrap;color:var(--ok-ink)">ReÃ§u {{ e.recuDate }}</span>
                 </div>
               </button>
             </sc-for>
@@ -853,14 +853,14 @@ input::placeholder{color:var(--ink-34)}
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px;flex-wrap:wrap;padding-right:238px">
           <button onClick="{{ backToHistorique }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 16px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:15px"></span>Retour</button>
-          <div style="padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap">{{ expRef }} · {{ expMagasin }}</div>
+          <div style="padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap">{{ expRef }} Â· {{ expMagasin }}</div>
           <span style="{{ expStatutStyle }}">{{ expStatutLabel }}</span>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:18px;margin-bottom:22px">
           <div style="padding:20px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-88),var(--srf-6));border:1px solid var(--ink-09);backdrop-filter:blur(22px);box-shadow:inset 0 1px 0 var(--srf-9)">
             <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-              <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66)">ENREGISTRÉES EN BOUTIQUE</span>
+              <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66)">ENREGISTRÃ‰ES EN BOUTIQUE</span>
               <span style="margin-left:auto;font:500 18px/1.2 'JetBrains Mono',monospace;letter-spacing:-.02em;color:var(--info-ink);white-space:nowrap">{{ expCountLabel }}</span>
             </div>
             <div style="height:8px;border-radius:999px;background:var(--ink-08);overflow:hidden;margin-bottom:12px">
@@ -872,12 +872,12 @@ input::placeholder{color:var(--ink-34)}
           <div style="padding:20px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-88),var(--srf-6));border:1px solid var(--ink-09);backdrop-filter:blur(22px);box-shadow:inset 0 1px 0 var(--srf-9)">
             <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:14px">SUIVI</div>
             <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--ink-08)"><span style="font:400 12px/1.4 Manrope,sans-serif;color:var(--ink-66)">Code du carton</span><span style="font:600 12px/1.4 'JetBrains Mono',monospace">{{ expCode }}</span></div>
-            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--ink-08)"><span style="font:400 12px/1.4 Manrope,sans-serif;color:var(--ink-66)">Date d'expédition</span><span style="font:600 12px/1.4 'JetBrains Mono',monospace">{{ expDate }}</span></div>
-            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0"><span style="font:400 12px/1.4 Manrope,sans-serif;color:var(--ink-66)">Date de réception</span><span style="font:600 12px/1.4 'JetBrains Mono',monospace;color:var(--ok-ink)">{{ expRecuDate }}</span></div>
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--ink-08)"><span style="font:400 12px/1.4 Manrope,sans-serif;color:var(--ink-66)">Date d'expÃ©dition</span><span style="font:600 12px/1.4 'JetBrains Mono',monospace">{{ expDate }}</span></div>
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0"><span style="font:400 12px/1.4 Manrope,sans-serif;color:var(--ink-66)">Date de rÃ©ception</span><span style="font:600 12px/1.4 'JetBrains Mono',monospace;color:var(--ok-ink)">{{ expRecuDate }}</span></div>
           </div>
 
           <div style="padding:20px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-88),var(--srf-6));border:1px solid var(--ink-09);backdrop-filter:blur(22px);box-shadow:inset 0 1px 0 var(--srf-9);display:flex;flex-direction:column;gap:11px">
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:3px">CÔTÉ BOUTIQUE</div>
+            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:3px">CÃ”TÃ‰ BOUTIQUE</div>
             <sc-if value="{{ expEnTransit }}" hint-placeholder-val="{{ true }}">
               <button onClick="{{ receptionner }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:13px 18px;border-radius:999px;border:1px solid rgba(166,106,5,.34);background:rgba(245,165,36,.16);color:var(--warn-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(245,165,36,.26)"><span data-icon="scan-barcode" style="display:grid;place-items:center;font-size:15px"></span>Scan du carton par la boutique</button>
             </sc-if>
@@ -888,11 +888,11 @@ input::placeholder{color:var(--ink-34)}
           </div>
         </div>
 
-        <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-66);margin-bottom:14px">MONTURES ENVOYÉES</div>
+        <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-66);margin-bottom:14px">MONTURES ENVOYÃ‰ES</div>
         <div style="border-radius:24px;overflow:hidden;border:1px solid var(--ink-09);background:linear-gradient(160deg,var(--srf-9),var(--srf-64));backdrop-filter:blur(24px);box-shadow:0 24px 56px -30px var(--ink-2)">
           <div style="overflow-x:auto"><div style="min-width:700px">
             <div style="display:grid;grid-template-columns:54px minmax(110px,1.2fr) minmax(92px,.9fr) minmax(96px,.9fr) minmax(140px,1.2fr) 84px;gap:14px;padding:14px 20px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
-              <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>COULEUR</div><div>IDENTIFIANT</div><div style="text-align:right">ÉTAT</div>
+              <div>PHOTO</div><div>RÃ‰FÃ‰RENCE</div><div>MARQUE</div><div>COULEUR</div><div>IDENTIFIANT</div><div style="text-align:right">Ã‰TAT</div>
             </div>
             <sc-for list="{{ expLignes }}" as="l" hint-placeholder-count="3">
               <div style="{{ l.rowStyle }}">
@@ -917,7 +917,7 @@ input::placeholder{color:var(--ink-34)}
         <div style="margin-bottom:30px;padding-right:238px">
           <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">LECTEUR DE CODES-BARRES</div>
           <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Scan</h1>
-          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Connectez votre téléphone comme lecteur, ou saisissez le code d'un carton à la main.</p>
+          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Connectez votre tÃ©lÃ©phone comme lecteur, ou saisissez le code d'un carton Ã  la main.</p>
           <sc-if value="{{ scanTargetReady }}" hint-placeholder-val="{{ false }}">
             <div style="display:inline-flex;align-items:center;gap:9px;margin-top:14px;padding:9px 13px;border-radius:12px;background:rgba(245,165,36,.14);border:1px solid rgba(166,106,5,.3);color:var(--warn-ink);font:600 12px/1.3 Manrope,sans-serif">Carton attendu : {{ scanTargetCode }}</div>
           </sc-if>
@@ -927,7 +927,7 @@ input::placeholder{color:var(--ink-34)}
           <div style="padding:26px;border-radius:24px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9)">
             <div style="display:flex;align-items:center;gap:11px;margin-bottom:20px">
               <span data-icon="smartphone" style="display:inline-grid;place-items:center;font-size:19px;color:var(--info-ink);flex:none"></span>
-              <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">Téléphone lecteur</div>
+              <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">TÃ©lÃ©phone lecteur</div>
             </div>
             <sc-if value="{{ phoneNotPaired }}" hint-placeholder-val="{{ true }}">
               <div style="padding:18px;border-radius:18px;background:var(--card);border:1px solid var(--ink-08);margin-bottom:18px">
@@ -936,31 +936,31 @@ input::placeholder{color:var(--ink-34)}
                     <span style="{{ b.style }}"></span>
                   </sc-for>
                 </div>
-                <sc-if value="{{ pairQrReady }}" hint-placeholder-val="{{ false }}"><img bindSrc="{{ pairQrUrl }}" alt="QR d’appairage" style="display:block;width:100%;max-width:260px;margin:16px auto 0;border-radius:12px;background:#fff"></sc-if>
+                <sc-if value="{{ pairQrReady }}" hint-placeholder-val="{{ false }}"><img bindSrc="{{ pairQrUrl }}" alt="QR dâ€™appairage" style="display:block;width:100%;max-width:260px;margin:16px auto 0;border-radius:12px;background:#fff"></sc-if>
                 <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:2px;display:none">
                 </div>
               </div>
-              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:8px;text-wrap:pretty">Scannez ce code avec l'appareil photo du téléphone, ou saisissez le code d'appairage dans l'application mobile.</div>
+              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:8px;text-wrap:pretty">Scannez ce code avec l'appareil photo du tÃ©lÃ©phone, ou saisissez le code d'appairage dans l'application mobile.</div>
               <div style="font:500 15px/1.3 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink);margin-bottom:20px">{{ pairCode }}</div>
-              <button onClick="{{ startPair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -14px rgba(191,33,120,.6),inset 0 1px 0 var(--srf-5);transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="transform:translateY(-1px)"><span data-icon="link" style="display:grid;place-items:center;font-size:16px"></span>Connecter le téléphone</button>
+              <button onClick="{{ startPair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -14px rgba(191,33,120,.6),inset 0 1px 0 var(--srf-5);transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="transform:translateY(-1px)"><span data-icon="link" style="display:grid;place-items:center;font-size:16px"></span>Connecter le tÃ©lÃ©phone</button>
             </sc-if>
             <sc-if value="{{ pairing }}" hint-placeholder-val="{{ false }}">
               <div style="padding:44px 20px;text-align:center">
                 <span style="display:inline-block;width:26px;height:26px;border-radius:999px;border:2.5px solid rgba(51,135,156,.24);border-top-color:var(--info-ink);animation:spin .8s linear infinite;margin-bottom:18px"></span>
-                <div style="font:600 13.5px/1.3 Manrope,sans-serif;margin-bottom:8px">Appairage en cours…</div>
-                <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-66)">Confirmez la connexion sur le téléphone.</div>
+                <div style="font:600 13.5px/1.3 Manrope,sans-serif;margin-bottom:8px">Appairage en coursâ€¦</div>
+                <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-66)">Confirmez la connexion sur le tÃ©lÃ©phone.</div>
               </div>
             </sc-if>
             <sc-if value="{{ phonePaired }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;align-items:center;gap:13px;padding:16px;border-radius:18px;background:rgba(52,201,141,.1);border:1px solid rgba(30,143,99,.28);margin-bottom:18px">
                 <span style="width:11px;height:11px;border-radius:999px;background:#34C98D;box-shadow:0 0 0 4px rgba(52,201,141,.18);flex:none"></span>
                 <div style="flex:1;min-width:0">
-                  <div style="font:600 13px/1.3 Manrope,sans-serif">Téléphone d'Aïssata</div>
-                  <div style="font:500 11px/1.4 'JetBrains Mono',monospace;color:var(--ink-66);margin-top:5px">Lecteur actif · Wi-Fi local</div>
+                  <div style="font:600 13px/1.3 Manrope,sans-serif">TÃ©lÃ©phone d'AÃ¯ssata</div>
+                  <div style="font:500 11px/1.4 'JetBrains Mono',monospace;color:var(--ink-66);margin-top:5px">Lecteur actif Â· Wi-Fi local</div>
                 </div>
               </div>
-              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Le téléphone envoie chaque lecture directement dans l'écran ouvert.</div>
-              <button onClick="{{ unpair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="unlink" style="display:grid;place-items:center;font-size:15px"></span>Déconnecter</button>
+              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Le tÃ©lÃ©phone envoie chaque lecture directement dans l'Ã©cran ouvert.</div>
+              <button onClick="{{ unpair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="unlink" style="display:grid;place-items:center;font-size:15px"></span>DÃ©connecter</button>
             </sc-if>
           </div>
 
@@ -969,10 +969,10 @@ input::placeholder{color:var(--ink-34)}
               <span data-icon="keyboard" style="display:inline-grid;place-items:center;font-size:19px;color:var(--warn-ink);flex:none"></span>
               <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">Saisie manuelle</div>
             </div>
-            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Recours si le lecteur est en panne. Saisissez le code imprimé sur le carton.</div>
+            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Recours si le lecteur est en panne. Saisissez le code imprimÃ© sur le carton.</div>
             <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:11px">CODE DU CARTON</div>
             <input value="{{ manualCode }}" onChange="{{ setManualCode }}" placeholder="RO-1800-001" style="width:100%;padding:15px 17px;border-radius:16px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 16px/1.3 'JetBrains Mono',monospace;letter-spacing:.06em;margin-bottom:14px">
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">CARTONS À ENREGISTRER</div>
+            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">CARTONS Ã€ ENREGISTRER</div>
             <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
               <sc-for list="{{ manualTargets }}" as="t" hint-placeholder-count="3">
                 <button onClick="{{ t.onFill }}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:14px;border:1px solid var(--ink-09);background:var(--srf-62);cursor:pointer;text-align:left;transition:all .24s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.16);border-color:rgba(51,135,156,.3)">
@@ -990,30 +990,30 @@ input::placeholder{color:var(--ink-34)}
     <sc-if value="{{ isProcess }}" hint-placeholder-val="{{ false }}">
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1);max-width:920px">
         <div style="margin-bottom:38px;padding-right:238px">
-          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">POSTE · MAGASINIER STOCK GÉNÉRAL</div>
-          <h1 style="font:600 30px/1.14 Sora,sans-serif;letter-spacing:-.024em;margin:0 0 16px;max-width:26ch;text-wrap:balance">À quoi sert le stock général</h1>
-          <p style="font:300 15px/1.65 Manrope,sans-serif;color:var(--ink-62);margin:0;max-width:68ch;text-wrap:pretty">Votre poste transforme des cartons en montures identifiables une par une. Le pré-enregistrement a décrit les lots ; vous descendez à l'unité. Chaque monture reçoit un identifiant unique, une référence et une photo — c'est ce triplet qui permet de la retrouver, de la vendre et de la tracer jusqu'en boutique.</p>
+          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">POSTE Â· MAGASINIER STOCK GÃ‰NÃ‰RAL</div>
+          <h1 style="font:600 30px/1.14 Sora,sans-serif;letter-spacing:-.024em;margin:0 0 16px;max-width:26ch;text-wrap:balance">Ã€ quoi sert le stock gÃ©nÃ©ral</h1>
+          <p style="font:300 15px/1.65 Manrope,sans-serif;color:var(--ink-62);margin:0;max-width:68ch;text-wrap:pretty">Votre poste transforme des cartons en montures identifiables une par une. Le prÃ©-enregistrement a dÃ©crit les lots ; vous descendez Ã  l'unitÃ©. Chaque monture reÃ§oit un identifiant unique, une rÃ©fÃ©rence et une photo â€” c'est ce triplet qui permet de la retrouver, de la vendre et de la tracer jusqu'en boutique.</p>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:18px;margin-bottom:40px">
           <div style="padding:22px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px)">
             <span data-icon="fingerprint" style="display:inline-grid;place-items:center;font-size:22px;color:var(--info-ink);margin-bottom:16px"></span>
             <div style="font:600 14px/1.3 Sora,sans-serif;margin-bottom:9px">Ce que vous produisez</div>
-            <div style="font:400 12.5px/1.6 Manrope,sans-serif;color:var(--ink-7);text-wrap:pretty">Une fiche par monture : identifiant unique, référence, photo, et les caractéristiques héritées du carton.</div>
+            <div style="font:400 12.5px/1.6 Manrope,sans-serif;color:var(--ink-7);text-wrap:pretty">Une fiche par monture : identifiant unique, rÃ©fÃ©rence, photo, et les caractÃ©ristiques hÃ©ritÃ©es du carton.</div>
           </div>
           <div style="padding:22px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px)">
             <span data-icon="zap" style="display:inline-grid;place-items:center;font-size:22px;color:var(--info-ink);margin-bottom:16px"></span>
             <div style="font:600 14px/1.3 Sora,sans-serif;margin-bottom:9px">Ce qui vous fait gagner du temps</div>
-            <div style="font:400 12.5px/1.6 Manrope,sans-serif;color:var(--ink-7);text-wrap:pretty">Gamme, type, prix, genre, formes et marques arrivent déjà remplis. Vous ne saisissez que ce qui est propre à la monture.</div>
+            <div style="font:400 12.5px/1.6 Manrope,sans-serif;color:var(--ink-7);text-wrap:pretty">Gamme, type, prix, genre, formes et marques arrivent dÃ©jÃ  remplis. Vous ne saisissez que ce qui est propre Ã  la monture.</div>
           </div>
           <div style="padding:22px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px)">
             <span data-icon="store" style="display:inline-grid;place-items:center;font-size:22px;color:var(--info-ink);margin-bottom:16px"></span>
-            <div style="font:600 14px/1.3 Sora,sans-serif;margin-bottom:9px">Qui en dépend</div>
+            <div style="font:600 14px/1.3 Sora,sans-serif;margin-bottom:9px">Qui en dÃ©pend</div>
             <div style="font:400 12.5px/1.6 Manrope,sans-serif;color:var(--ink-7);text-wrap:pretty">Les boutiques : elles commandent sur la base de votre inventaire, monture par monture.</div>
           </div>
         </div>
 
-        <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ink-64);margin-bottom:22px">LES QUATRE ÉTAPES</div>
+        <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ink-64);margin-bottom:22px">LES QUATRE Ã‰TAPES</div>
         <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:40px">
           <sc-for list="{{ steps }}" as="s" hint-placeholder-count="4">
             <div style="display:flex;gap:20px;padding:22px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-88),var(--srf-6));border:1px solid var(--ink-08);backdrop-filter:blur(22px)">
@@ -1028,7 +1028,7 @@ input::placeholder{color:var(--ink-34)}
 
         <div style="padding:24px 26px;border-radius:22px;background:rgba(95,194,217,.12);border:1px solid rgba(51,135,156,.22);backdrop-filter:blur(20px)">
           <div style="font:600 14px/1.3 Sora,sans-serif;color:var(--info-ink);margin-bottom:12px">Ce que votre poste ne fait pas</div>
-          <div style="font:400 13px/1.65 Manrope,sans-serif;color:var(--ink-68);text-wrap:pretty">Vous ne modifiez pas la composition des cartons : si une quantité ne correspond pas à ce qui est annoncé, signalez-le au pré-enregistrement plutôt que de corriger silencieusement. Vous ne fixez pas non plus les prix de vente en boutique.</div>
+          <div style="font:400 13px/1.65 Manrope,sans-serif;color:var(--ink-68);text-wrap:pretty">Vous ne modifiez pas la composition des cartons : si une quantitÃ© ne correspond pas Ã  ce qui est annoncÃ©, signalez-le au prÃ©-enregistrement plutÃ´t que de corriger silencieusement. Vous ne fixez pas non plus les prix de vente en boutique.</div>
         </div>
       </div>
     </sc-if>
@@ -1043,7 +1043,7 @@ input::placeholder{color:var(--ink-34)}
         <div style="{{ scanBarcodeStyle }}"></div>
       </div>
       <div style="font:600 15px/1.3 Sora,sans-serif;margin-bottom:9px">Lecture du carton</div>
-      <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-66)">Présentez l'étiquette devant le lecteur.</div>
+      <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-66)">PrÃ©sentez l'Ã©tiquette devant le lecteur.</div>
     </div>
   </div>
 </sc-if>
@@ -1054,7 +1054,7 @@ input::placeholder{color:var(--ink-34)}
       <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:20px">
         <span style="width:38px;height:38px;border-radius:13px;background:rgba(95,194,217,.18);border:1px solid rgba(51,135,156,.3);display:grid;place-items:center;color:var(--info-ink);flex:none"><span data-icon="circle-help" style="display:grid;place-items:center;font-size:19px"></span></span>
         <div style="flex:1;min-width:0">
-          <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--info-ink);margin-bottom:9px">AIDE DE CET ÉCRAN</div>
+          <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--info-ink);margin-bottom:9px">AIDE DE CET Ã‰CRAN</div>
           <div style="font:600 19px/1.25 Sora,sans-serif;letter-spacing:-.02em">{{ helpTitre }}</div>
         </div>
         <button onClick="{{ closeHelp }}" style="width:34px;height:34px;border-radius:12px;border:1px solid var(--ink-1);background:var(--srf-8);color:var(--ink);cursor:pointer;display:grid;place-items:center;flex:none"><span data-icon="x" style="display:grid;place-items:center;font-size:16px"></span></button>
@@ -1100,47 +1100,48 @@ class Component extends DCLogic {
     magasin: 'Pointe-Noire', origFilter: 'tous', demId: null, sorties: 0,
     expeditions: [], expId: null,
     demandes: [
-      { id: 'd1', magasin: 'Pointe-Noire', origine: 'auto', ref: 'RQ-2026-1041', date: '28/08/2026', motif: 'Seuil atteint · 9 % de stock restant', besoin: 4, statut: 'valide', scanned: [], expedie: false, cartonCode: null },
+      { id: 'd1', magasin: 'Pointe-Noire', origine: 'auto', ref: 'RQ-2026-1041', date: '28/08/2026', motif: 'Seuil atteint Â· 9 % de stock restant', besoin: 4, statut: 'valide', scanned: [], expedie: false, cartonCode: null },
       { id: 'd2', magasin: 'Brazzaville', origine: 'responsable', ref: 'RQ-2026-1042', date: '28/08/2026', motif: 'Responsable Brazzaville', besoin: 3, statut: 'valide', scanned: [], expedie: false, cartonCode: null },
-      { id: 'd3', magasin: 'Kinshasa', origine: 'auto', ref: 'RQ-2026-1043', date: '27/08/2026', motif: 'Seuil atteint · 7 % de stock restant', besoin: 2, statut: 'valide', scanned: [], expedie: false, cartonCode: null },
+      { id: 'd3', magasin: 'Kinshasa', origine: 'auto', ref: 'RQ-2026-1043', date: '27/08/2026', motif: 'Seuil atteint Â· 7 % de stock restant', besoin: 2, statut: 'valide', scanned: [], expedie: false, cartonCode: null },
       { id: 'd4', magasin: 'Lubumbashi', origine: 'responsable', ref: 'RQ-2026-1044', date: '26/08/2026', motif: 'Responsable Lubumbashi', besoin: 2, statut: 'valide', scanned: [], expedie: false, cartonCode: null },
-      { id: 'd5', magasin: 'Kolwezi', origine: 'auto', ref: 'RQ-2026-1045', date: '26/08/2026', motif: 'Seuil atteint · 8 % de stock restant', besoin: 2, statut: 'valide', scanned: [], expedie: false, cartonCode: null }
+      { id: 'd5', magasin: 'Kolwezi', origine: 'auto', ref: 'RQ-2026-1045', date: '26/08/2026', motif: 'Seuil atteint Â· 8 % de stock restant', besoin: 2, statut: 'valide', scanned: [], expedie: false, cartonCode: null }
     ],
     commandes: [
       {
-        id: 'c1', ref: 'BC-2026-0418', provenance: 'Dubaï', dateArr: '26/08/2026',
+        id: 'c1', ref: 'BC-2026-0418', provenance: 'DubaÃ¯', dateArr: '26/08/2026',
         valises: [
           {
             id: 'v1', couleur: 'Rouge', gamme: 'Moyenne gamme', genre: 'Homme', montures: 60, scanned: false,
             cartons: [
-              { id: 'k1', qty: 30, code: 'RO-0060-001', gamme: 'Moyenne gamme', type: 'Vue', prix: 90000, formes: { Aviator: 15, Ronde: 15 }, marques: ['Okulo', 'Milano'], couleurs: ['Noir', 'Écaille', 'Bleu nuit'], matieres: ['Acétate', 'Acétate + métal'], saisies: [] },
-              { id: 'k2', qty: 30, code: 'RO-0060-002', gamme: 'Moyenne gamme', type: 'Solaire', prix: 90000, formes: { 'Œil de chat': 30 }, marques: ['Coline'], couleurs: ['Rose transparent', 'Guépard'], matieres: ['Acétate'], saisies: [] }
+              { id: 'k1', qty: 30, code: 'RO-0060-001', gamme: 'Moyenne gamme', type: 'Vue', prix: 90000, formes: { Aviator: 15, Ronde: 15 }, marques: ['Okulo', 'Milano'], couleurs: ['Noir', 'Ã‰caille', 'Bleu nuit'], matieres: ['AcÃ©tate', 'AcÃ©tate + mÃ©tal'], saisies: [] },
+              { id: 'k2', qty: 30, code: 'RO-0060-002', gamme: 'Moyenne gamme', type: 'Solaire', prix: 90000, formes: { 'Å’il de chat': 30 }, marques: ['Coline'], couleurs: ['Rose transparent', 'GuÃ©pard'], matieres: ['AcÃ©tate'], saisies: [] }
             ]
           },
           {
             id: 'v2', couleur: 'Noire', gamme: 'Classique', genre: 'Femme', montures: 40, scanned: false,
             cartons: [
-              { id: 'k3', qty: 20, code: 'NO-0040-001', gamme: 'Classique', type: 'Vue', prix: 70000, formes: { Papillon: 20 }, marques: ['Jane Austen'], couleurs: ['Cristal', 'Havane'], matieres: ['Acétate', 'Métal'], saisies: [] },
-              { id: 'k4', qty: 20, code: 'NO-0040-002', gamme: 'Classique', type: 'Lecture', prix: 70000, formes: { Rectangulaire: 12, Browline: 8 }, marques: ['Level', 'Lapo'], couleurs: ['Noir', 'Doré', 'Bicolore noir-doré'], matieres: ['Métal', 'Titane'], saisies: [] }
+              { id: 'k3', qty: 20, code: 'NO-0040-001', gamme: 'Classique', type: 'Vue', prix: 70000, formes: { Papillon: 20 }, marques: ['Jane Austen'], couleurs: ['Cristal', 'Havane'], matieres: ['AcÃ©tate', 'MÃ©tal'], saisies: [] },
+              { id: 'k4', qty: 20, code: 'NO-0040-002', gamme: 'Classique', type: 'Lecture', prix: 70000, formes: { Rectangulaire: 12, Browline: 8 }, marques: ['Level', 'Lapo'], couleurs: ['Noir', 'DorÃ©', 'Bicolore noir-dorÃ©'], matieres: ['MÃ©tal', 'Titane'], saisies: [] }
             ]
           }
         ]
       },
       {
-        id: 'c2', ref: 'BC-2026-0419', provenance: 'Dubaï', dateArr: '27/08/2026',
+        id: 'c2', ref: 'BC-2026-0419', provenance: 'DubaÃ¯', dateArr: '27/08/2026',
         valises: [
           {
             id: 'v3', couleur: 'Violette', gamme: 'Luxe', genre: 'Mixte', montures: 20, scanned: false,
             cartons: [
-              { id: 'k5', qty: 20, code: 'VI-0020-001', gamme: 'Luxe', type: 'Vue', prix: 180000, formes: { Polygone: 20 }, marques: ['Louis Carter'], couleurs: ['Transparent fumé', 'Tricolore'], matieres: ['Titane', 'Corne'], saisies: [] }
+              { id: 'k5', qty: 20, code: 'VI-0020-001', gamme: 'Luxe', type: 'Vue', prix: 180000, formes: { Polygone: 20 }, marques: ['Louis Carter'], couleurs: ['Transparent fumÃ©', 'Tricolore'], matieres: ['Titane', 'Corne'], saisies: [] }
             ]
           }
         ]
       }
     ],
-    // ✅ MODIFICATION 1 : Ajout des variables photo dans le state
+    // âœ… MODIFICATION 1 : Ajout des variables photo dans le state
     photoPreview: null,
     photoData: null,
+    branchPhotoData: null,
     captureLabel: 'Prendre une photo'
   };
 
@@ -1168,7 +1169,7 @@ class Component extends DCLogic {
       const lastName = String(user.last_name || user.lastName || '').trim();
       const fullName = [firstName, lastName].filter(Boolean).join(' ') ||
         String(user.full_name || user.fullName || user.name || user.nom || '').trim();
-      this.setState({ userName: fullName || String(user.email || 'Utilisateur').trim() || 'Utilisateur' });
+      this.setState({ userName: fullName || String(user.email || 'Utilisateur').trim() || 'Utilisateur', currentUser: user, stationId: user.station_id || user.stationId || user.stationID || null });
     };
     try {
       const userJson = localStorage.getItem('user');
@@ -1204,11 +1205,11 @@ class Component extends DCLogic {
     try {
       const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/mobile-capture/sessions`, { method: 'POST', headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' } });
       const payload = await response.json();
-      if (!response.ok || !payload.success) throw new Error(payload.error || 'Création de session impossible');
+      if (!response.ok || !payload.success) throw new Error(payload.error || 'CrÃ©ation de session impossible');
       const session = payload.data;
       this.setState({ pairing: false, pairCode: session.pair_code, pairQrUrl: session.qr_url });
       this.connectMobileEvents(session.events_url);
-      this.toast('smartphone', 'QR prêt', 'Scannez-le avec le téléphone.', 'info');
+      this.toast('smartphone', 'QR prÃªt', 'Scannez-le avec le tÃ©lÃ©phone.', 'info');
     } catch (error) { this.setState({ pairing: false }); this.toast('triangle-alert', 'Appairage impossible', error.message || 'Backend indisponible', 'warn'); }
   }
   connectMobileEvents(eventsUrl) {
@@ -1219,7 +1220,7 @@ class Component extends DCLogic {
   }
   async handleMobileEvent(event) {
     const data = event.data || {};
-    if (event.type === 'device.connected') { this.setState({ phonePaired: true }); this.toast('smartphone', 'Téléphone connecté', 'Lecteur et caméra actifs.', 'ok'); return; }
+    if (event.type === 'device.connected') { this.setState({ phonePaired: true }); this.toast('smartphone', 'TÃ©lÃ©phone connectÃ©', 'Lecteur et camÃ©ra actifs.', 'ok'); return; }
     if (event.type === 'barcode.scanned') {
       const barcode = String(data.barcode || '').trim().toUpperCase();
       const target = this.state.scanTarget;
@@ -1229,13 +1230,45 @@ class Component extends DCLogic {
       }
       const arrivals = (window.LStore ? window.LStore.get().arrivees : []) || [];
       const hit = arrivals.flatMap(c => c.valises.flatMap(v => v.cartons.map(k => ({ c, v, k })))).find(x => String(x.k.code).toUpperCase() === barcode);
-      if (hit) { this.openCarton(hit.c.id, hit.v.id, hit.k.id); this.toast('scan-barcode', 'Code reçu du téléphone', barcode, 'ok'); }
-      else this.toast('triangle-alert', 'Code reçu', `${barcode} ne correspond à aucun carton ouvert`, 'warn');
+      if (hit) { this.openCarton(hit.c.id, hit.v.id, hit.k.id); this.toast('scan-barcode', 'Code reÃ§u du tÃ©lÃ©phone', barcode, 'ok'); }
+      else this.toast('triangle-alert', 'Code reÃ§u', `${barcode} ne correspond Ã  aucun carton ouvert`, 'warn');
       return;
     }
     if (event.type === 'photo.received' && data.photo_url) {
-      try { const response = await fetch(`${this.apiBaseUrl()}${data.photo_url}`); const blob = await response.blob(); const reader = new FileReader(); reader.onload = () => this.setState({ photoPreview: reader.result, photoData: reader.result, captureLabel: 'Photo reçue du téléphone ✓' }); reader.readAsDataURL(blob); this.toast('camera', 'Photo reçue', 'Prête pour validation sur le PC.', 'ok'); }
-      catch (_) { this.toast('triangle-alert', 'Photo non lisible', 'Réessayez depuis le téléphone.', 'warn'); }
+      const kind = String(data.kind || 'monture').toLowerCase();
+      try {
+        const response = await fetch(`${this.apiBaseUrl()}${data.photo_url}`);
+        if (!response.ok) throw new Error('Photo non lisible');
+        const blob = await response.blob();
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const photoData = reader.result;
+          if (kind === 'branche') {
+            this.setState({ branchPhotoData: photoData });
+            const fd = new FormData();
+            fd.append('image', blob, 'branche.jpg');
+            try {
+              const analysisResponse = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/analyze`, { method: 'POST', headers: this.apiHeaders(), body: fd });
+              const analysisPayload = await analysisResponse.json().catch(() => ({}));
+              if (!analysisResponse.ok || analysisPayload.success === false) throw new Error(analysisPayload.error || 'Analyse impossible');
+              const result = analysisPayload.data || analysisPayload;
+              const reference = String(result.reference || '').trim().toUpperCase();
+              if (reference) {
+                this.setState({ fRef: reference });
+                this.toast('scan-text', 'Référence lue', reference, 'ok');
+              } else {
+                this.toast('triangle-alert', 'Référence non détectée', 'Saisissez-la manuellement.', 'warn');
+              }
+            } catch (error) {
+              this.toast('triangle-alert', 'Analyse branche impossible', error.message || 'Saisissez la référence manuellement.', 'warn');
+            }
+            return;
+          }
+          this.setState({ photoPreview: photoData, photoData, captureLabel: 'Photo reçue du téléphone ✓' });
+          this.toast('camera', 'Photo monture reçue', 'Prête pour validation sur le PC.', 'ok');
+        };
+        reader.readAsDataURL(blob);
+      } catch (_) { this.toast('triangle-alert', 'Photo non lisible', 'Réessayez depuis le téléphone.', 'warn'); }
     }
   }
   async startCartonScan(cmdId, valId, cartId, code) {
@@ -1273,21 +1306,21 @@ class Component extends DCLogic {
         mapped.push({
           id: String(command.id),
           ref: command.code || `BC-${command.id}`,
-          provenance: (order && (order.provenance || order.supplier)) || command.provenance || command.order_provenance || command.supplier || '—',
-          destination: (order && order.destination) || 'Stock général',
-          dateArr: command.arrived_at ? new Date(command.arrived_at).toLocaleDateString('fr-FR') : (command.updated_at ? new Date(command.updated_at).toLocaleDateString('fr-FR') : '—'),
+          provenance: (order && (order.provenance || order.supplier)) || command.provenance || command.order_provenance || command.supplier || 'â€”',
+          destination: (order && order.destination) || 'Stock gÃ©nÃ©ral',
+          dateArr: command.arrived_at ? new Date(command.arrived_at).toLocaleDateString('fr-FR') : (command.updated_at ? new Date(command.updated_at).toLocaleDateString('fr-FR') : 'â€”'),
           valises: (cases || []).map(v => ({
             id: String(v.id),
             couleur: v.couleur || 'Sans nom',
-            gamme: v.gamme || '—',
-            genre: v.genre || '—',
+            gamme: v.gamme || 'â€”',
+            genre: v.genre || 'â€”',
             montures: Number(v.montures) || 0,
             scanned: !!v.shipment_scanned,
             cartons: (v.cartons || []).map(box => ({
               id: String(box.id),
               qty: Number(box.quantity) || Number(box.qty) || 0,
               code: box.code || `C-${box.id}`,
-              gamme: box.gamme || v.gamme || '—',
+              gamme: box.gamme || v.gamme || 'â€”',
               type: box.type || 'Vue',
               prix: Number(box.prix) || 0,
               formes: box.formes || {},
@@ -1308,18 +1341,18 @@ class Component extends DCLogic {
         S.set({ montures: glasses.map(item => ({
           uid: item.id || item.barcode || `${Date.now()}-${Math.random()}`,
           code: item.barcode || item.code || '',
-          marque: item.marque || '—',
-          forme: item.forme || '—',
-          gamme: item.gamme || '—',
+          marque: item.marque || 'â€”',
+          forme: item.forme || 'â€”',
+          gamme: item.gamme || 'â€”',
           type: item.type || 'Vue',
           prix: Number(item.price) || Number(item.prix) || 0,
-          site: item.station_name || 'Stock général',
+          site: item.station_name || 'Stock gÃ©nÃ©ral',
           statut: item.status || 'EN_STOCK_GENERAL'
         })) });
       }
     } catch (error) {
-      console.error('Erreur chargement backend stock général:', error);
-      this.toast('triangle-alert', 'Connexion backend impossible', 'Les données locales restent visibles.', 'warn');
+      console.error('Erreur chargement backend stock gÃ©nÃ©ral:', error);
+      this.toast('triangle-alert', 'Connexion backend impossible', 'Les donnÃ©es locales restent visibles.', 'warn');
     }
   }
 
@@ -1338,11 +1371,11 @@ class Component extends DCLogic {
           .filter(item => item && (item.ref || item.magasin || item.id))
           .map(item => ({
             id: String(item.id || item.ref || `dem-${Date.now()}-${Math.random()}`),
-            magasin: item.magasin || 'Stock général',
+            magasin: item.magasin || 'Stock gÃ©nÃ©ral',
             origine: item.origine === 'admin' ? 'admin' : (item.origine === 'auto' ? 'auto' : 'responsable'),
             ref: item.ref || `RQ-${item.id || 'N/A'}`,
             date: item.date || this.dateFr(),
-            motif: item.motif || 'Liste envoyée vers le magasin',
+            motif: item.motif || 'Liste envoyÃ©e vers le magasin',
             besoin: Number(item.besoin) || 0,
             statut: item.statut === 'valide' ? 'valide' : (item.statut === 'refuse' ? 'refuse' : 'attente'),
             scanned: Array.isArray(item.uids) ? item.uids : [],
@@ -1363,7 +1396,7 @@ class Component extends DCLogic {
           id: String(box.id),
           code: box.code || '',
           ref: box.reference || box.code || `EXP-${box.id}`,
-          magasin: box.city || '—',
+          magasin: box.city || 'â€”',
           date: box.created_at ? new Date(box.created_at).toLocaleDateString('fr-FR') : this.dateFr(),
           statut: box.status || 'CREATED',
           lignes: Array.isArray(box.items) ? box.items : [],
@@ -1371,7 +1404,7 @@ class Component extends DCLogic {
           archived: !!box.closed_at,
           magScanned: [],
           cartonCode: box.code || '',
-          city: box.city || '—'
+          city: box.city || 'â€”'
         }));
 
         if (mappedBoxes.length > 0) {
@@ -1379,7 +1412,7 @@ class Component extends DCLogic {
         }
       }
     } catch (error) {
-      console.warn('Aucune donnée backend disponible pour l’expédition:', error);
+      console.warn('Aucune donnÃ©e backend disponible pour lâ€™expÃ©dition:', error);
     }
   }
 
@@ -1483,7 +1516,7 @@ class Component extends DCLogic {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload.success === false) {
-        throw new Error(payload.error || 'Le scan de la valise a été refusé.');
+        throw new Error(payload.error || 'Le scan de la valise a Ã©tÃ© refusÃ©.');
       }
       this.setArrivees(list => list.map(x => x.id !== command.id ? x : {
         ...x,
@@ -1491,13 +1524,13 @@ class Component extends DCLogic {
       }));
       const total = command.valises.length;
       const scanned = command.valises.filter(v => v.scanned).length + 1;
-      this.toast('badge-check', `Valise ${caseItem.couleur} scannée`, `${scanned} / ${total}`, 'ok');
-      // Le dernier scan bascule la commande à "arrived" côté serveur. On recharge
-      // pour conserver la même source de vérité sur tous les postes.
+      this.toast('badge-check', `Valise ${caseItem.couleur} scannÃ©e`, `${scanned} / ${total}`, 'ok');
+      // Le dernier scan bascule la commande Ã  "arrived" cÃ´tÃ© serveur. On recharge
+      // pour conserver la mÃªme source de vÃ©ritÃ© sur tous les postes.
       this.loadBackendData();
     } catch (error) {
       console.error('Erreur scan valise:', error);
-      this.toast('triangle-alert', 'Scan non enregistré', error.message || 'Vérifiez la connexion au backend.', 'warn');
+      this.toast('triangle-alert', 'Scan non enregistrÃ©', error.message || 'VÃ©rifiez la connexion au backend.', 'warn');
     }
   }
   async openCarton(cmdId, valId, cartId) {
@@ -1517,17 +1550,17 @@ class Component extends DCLogic {
         fMarque: cart ? (cart.marques[0] || '') : '',
         fCouleur: cart ? ((cart.couleurs || [])[0] || '') : '',
         fMatiere: cart ? ((cart.matieres || [])[0] || '') : '',
-        fRef: '', photo: false
+        fRef: '', photo: false, photoPreview: null, photoData: null, branchPhotoData: null, captureLabel: 'Prendre une photo'
       });
-      this.toast('badge-check', 'Carton vérifié', cart ? `${cart.code} · ${cart.qty || cart.quantity} montures` : '', 'ok');
+      this.toast('badge-check', 'Carton vÃ©rifiÃ©', cart ? `${cart.code} Â· ${cart.qty || cart.quantity} montures` : '', 'ok');
     } catch (error) {
       this.setState({ scanning: false });
-      console.error('Erreur vérification carton:', error);
-      this.toast('triangle-alert', 'Carton refusé', error.message || 'Impossible de vérifier ce carton.', 'warn');
+      console.error('Erreur vÃ©rification carton:', error);
+      this.toast('triangle-alert', 'Carton refusÃ©', error.message || 'Impossible de vÃ©rifier ce carton.', 'warn');
     }
   }
 
-  // ✅ MODIFICATION 3 : Méthodes de capture photo
+  // âœ… MODIFICATION 3 : MÃ©thodes de capture photo
   capturePhoto() {
     const input = document.getElementById('photoInput');
     if (input) {
@@ -1559,9 +1592,9 @@ class Component extends DCLogic {
       this.setState({ 
         photoPreview: event.target.result, 
         photoData: event.target.result,
-        captureLabel: 'Photo importée ✓'
+        captureLabel: 'Photo importÃ©e âœ“'
       });
-      this.toast('check', 'Photo importée', file.name, 'ok');
+      this.toast('check', 'Photo importÃ©e', file.name, 'ok');
     };
     reader.onerror = () => {
       this.toast('triangle-alert', 'Erreur de lecture', 'Impossible de lire l\'image', 'warn');
@@ -1575,7 +1608,8 @@ class Component extends DCLogic {
     this.setState({ 
       photoPreview: null, 
       photoData: null,
-      captureLabel: 'Prendre une photo'
+    branchPhotoData: null,
+    captureLabel: 'Prendre une photo'
     });
   }
 
@@ -1615,10 +1649,10 @@ class Component extends DCLogic {
     const stock = this.allStock();
 
     const navData = [
-      { key: 'commandes', label: 'Commande à enregistrer', icon: 'clipboard-list', badge: String(commandesDB.filter(c => this.cmdDone(c) < this.cmdTotal(c)).length || '') },
-      { key: 'expedier', label: 'Commande à expédier', icon: 'truck', badge: '' },
-      { key: 'historique', label: 'Historique des expéditions', icon: 'history', badge: String(expeditionsDB.filter(e => !e.archived).length || '') },
-      { key: 'stock', label: 'Gestion du stock', icon: 'boxes', badge: String((DB.montures || []).filter(m => m.site === 'Stock général' && m.statut !== 'transit').length || '') },
+      { key: 'commandes', label: 'Commande Ã  enregistrer', icon: 'clipboard-list', badge: String(commandesDB.filter(c => this.cmdDone(c) < this.cmdTotal(c)).length || '') },
+      { key: 'expedier', label: 'Commande Ã  expÃ©dier', icon: 'truck', badge: '' },
+      { key: 'historique', label: 'Historique des expÃ©ditions', icon: 'history', badge: String(expeditionsDB.filter(e => !e.archived).length || '') },
+      { key: 'stock', label: 'Gestion du stock', icon: 'boxes', badge: String((DB.montures || []).filter(m => m.site === 'Stock gÃ©nÃ©ral' && m.statut !== 'transit').length || '') },
       { key: 'scan', label: 'Scan', icon: 'scan-barcode', badge: '' },
       { key: 'process', label: 'Process', icon: 'route', badge: '' }
     ];
@@ -1637,7 +1671,7 @@ class Component extends DCLogic {
       };
     });
 
-    // --- écran 1 : commandes ---
+    // --- Ã©cran 1 : commandes ---
     const commandes = commandesDB.map(c => {
       const done = this.cmdDone(c), tot = this.cmdTotal(c);
       const complete = done === tot;
@@ -1645,11 +1679,11 @@ class Component extends DCLogic {
       const recu = this.cmdRecu(c);
       return {
         recu, pasRecu: !recu,
-        receptionLabel: `${nScan} / ${nVal} valises scannées`,
+        receptionLabel: `${nScan} / ${nVal} valises scannÃ©es`,
         receptionStyle: `height:100%;width:${nVal ? (nScan / nVal * 100).toFixed(1) : 0}%;border-radius:999px;background:linear-gradient(90deg,#33879C,#5FC2D9);transition:width .5s ${ease}`,
         scanRows: c.valises.map(v => ({
           couleur: v.couleur,
-          info: `${v.gamme} · ${v.genre} · ${v.montures} u.`,
+          info: `${v.gamme} Â· ${v.genre} Â· ${v.montures} u.`,
           dotStyle: `width:16px;height:16px;border-radius:5px;flex:none;background:${this.COLORS[v.couleur] || '#888'};border:1px solid var(--ink-16)`,
           rowStyle: `display:flex;align-items:center;gap:12px;padding:12px 15px;border-radius:16px;border:1px solid ${v.scanned ? 'rgba(30,143,99,.3)' : 'var(--ink-09)'};background:${v.scanned ? 'rgba(52,201,141,.1)' : 'var(--srf-62)'};transition:all .3s ${ease}`,
           btnIcon: v.scanned ? 'badge-check' : 'scan-barcode',
@@ -1660,32 +1694,32 @@ class Component extends DCLogic {
         })),
         ref: c.ref, provenance: c.provenance, dateArr: c.dateArr,
         total: tot.toLocaleString('fr-FR'),
-        progressLabel: `${done} / ${tot} montures créées`,
+        progressLabel: `${done} / ${tot} montures crÃ©Ã©es`,
         progressStyle: `height:100%;width:${tot ? (done / tot * 100).toFixed(1) : 0}%;border-radius:999px;background:linear-gradient(90deg,#BF2178,#F2138E);transition:width .5s ${ease}`,
-        statutLabel: !recu ? 'En transit' : (complete ? 'Terminée' : (done ? 'En cours' : 'Réceptionnée')),
+        statutLabel: !recu ? 'En transit' : (complete ? 'TerminÃ©e' : (done ? 'En cours' : 'RÃ©ceptionnÃ©e')),
         statutStyle: !recu ? tagTodo : (complete ? tagOk : tagWip),
         cardStyle: `border-radius:24px;overflow:hidden;background:${glass};border:1px solid ${complete ? 'rgba(30,143,99,.26)' : 'var(--ink-09)'};backdrop-filter:blur(24px);box-shadow:0 22px 50px -30px var(--ink-2),inset 0 1px 0 var(--srf-9)`,
         valisePills: c.valises.map(v => {
           const vd = this.valiseDone(v);
           return {
-            label: `${v.couleur} · ${vd}/${v.montures}`,
+            label: `${v.couleur} Â· ${vd}/${v.montures}`,
             style: `display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:999px;white-space:nowrap;font:600 11.5px/1.4 Manrope,sans-serif;background:var(--srf-7);border:1px solid var(--ink-1);color:var(--ink-74)`,
             dotStyle: `width:11px;height:11px;border-radius:4px;flex:none;background:${this.COLORS[v.couleur] || '#888'};border:1px solid var(--ink-14)`
           };
         }),
-        ctaLabel: !recu ? 'Confirmer la réception' : (complete ? 'Revoir la commande' : (done ? "Continuer l'enregistrement" : "Démarrer l'enregistrement")),
+        ctaLabel: !recu ? 'Confirmer la rÃ©ception' : (complete ? 'Revoir la commande' : (done ? "Continuer l'enregistrement" : "DÃ©marrer l'enregistrement")),
         ctaIcon: !recu ? 'lock' : (complete ? 'eye' : 'play'),
         ctaStyle: !recu
           ? `display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13px/1.3 Manrope,sans-serif;cursor:not-allowed`
           : (complete ? soft : magenta),
         onOpen: () => {
-          if (!recu) { this.toast('scan-barcode', 'Scan requis', `Scannez les ${nVal} valises pour confirmer l'arrivée`, 'warn'); return; }
+          if (!recu) { this.toast('scan-barcode', 'Scan requis', `Scannez les ${nVal} valises pour confirmer l'arrivÃ©e`, 'warn'); return; }
           this.setState({ screen: 'valises', cmdId: c.id });
         }
       };
     });
 
-    // --- écran 2 : valises ---
+    // --- Ã©cran 2 : valises ---
     const valises = cmd ? cmd.valises.map(v => {
       const vd = this.valiseDone(v);
       const complete = vd === v.montures;
@@ -1694,7 +1728,7 @@ class Component extends DCLogic {
         cartonCount: v.cartons.length,
         progress: `${vd} / ${v.montures}`,
         swatchStyle: `width:20px;height:20px;border-radius:7px;flex:none;background:${this.COLORS[v.couleur] || '#888'};border:1px solid var(--ink-14);box-shadow:inset 0 1px 0 var(--srf-35)`,
-        tagLabel: complete ? 'Terminée' : (vd ? 'En cours' : 'À enregistrer'),
+        tagLabel: complete ? 'TerminÃ©e' : (vd ? 'En cours' : 'Ã€ enregistrer'),
         tagStyle: complete ? tagOk : (vd ? tagWip : tagTodo),
         barStyle: `height:100%;width:${(vd / v.montures * 100).toFixed(1)}%;border-radius:999px;background:linear-gradient(90deg,#33879C,#5FC2D9);transition:width .5s ${ease}`,
         cardStyle: `padding:22px 24px;border-radius:22px;background:${glass};border:1px solid ${complete ? 'rgba(30,143,99,.26)' : 'var(--ink-09)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9);display:flex;flex-direction:column`,
@@ -1705,7 +1739,7 @@ class Component extends DCLogic {
       };
     }) : [];
 
-    // --- écran 3 : cartons ---
+    // --- Ã©cran 3 : cartons ---
     const cartons = val ? val.cartons.map((k, ki) => {
       const done = k.saisies.length;
       const complete = done === k.qty;
@@ -1713,7 +1747,7 @@ class Component extends DCLogic {
         n: String(ki + 1).padStart(2, '0'),
         gamme: k.gamme, type: k.type, code: k.code,
         barcodeStyle: this.barcode(k.code, 38),
-        tagLabel: complete ? 'Terminé' : `${done}/${k.qty}`,
+        tagLabel: complete ? 'TerminÃ©' : `${done}/${k.qty}`,
         tagStyle: complete ? tagOk : (done ? tagWip : tagTodo),
         cardStyle: `padding:20px 22px;border-radius:22px;background:${glass};border:1px solid ${complete ? 'rgba(30,143,99,.26)' : 'var(--ink-09)'};backdrop-filter:blur(22px);box-shadow:inset 0 1px 0 var(--srf-9);display:flex;flex-direction:column`,
         ctaLabel: complete ? 'Revoir' : 'Scanner ce carton',
@@ -1723,120 +1757,120 @@ class Component extends DCLogic {
       };
     }) : [];
 
-    // --- écran 4 : saisie ---
+    // --- Ã©cran 4 : saisie ---
     const kFormes = cart ? Object.keys(cart.formes) : [];
     const saisiesCount = cart ? cart.saisies.length : 0;
     const kQty = cart ? cart.qty : 0;
     const plein = cart && saisiesCount >= kQty;
     const refTrim = (s.fRef || '').trim();
     const dejaVu = cart ? cart.saisies.some(m => m.ref.toLowerCase() === refTrim.toLowerCase()) : false;
-    const canCreate = cart && !plein && refTrim.length >= 3 && s.photoData && s.fForme && s.fMarque && s.fCouleur && s.fMatiere && !dejaVu;
+    const canCreate = cart && !plein && refTrim.length >= 3 && s.photoData && s.branchPhotoData && s.fForme && s.fMarque && s.fCouleur && s.fMatiere && !dejaVu;
 
     const photoImages = ['linear-gradient(140deg,#7C8AA6,#3D4A63)', 'linear-gradient(140deg,#A68B7C,#63503D)', 'linear-gradient(140deg,#8B7CA6,#4A3D63)', 'linear-gradient(140deg,#7CA69B,#3D635A)'];
 
-    const dispoStock = (DB.montures || []).filter(m => m.site === 'Stock général' && m.statut !== 'transit');
+    const dispoStock = (DB.montures || []).filter(m => m.site === 'Stock gÃ©nÃ©ral' && m.statut !== 'transit');
     const kpis = [
       { label: 'DISPONIBLES EN STOCK', value: dispoStock.length.toLocaleString('fr-FR'), color: 'var(--info-ink)' },
-      { label: 'SORTIES VERS BOUTIQUES', value: (DB.montures || []).filter(m => m.site !== 'Stock général' || m.statut === 'transit').length.toLocaleString('fr-FR'), color: 'var(--acc-ink)' },
+      { label: 'SORTIES VERS BOUTIQUES', value: (DB.montures || []).filter(m => m.site !== 'Stock gÃ©nÃ©ral' || m.statut === 'transit').length.toLocaleString('fr-FR'), color: 'var(--acc-ink)' },
       { label: 'VALEUR DISPONIBLE', value: (dispoStock.reduce((a, m) => a + m.prix, 0) / 1000).toFixed(0) + ' k', color: 'var(--ok-ink)' },
       { label: 'MARQUES DISPONIBLES', value: String(new Set(dispoStock.map(m => m.marque)).size), color: 'var(--ink)' }
     ];
 
     const H = {
       commandes: {
-        titre: 'Commandes à enregistrer',
-        intro: "Les commandes arrivées du pré-enregistrement attendent ici. Le contenu des cartons est déjà décrit ; il vous reste à créer les montures une par une.",
+        titre: 'Commandes Ã  enregistrer',
+        intro: "Les commandes arrivÃ©es du prÃ©-enregistrement attendent ici. Le contenu des cartons est dÃ©jÃ  dÃ©crit ; il vous reste Ã  crÃ©er les montures une par une.",
         actions: [
-          "Scannez chaque valise à l'arrivée : le bon passe de « en transit » à « réceptionné » et l'enregistrement se débloque.",
-          "Chaque carte montre l'avancement en montures créées sur le total de la commande.",
+          "Scannez chaque valise Ã  l'arrivÃ©e : le bon passe de Â« en transit Â» Ã  Â« rÃ©ceptionnÃ© Â» et l'enregistrement se dÃ©bloque.",
+          "Chaque carte montre l'avancement en montures crÃ©Ã©es sur le total de la commande.",
           "Les pastilles de couleur rappellent les valises et leur progression.",
-          "« Démarrer l'enregistrement » ouvre la liste des valises."
+          "Â« DÃ©marrer l'enregistrement Â» ouvre la liste des valises."
         ]
       },
       valises: {
         titre: 'Valises de la commande',
-        intro: "Une valise regroupe des montures de même gamme et même genre. Choisissez celle que vous avez physiquement devant vous.",
+        intro: "Une valise regroupe des montures de mÃªme gamme et mÃªme genre. Choisissez celle que vous avez physiquement devant vous.",
         actions: [
-          "La barre de progression suit les montures créées dans la valise.",
-          "« Ouvrir les cartons » affiche les cartons à scanner."
+          "La barre de progression suit les montures crÃ©Ã©es dans la valise.",
+          "Â« Ouvrir les cartons Â» affiche les cartons Ã  scanner."
         ]
       },
       cartons: {
         titre: 'Cartons de la valise',
-        intro: "Chaque carton porte une étiquette imprimée au pré-enregistrement. Le scan ouvre sa fiche pré-remplie.",
+        intro: "Chaque carton porte une Ã©tiquette imprimÃ©e au prÃ©-enregistrement. Le scan ouvre sa fiche prÃ©-remplie.",
         actions: [
-          "« Scanner ce carton » simule la lecture de l'étiquette.",
-          "Si le lecteur est en panne, passez par l'écran Scan et saisissez le code.",
-          "La pastille indique combien de montures sont déjà créées."
+          "Â« Scanner ce carton Â» simule la lecture de l'Ã©tiquette.",
+          "Si le lecteur est en panne, passez par l'Ã©cran Scan et saisissez le code.",
+          "La pastille indique combien de montures sont dÃ©jÃ  crÃ©Ã©es."
         ]
       },
       saisie: {
-        titre: 'Création des montures',
-        intro: "La colonne de gauche est la fiche du carton : gamme, type, prix, genre, formes et marques sont hérités et non modifiables. Vous ne saisissez que ce qui est propre à chaque monture.",
+        titre: 'CrÃ©ation des montures',
+        intro: "La colonne de gauche est la fiche du carton : gamme, type, prix, genre, formes et marques sont hÃ©ritÃ©s et non modifiables. Vous ne saisissez que ce qui est propre Ã  chaque monture.",
         actions: [
-          "Choisissez la forme, la marque, la couleur et la matière dans les listes du carton.",
-          "Saisissez la référence imprimée sur la branche de la monture.",
-          "Prenez la photo — elle est obligatoire pour valider.",
-          "« Créer l'identifiant » génère un ID unique et met la monture en stock.",
-          "Une référence déjà utilisée dans ce carton est refusée."
+          "Choisissez la forme, la marque, la couleur et la matiÃ¨re dans les listes du carton.",
+          "Saisissez la rÃ©fÃ©rence imprimÃ©e sur la branche de la monture.",
+          "Prenez la photo â€” elle est obligatoire pour valider.",
+          "Â« CrÃ©er l'identifiant Â» gÃ©nÃ¨re un ID unique et met la monture en stock.",
+          "Une rÃ©fÃ©rence dÃ©jÃ  utilisÃ©e dans ce carton est refusÃ©e."
         ]
       },
       stock: {
         titre: 'Gestion du stock',
-        intro: "L'inventaire de toutes les montures enregistrées, avec leur identifiant unique.",
+        intro: "L'inventaire de toutes les montures enregistrÃ©es, avec leur identifiant unique.",
         actions: [
-          "Les compteurs en haut donnent le volume, la valeur d'achat et la diversité du stock.",
-          "Le tableau liste chaque monture avec sa référence, sa marque, sa forme et son identifiant."
+          "Les compteurs en haut donnent le volume, la valeur d'achat et la diversitÃ© du stock.",
+          "Le tableau liste chaque monture avec sa rÃ©fÃ©rence, sa marque, sa forme et son identifiant."
         ]
       },
       scan: {
         titre: 'Lecteur de codes-barres',
-        intro: "Deux façons de lire une étiquette : le téléphone en lecteur sans fil, ou la saisie au clavier en secours.",
+        intro: "Deux faÃ§ons de lire une Ã©tiquette : le tÃ©lÃ©phone en lecteur sans fil, ou la saisie au clavier en secours.",
         actions: [
-          "« Connecter le téléphone » affiche un code d'appairage à scanner.",
+          "Â« Connecter le tÃ©lÃ©phone Â» affiche un code d'appairage Ã  scanner.",
           "En cas de panne, saisissez le code du carton dans le champ de droite.",
-          "La liste des cartons à enregistrer pré-remplit le champ d'un clic."
+          "La liste des cartons Ã  enregistrer prÃ©-remplit le champ d'un clic."
         ]
       },
       expedier: {
-        titre: 'Commandes à expédier',
-        intro: "Les boutiques reçoivent du stock de trois façons : automatiquement quand une catégorie passe sous son minimum de genre, de type ou de gamme, sur demande d'un responsable de magasin, ou par une liste que l'administrateur a créée lui-même.",
+        titre: 'Commandes Ã  expÃ©dier',
+        intro: "Les boutiques reÃ§oivent du stock de trois faÃ§ons : automatiquement quand une catÃ©gorie passe sous son minimum de genre, de type ou de gamme, sur demande d'un responsable de magasin, ou par une liste que l'administrateur a crÃ©Ã©e lui-mÃªme.",
         actions: [
           "Choisissez la ville en haut ; la pastille indique le nombre de demandes en attente.",
-          "Le filtre par origine sépare les envois automatiques, les demandes des responsables et les listes de l'administrateur.",
-          "Ouvrez une demande pour voir la liste des montures à prélever."
+          "Le filtre par origine sÃ©pare les envois automatiques, les demandes des responsables et les listes de l'administrateur.",
+          "Ouvrez une demande pour voir la liste des montures Ã  prÃ©lever."
         ]
       },
       demande: {
-        titre: "Préparation d'une expédition",
-        intro: "La liste arrive grisée : chaque ligne donne l'emplacement exact de la monture — valise, carton, référence et identifiant unique. Le scan est ce qui confirme le prélèvement physique.",
+        titre: "PrÃ©paration d'une expÃ©dition",
+        intro: "La liste arrive grisÃ©e : chaque ligne donne l'emplacement exact de la monture â€” valise, carton, rÃ©fÃ©rence et identifiant unique. Le scan est ce qui confirme le prÃ©lÃ¨vement physique.",
         actions: [
-          "Scannez chaque monture : la ligne se dégrise et passe au vert.",
-          "Tant qu'il reste une ligne grisée, le carton ne peut pas être créé.",
-          "« Créer le carton » génère un QR code que le responsable du magasin scannera à l'arrivée.",
-          "À la création, les montures sortent du stock — le compteur baisse immédiatement."
+          "Scannez chaque monture : la ligne se dÃ©grise et passe au vert.",
+          "Tant qu'il reste une ligne grisÃ©e, le carton ne peut pas Ãªtre crÃ©Ã©.",
+          "Â« CrÃ©er le carton Â» gÃ©nÃ¨re un QR code que le responsable du magasin scannera Ã  l'arrivÃ©e.",
+          "Ã€ la crÃ©ation, les montures sortent du stock â€” le compteur baisse immÃ©diatement."
         ]
       },
       historique: {
-        titre: 'Historique des expéditions',
-        intro: "Chaque carton créé apparaît ici et traverse trois états avant l'archivage.",
+        titre: 'Historique des expÃ©ditions',
+        intro: "Chaque carton crÃ©Ã© apparaÃ®t ici et traverse trois Ã©tats avant l'archivage.",
         actions: [
-          "En transit : le carton est parti, la boutique ne l'a pas encore scanné.",
-          "Reçu · en cours d'enregistrement : le code-barres du carton a été scanné en boutique.",
-          "Montures enregistrées : la boutique a scanné chaque monture, le bon peut être archivé.",
-          "Cliquez un bon pour voir la liste des montures envoyées, grisées jusqu'à leur scan."
+          "En transit : le carton est parti, la boutique ne l'a pas encore scannÃ©.",
+          "ReÃ§u Â· en cours d'enregistrement : le code-barres du carton a Ã©tÃ© scannÃ© en boutique.",
+          "Montures enregistrÃ©es : la boutique a scannÃ© chaque monture, le bon peut Ãªtre archivÃ©.",
+          "Cliquez un bon pour voir la liste des montures envoyÃ©es, grisÃ©es jusqu'Ã  leur scan."
         ]
       },
       expedition: {
-        titre: 'Détail du bon expédié',
-        intro: "La liste des montures envoyées avec ce carton. Elles restent grisées jusqu'au scan en boutique.",
+        titre: 'DÃ©tail du bon expÃ©diÃ©',
+        intro: "La liste des montures envoyÃ©es avec ce carton. Elles restent grisÃ©es jusqu'au scan en boutique.",
         actions: [
-          "« Scan du carton par la boutique » fait passer le bon en réception.",
-          "« Scanner la monture suivante » simule le travail du responsable de magasin.",
-          "« Archiver ce bon » ne s'active que quand toutes les montures sont enregistrées."
+          "Â« Scan du carton par la boutique Â» fait passer le bon en rÃ©ception.",
+          "Â« Scanner la monture suivante Â» simule le travail du responsable de magasin.",
+          "Â« Archiver ce bon Â» ne s'active que quand toutes les montures sont enregistrÃ©es."
         ]
       },
-      process: { titre: 'Le process du poste', intro: "Page de référence sur le rôle du stock général dans la chaîne.", actions: ["Parcourez les quatre étapes pour situer votre saisie."] }
+      process: { titre: 'Le process du poste', intro: "Page de rÃ©fÃ©rence sur le rÃ´le du stock gÃ©nÃ©ral dans la chaÃ®ne.", actions: ["Parcourez les quatre Ã©tapes pour situer votre saisie."] }
     };
     const h = H[s.screen] || H.commandes;
 
@@ -1857,11 +1891,11 @@ class Component extends DCLogic {
       userName: s.userName || 'Utilisateur',
       stockCount: dispoStock.length.toLocaleString('fr-FR'),
       pendingLabel: cartonsRestants.length
-        ? `${cartonsRestants.length} carton(s) encore à enregistrer.`
-        : 'Tous les cartons reçus sont enregistrés.',
+        ? `${cartonsRestants.length} carton(s) encore Ã  enregistrer.`
+        : 'Tous les cartons reÃ§us sont enregistrÃ©s.',
       theme: window.LStore ? window.LStore.theme() : 'light',
       themeDark: (window.LStore ? window.LStore.theme() : 'light') === 'dark',
-      themeLabel: (window.LStore ? window.LStore.theme() : 'light') === 'dark' ? 'Thème clair' : 'Thème sombre',
+      themeLabel: (window.LStore ? window.LStore.theme() : 'light') === 'dark' ? 'ThÃ¨me clair' : 'ThÃ¨me sombre',
       themeIcon: (window.LStore ? window.LStore.theme() : 'light') === 'dark' ? 'sun' : 'moon',
       toggleTheme: () => {
         const S1 = window.LStore;
@@ -1873,7 +1907,7 @@ class Component extends DCLogic {
         const h = s.hist || [];
         const k = h[h.length - 1];
         const n = navData.find(x => x.key === k);
-        return n ? 'Retour vers ' + n.label : 'Page précédente';
+        return n ? 'Retour vers ' + n.label : 'Page prÃ©cÃ©dente';
       })(),
       goBack: () => {
         const h = (s.hist || []).slice();
@@ -1949,10 +1983,10 @@ class Component extends DCLogic {
               origLabel: origNom(d.origine),
               origStyle: origTag(d.origine),
               motif: d.motif,
-              count: `${d.besoin} monture${d.besoin > 1 ? 's' : ''} demandée${d.besoin > 1 ? 's' : ''}`,
-              progressLabel: d.expedie ? 'Expédiée' : (tot ? `${sc} / ${tot} scannées` : 'Stock insuffisant'),
+              count: `${d.besoin} monture${d.besoin > 1 ? 's' : ''} demandÃ©e${d.besoin > 1 ? 's' : ''}`,
+              progressLabel: d.expedie ? 'ExpÃ©diÃ©e' : (tot ? `${sc} / ${tot} scannÃ©es` : 'Stock insuffisant'),
               statutStyle: d.expedie ? tagOk : (sc ? tagWip : tagTodo),
-              statutLabel: d.expedie ? 'Expédiée' : (sc ? 'En préparation' : 'À préparer'),
+              statutLabel: d.expedie ? 'ExpÃ©diÃ©e' : (sc ? 'En prÃ©paration' : 'Ã€ prÃ©parer'),
               barStyle: `height:100%;width:${tot ? (sc / tot * 100).toFixed(1) : 0}%;border-radius:999px;background:linear-gradient(90deg,#BF2178,#F2138E);transition:width .5s ${ease}`,
               cardStyle: `padding:22px 24px;border-radius:22px;background:${glass};border:1px solid ${d.expedie ? 'rgba(30,143,99,.26)' : 'var(--ink-09)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9);cursor:pointer;text-align:left;width:100%;transition:all .3s ${ease}`,
               onOpen: () => this.setState({ screen: 'demande', demId: d.id })
@@ -1962,8 +1996,8 @@ class Component extends DCLogic {
 
           isDemande: s.screen === 'demande',
           backToExpedier: () => this.setState({ screen: 'expedier', demId: null }),
-          demRef: dem ? dem.ref : '—',
-          demMagasin: dem ? dem.magasin : '—',
+          demRef: dem ? dem.ref : 'â€”',
+          demMagasin: dem ? dem.magasin : 'â€”',
           demOrigLabel: dem ? origNom(dem.origine) : '',
           demOrigStyle: dem ? origTag(dem.origine) : '',
           demMotif: dem ? dem.motif : '',
@@ -1991,8 +2025,8 @@ class Component extends DCLogic {
                 if (on || dem.expedie) return;
                 this.setDemandes(list => list.map(d => d.id !== dem.id ? d : { ...d, scanned: [...(d.scanned || []), m.uid] }));
                 const after = demScanned + 1;
-                if (after === demTotal) this.toast('package-check', 'Liste complète', 'Créez le carton et générez le QR', 'ok');
-                else this.toast('badge-check', `${m.ref} scannée`, `${after} / ${demTotal}`, 'ok');
+                if (after === demTotal) this.toast('package-check', 'Liste complÃ¨te', 'CrÃ©ez le carton et gÃ©nÃ©rez le QR', 'ok');
+                else this.toast('badge-check', `${m.ref} scannÃ©e`, `${after} / ${demTotal}`, 'ok');
               }
             };
           }),
@@ -2008,7 +2042,7 @@ class Component extends DCLogic {
             if (!dem || dem.expedie) return;
             if (!demTotal) { this.toast('triangle-alert', 'Stock insuffisant', 'Aucune monture disponible', 'warn'); return; }
             if (demScanned !== demTotal) {
-              this.toast('lock', 'Liste incomplète', `${demTotal - demScanned} monture(s) à scanner`, 'warn');
+              this.toast('lock', 'Liste incomplÃ¨te', `${demTotal - demScanned} monture(s) Ã  scanner`, 'warn');
               return;
             }
             const code = `EXP-${dem.magasin.slice(0, 3).toUpperCase()}-${dem.ref.slice(-4)}`;
@@ -2028,12 +2062,12 @@ class Component extends DCLogic {
                 montures: (S.get().montures || []).map(x => uids.has(x.uid) ? { ...x, site: dem.magasin, statut: 'transit' } : x)
               });
               const parCarton = {};
-              demLignesSrc.forEach(x => { const k = x.carton || '—'; parCarton[k] = (parCarton[k] || 0) + 1; });
+              demLignesSrc.forEach(x => { const k = x.carton || 'â€”'; parCarton[k] = (parCarton[k] || 0) + 1; });
               Object.keys(parCarton).forEach(k => {
-                S.mouvement({ sens: 'sortie', de: 'Stock général', vers: dem.magasin, ref: code, motif: dem.origine === 'auto' ? 'Envoi automatique' : 'Demande responsable', qty: parCarton[k], carton: k, valise: (demLignesSrc.find(x => x.carton === k) || {}).valise || '—' });
+                S.mouvement({ sens: 'sortie', de: 'Stock gÃ©nÃ©ral', vers: dem.magasin, ref: code, motif: dem.origine === 'auto' ? 'Envoi automatique' : 'Demande responsable', qty: parCarton[k], carton: k, valise: (demLignesSrc.find(x => x.carton === k) || {}).valise || 'â€”' });
               });
             }
-            this.toast('qr-code', 'Carton créé', `${code} · ${demTotal} montures sorties du stock`, 'ok');
+            this.toast('qr-code', 'Carton crÃ©Ã©', `${code} Â· ${demTotal} montures sorties du stock`, 'ok');
           }
         };
       })(),
@@ -2049,9 +2083,9 @@ class Component extends DCLogic {
       ...(() => {
         const PH = {
           transit: { label: 'En transit', style: chip('rgba(245,165,36,.16)', 'rgba(166,106,5,.34)', 'var(--warn-ink)'), icon: 'truck' },
-          recu: { label: 'Reçu · en cours d\'enregistrement', style: chip('rgba(95,194,217,.2)', 'rgba(51,135,156,.34)', 'var(--info-ink)'), icon: 'package-open' },
-          enregistre: { label: 'Montures enregistrées', style: tagOk, icon: 'badge-check' },
-          archive: { label: 'Archivée', style: chip('var(--srf-7)', 'var(--ink-12)', 'var(--ink-6)'), icon: 'archive' }
+          recu: { label: 'ReÃ§u Â· en cours d\'enregistrement', style: chip('rgba(95,194,217,.2)', 'rgba(51,135,156,.34)', 'var(--info-ink)'), icon: 'package-open' },
+          enregistre: { label: 'Montures enregistrÃ©es', style: tagOk, icon: 'badge-check' },
+          archive: { label: 'ArchivÃ©e', style: chip('var(--srf-7)', 'var(--ink-12)', 'var(--ink-6)'), icon: 'archive' }
         };
         const actifs = expeditionsDB.filter(e => !e.archived);
         const archives = expeditionsDB.filter(e => e.archived);
@@ -2061,10 +2095,10 @@ class Component extends DCLogic {
           const sc = e.magScanned.length, tot = e.lignes.length;
           return {
             ref: e.ref, magasin: e.magasin, code: e.code, date: e.date,
-            recuDate: e.recuDate || '—',
+            recuDate: e.recuDate || 'â€”',
             count: `${tot} monture${tot > 1 ? 's' : ''}`,
             statutLabel: PH[ph].label, statutStyle: PH[ph].style, statutIcon: PH[ph].icon,
-            progressLabel: ph === 'transit' ? 'En attente du scan magasin' : `${sc} / ${tot} enregistrées en boutique`,
+            progressLabel: ph === 'transit' ? 'En attente du scan magasin' : `${sc} / ${tot} enregistrÃ©es en boutique`,
             barStyle: `height:100%;width:${tot ? (sc / tot * 100).toFixed(1) : 0}%;border-radius:999px;background:linear-gradient(90deg,#33879C,#5FC2D9);transition:width .5s ${ease}`,
             cardStyle: `padding:22px 24px;border-radius:22px;background:${glass};border:1px solid ${ph === 'enregistre' ? 'rgba(30,143,99,.26)' : 'var(--ink-09)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9);cursor:pointer;text-align:left;width:100%;transition:all .3s ${ease}`,
             onOpen: () => this.setState({ screen: 'expedition', expId: e.id })
@@ -2079,15 +2113,15 @@ class Component extends DCLogic {
           expArchives: archives.map(card),
           expAucun: expeditionsDB.length === 0,
           expHasArchives: archives.length > 0,
-          expArchiveCount: `${archives.length} bon${archives.length > 1 ? 's' : ''} archivé${archives.length > 1 ? 's' : ''}`,
+          expArchiveCount: `${archives.length} bon${archives.length > 1 ? 's' : ''} archivÃ©${archives.length > 1 ? 's' : ''}`,
 
           isExpedition: s.screen === 'expedition',
           backToHistorique: () => this.setState({ screen: 'historique', expId: null }),
-          expRef: exp ? exp.ref : '—',
-          expMagasin: exp ? exp.magasin : '—',
-          expCode: exp ? exp.code : '—',
-          expDate: exp ? exp.date : '—',
-          expRecuDate: exp && exp.recuDate ? exp.recuDate : '—',
+          expRef: exp ? exp.ref : 'â€”',
+          expMagasin: exp ? exp.magasin : 'â€”',
+          expCode: exp ? exp.code : 'â€”',
+          expDate: exp ? exp.date : 'â€”',
+          expRecuDate: exp && exp.recuDate ? exp.recuDate : 'â€”',
           expStatutLabel: PH[phExp].label,
           expStatutStyle: PH[phExp].style,
           expCountLabel: `${scExp} / ${totExp}`,
@@ -2097,10 +2131,10 @@ class Component extends DCLogic {
           expComplet: phExp === 'enregistre',
           expArchived: phExp === 'archive',
           expNote: phExp === 'transit'
-            ? "Le carton est parti. Les montures restent grisées jusqu'à ce que le responsable de boutique scanne le code-barres du carton."
+            ? "Le carton est parti. Les montures restent grisÃ©es jusqu'Ã  ce que le responsable de boutique scanne le code-barres du carton."
             : phExp === 'recu'
-              ? "Carton reçu en boutique. Chaque monture se dégrise au fur et à mesure que le responsable la scanne."
-              : "Toutes les montures sont enregistrées en boutique. Le bon peut passer aux archives.",
+              ? "Carton reÃ§u en boutique. Chaque monture se dÃ©grise au fur et Ã  mesure que le responsable la scanne."
+              : "Toutes les montures sont enregistrÃ©es en boutique. Le bon peut passer aux archives.",
           expLignes: exp ? exp.lignes.map(l => {
             const on = setExp.has(l.uid);
             return {
@@ -2109,14 +2143,14 @@ class Component extends DCLogic {
               photoStyle: `width:42px;height:42px;border-radius:11px;flex:none;display:grid;place-items:center;background:${l.photo || 'linear-gradient(140deg,#9AA0AD,#5A6070)'};border:1px solid var(--ink-12)`,
               rowStyle: `display:grid;grid-template-columns:54px minmax(110px,1.2fr) minmax(92px,.9fr) minmax(96px,.9fr) minmax(140px,1.2fr) 84px;gap:14px;align-items:center;padding:12px 20px;border-bottom:1px solid var(--ink-06);transition:all .34s ${ease};` +
                 (on ? 'background:rgba(52,201,141,.08);opacity:1' : 'background:transparent;opacity:.44;filter:grayscale(1)'),
-              stateLabel: on ? 'Enregistrée' : 'En attente',
+              stateLabel: on ? 'EnregistrÃ©e' : 'En attente',
               stateStyle: on ? tagOk : chip('var(--srf-7)', 'var(--ink-12)', 'var(--ink-55)')
             };
           }) : [],
           receptionner: () => {
             if (!exp || exp.recu) return;
             this.setCartons(list => list.map(e => e.id === exp.id ? { ...e, recu: true, recuDate: this.dateFr() } : e));
-            this.toast('package-open', 'Carton reçu', `${exp.magasin} · ${exp.code}`, 'ok');
+            this.toast('package-open', 'Carton reÃ§u', `${exp.magasin} Â· ${exp.code}`, 'ok');
           },
           scannerBoutique: () => {
             if (!exp || !exp.recu || scExp >= totExp) return;
@@ -2124,14 +2158,14 @@ class Component extends DCLogic {
             if (!suivant) return;
             this.setCartons(list => list.map(e => e.id === exp.id ? { ...e, magScanned: [...(e.magScanned || []), suivant.uid] } : e));
             const after = scExp + 1;
-            if (after === totExp) this.toast('badge-check', 'Montures enregistrées', 'Le bon peut être archivé', 'ok');
-            else this.toast('scan-barcode', `${suivant.ref} enregistrée`, `${after} / ${totExp}`, 'info');
+            if (after === totExp) this.toast('badge-check', 'Montures enregistrÃ©es', 'Le bon peut Ãªtre archivÃ©', 'ok');
+            else this.toast('scan-barcode', `${suivant.ref} enregistrÃ©e`, `${after} / ${totExp}`, 'info');
           },
           archiver: () => {
             if (!exp || phExp !== 'enregistre') return;
             this.setCartons(list => list.map(e => e.id === exp.id ? { ...e, archived: true } : e));
             this.setState({ screen: 'historique', expId: null });
-            this.toast('archive', 'Bon archivé', `${exp.ref} · ${exp.magasin}`, 'ok');
+            this.toast('archive', 'Bon archivÃ©', `${exp.ref} Â· ${exp.magasin}`, 'ok');
           },
           archiverStyle: phExp === 'enregistre'
             ? `display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap;box-shadow:0 14px 30px -14px rgba(191,33,120,.6),inset 0 1px 0 var(--srf-5);transition:all .28s ${ease}`
@@ -2145,23 +2179,23 @@ class Component extends DCLogic {
 
       commandes, valises, cartons,
       cmdAucune: commandes.length === 0,
-      activeRef: cmd ? cmd.ref : '—',
+      activeRef: cmd ? cmd.ref : 'â€”',
       backToCommandes: () => this.setState({ screen: 'commandes' }),
       backToValises: () => this.setState({ screen: 'valises' }),
       backToCartons: () => this.setState({ screen: 'cartons' }),
 
-      curCouleur: val ? val.couleur : '—',
-      curGenre: val ? val.genre : '—',
+      curCouleur: val ? val.couleur : 'â€”',
+      curGenre: val ? val.genre : 'â€”',
       curSwatchStyle: `width:16px;height:16px;border-radius:5px;flex:none;background:${val ? (this.COLORS[val.couleur] || '#888') : '#888'};border:1px solid var(--ink-16)`,
 
       kNum: cart && val ? String(val.cartons.indexOf(cart) + 1).padStart(2, '0') : '01',
-      kGamme: cart ? cart.gamme : '—',
-      kType: cart ? cart.type : '—',
-      kPrix: cart ? this.fcfa(cart.prix) : '—',
+      kGamme: cart ? cart.gamme : 'â€”',
+      kType: cart ? cart.type : 'â€”',
+      kPrix: cart ? this.fcfa(cart.prix) : 'â€”',
       kQty,
-      kCode: cart ? cart.code : '—',
+      kCode: cart ? cart.code : 'â€”',
       kBarcodeStyle: cart ? this.barcode(cart.code, 44) : '',
-      kFormesList: kFormes.map(f => ({ label: `${f} · ${cart.formes[f]}`, style: chip('rgba(95,194,217,.18)', 'rgba(51,135,156,.3)', 'var(--info-ink)') })),
+      kFormesList: kFormes.map(f => ({ label: `${f} Â· ${cart.formes[f]}`, style: chip('rgba(95,194,217,.18)', 'rgba(51,135,156,.3)', 'var(--info-ink)') })),
       kMarquesList: cart ? cart.marques.map(m => ({ label: m, style: chip('var(--srf-7)', 'var(--ink-12)', 'var(--ink-72)') })) : [],
       kCouleursList: cart ? (cart.couleurs || []).map(c => ({ label: c, style: chip('rgba(242,19,142,.1)', 'rgba(191,33,120,.26)', 'var(--acc-ink)') })) : [],
       kMatieresList: cart ? (cart.matieres || []).map(m => ({ label: m, style: chip('rgba(245,165,36,.14)', 'rgba(166,106,5,.3)', 'var(--warn-ink)') })) : [],
@@ -2183,32 +2217,74 @@ class Component extends DCLogic {
       setMatiere: e => this.setState({ fMatiere: e.target.value }),
       setRef: e => this.setState({ fRef: e.target.value }),
 
-      // ✅ MODIFICATION 6 : Suppression des anciennes variables photo et ajout des nouvelles
+      // âœ… MODIFICATION 6 : Suppression des anciennes variables photo et ajout des nouvelles
       createStyle: canCreate
         ? `display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap;box-shadow:0 14px 30px -14px rgba(191,33,120,${(.6 * glow).toFixed(2)}),inset 0 1px 0 var(--srf-5);transition:all .28s ${ease}`
         : `display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13.5px/1.3 Manrope,sans-serif;cursor:not-allowed;white-space:nowrap`,
       formHint: plein ? 'Carton complet.'
-        : dejaVu ? 'Cette monture existe déjà : utilisez « Dupliquer » sur sa fiche pour en ajouter un exemplaire.'
-        : refTrim.length < 3 ? 'Saisissez la référence imprimée sur la monture.'
+        : dejaVu ? 'Cette monture existe dÃ©jÃ  : utilisez Â« Dupliquer Â» sur sa fiche pour en ajouter un exemplaire.'
+        : refTrim.length < 3 ? 'Saisissez la rÃ©fÃ©rence imprimÃ©e sur la monture.'
         : !s.fCouleur ? 'Choisissez la couleur de la monture.'
-        : !s.fMatiere ? 'Choisissez la matière de la monture.'
-        : !s.photoData ? 'La photo est obligatoire avant de créer l\'identifiant.'
-        : 'Prêt. L\'identifiant sera généré automatiquement.',
+        : !s.fMatiere ? 'Choisissez la matiÃ¨re de la monture.'
+        : !s.photoData ? 'La photo de face est obligatoire avant de crÃ©er l\'identifiant.'
+        : !s.branchPhotoData ? 'La photo de branche est obligatoire pour lire la rÃ©fÃ©rence.'
+        : 'PrÃªt. L\'identifiant sera gÃ©nÃ©rÃ© automatiquement.',
       hintColor: dejaVu ? 'var(--acc-ink)' : (canCreate ? 'var(--ok-ink)' : 'var(--ink-6)'),
       
-      // ✅ MODIFICATION 7 & 8 : createMonture avec vérification photo et stockage base64
-      createMonture: () => {
+      // âœ… MODIFICATION 7 & 8 : createMonture avec vÃ©rification photo et stockage base64
+      createMonture: async () => {
         if (!cart) return;
-        if (plein) { this.toast('triangle-alert', 'Carton complet', `${kQty} montures déjà créées`, 'warn'); return; }
-        if (refTrim.length < 3) { this.toast('triangle-alert', 'Référence manquante', 'Au moins 3 caractères', 'warn'); return; }
-        if (dejaVu) { this.toast('triangle-alert', 'Référence en double', refTrim, 'warn'); return; }
+        if (plein) { this.toast('triangle-alert', 'Carton complet', `${kQty} montures dÃ©jÃ  crÃ©Ã©es`, 'warn'); return; }
+        if (refTrim.length < 3) { this.toast('triangle-alert', 'RÃ©fÃ©rence manquante', 'Au moins 3 caractÃ¨res', 'warn'); return; }
+        if (dejaVu) { this.toast('triangle-alert', 'RÃ©fÃ©rence en double', refTrim, 'warn'); return; }
         if (!s.photoData) {
-          this.toast('triangle-alert', 'Photo manquante', 'Prenez ou importez une photo', 'warn');
+          this.toast('triangle-alert', 'Photo monture manquante', 'Prenez ou importez la photo de face', 'warn');
+          return;
+        }
+        if (!s.branchPhotoData) {
+          this.toast('triangle-alert', 'Photo branche manquante', 'Envoyez la photo de la branche depuis le tÃ©lÃ©phone', 'warn');
+          return;
+        }
+        if (!s.stationId) {
+          this.toast('triangle-alert', 'Station inconnue', 'Reconnectez-vous avant de valider.', 'warn');
+          return;
+        }
+        const dataUrlToBlob = dataUrl => {
+          const parts = String(dataUrl).split(',');
+          const meta = parts[0] || '';
+          const mime = (meta.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+          const binary = atob(parts[1] || '');
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return new Blob([bytes], { type: mime });
+        };
+        const fd = new FormData();
+        fd.append('station_id', String(s.stationId));
+        fd.append('reference', refTrim);
+        fd.append('brand', s.fMarque || '');
+        fd.append('marque', s.fMarque || '');
+        fd.append('shape', s.fForme || '');
+        fd.append('color', s.fCouleur || '');
+        fd.append('material', s.fMatiere || '');
+        fd.append('gender', val && val.genre ? val.genre : '');
+        fd.append('gamme', cart.gamme || '');
+        fd.append('reception_command_code', cmd.ref || '');
+        if (cart.prix != null) fd.append('price', String(cart.prix));
+        fd.append('image', dataUrlToBlob(s.photoData), 'monture.jpg');
+        fd.append('branch_image', dataUrlToBlob(s.branchPhotoData), 'branche.jpg');
+        let saved;
+        try {
+          const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception`, { method: 'POST', headers: this.apiHeaders(), body: fd });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload.success === false) throw new Error(payload.error || 'Enregistrement backend impossible');
+          saved = payload.data || payload;
+        } catch (error) {
+          this.toast('triangle-alert', 'Enregistrement impossible', error.message || 'Backend indisponible', 'warn');
           return;
         }
         const seq = saisiesCount + 1;
-        const uid = `${cart.code}-${String(seq).padStart(3, '0')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-        const monture = { id: 'm' + Date.now(), ref: refTrim, forme: s.fForme, marque: s.fMarque, couleur: s.fCouleur, matiere: s.fMatiere, uid, photo: s.photoData };
+        const uid = saved.barcode || `${cart.code}-${String(seq).padStart(3, '0')}`;
+        const monture = { id: saved.glass_id ? 'g' + saved.glass_id : 'm' + Date.now(), ref: refTrim, forme: s.fForme, marque: s.fMarque, couleur: s.fCouleur, matiere: s.fMatiere, uid, photo: s.photoData, photoBranche: s.branchPhotoData };
         this.setArrivees(list => list.map(c => c.id !== cmd.id ? c : {
             ...c,
             valises: c.valises.map(v => v.id !== val.id ? v : {
@@ -2216,39 +2292,38 @@ class Component extends DCLogic {
               cartons: v.cartons.map(k => k.id !== cart.id ? k : { ...k, saisies: [...k.saisies, monture] })
             })
           }));
-        this.setState({ fRef: '', photoPreview: null, photoData: null, captureLabel: 'Prendre une photo' });
+        this.setState({ fRef: '', photoPreview: null, photoData: null, branchPhotoData: null, captureLabel: 'Prendre une photo' });
         const S = window.LStore;
         if (S) {
-          S.set({ montures: [{ uid, ref: refTrim, marque: s.fMarque, forme: s.fForme, couleur: s.fCouleur, matiere: s.fMatiere, gamme: cart.gamme, type: cart.type, genre: val.genre, prix: cart.prix, valise: val.couleur, carton: cart.code, site: 'Stock général', statut: 'stock', photo: s.photoData }, ...(S.get().montures || [])] });
-          S.mouvement({ sens: 'entree', de: 'Pré-enregistrement', vers: 'Stock général', ref: cmd.ref, motif: 'Enregistrement', qty: 1, valise: val.couleur, carton: cart.code, monture: refTrim });
+          S.set({ montures: [{ uid, ref: refTrim, marque: s.fMarque, forme: s.fForme, couleur: s.fCouleur, matiere: s.fMatiere, gamme: cart.gamme, type: cart.type, genre: val.genre, prix: cart.prix, valise: val.couleur, carton: cart.code, site: 'Stock gÃ©nÃ©ral', statut: 'stock', photo: s.photoData, photoBranche: s.branchPhotoData, backendId: saved.glass_id, location: saved.location_code || saved.location }, ...(S.get().montures || [])] });
+          S.mouvement({ sens: 'entree', de: 'PrÃ©-enregistrement', vers: 'Stock gÃ©nÃ©ral', ref: cmd.ref, motif: 'Enregistrement', qty: 1, valise: val.couleur, carton: cart.code, monture: refTrim });
         }
-        this.toast('fingerprint', 'Monture enregistrée', uid, 'ok');
+        this.toast('fingerprint', 'Monture enregistrÃ©e', uid, 'ok');
       },
-
       saisies: cart ? cart.saisies.slice().reverse().map(m => {
         const jumeaux = cart.saisies.filter(x => x.ref.toLowerCase() === m.ref.toLowerCase() && x.couleur === m.couleur && x.matiere === m.matiere).length;
         return {
         ref: m.ref, forme: m.forme, marque: m.marque, couleur: m.couleur, matiere: m.matiere, uid: m.uid,
-        exemplaires: jumeaux > 1 ? `×${jumeaux} en stock` : '1 exemplaire',
+        exemplaires: jumeaux > 1 ? `Ã—${jumeaux} en stock` : '1 exemplaire',
         exemplairesStyle: jumeaux > 1
           ? 'display:inline-flex;padding:3px 9px;border-radius:999px;white-space:nowrap;font:600 10px/1.4 Manrope,sans-serif;background:rgba(52,201,141,.14);border:1px solid rgba(30,143,99,.3);color:var(--ok-ink)'
           : 'display:inline-flex;padding:3px 9px;border-radius:999px;white-space:nowrap;font:600 10px/1.4 Manrope,sans-serif;background:var(--srf-7);border:1px solid var(--ink-12);color:var(--ink-6)',
         onDuplicate: () => {
           const restantes = Math.max(0, cart.qty - cart.saisies.length);
           if (!restantes) {
-            this.toast('triangle-alert', 'Carton complet', `${cart.qty} montures déjà créées`, 'warn');
+            this.toast('triangle-alert', 'Carton complet', `${cart.qty} montures dÃ©jÃ  crÃ©Ã©es`, 'warn');
             return;
           }
 
-          const saisie = window.prompt(`Combien de copies de ${m.ref} voulez-vous créer ?\nMaximum : ${restantes}`, '1');
+          const saisie = window.prompt(`Combien de copies de ${m.ref} voulez-vous crÃ©er ?\nMaximum : ${restantes}`, '1');
           if (saisie === null) return;
           const quantite = Number.parseInt(String(saisie).trim(), 10);
           if (!Number.isInteger(quantite) || quantite < 1) {
-            this.toast('triangle-alert', 'Quantité invalide', 'Saisissez un nombre entier supérieur à 0.', 'warn');
+            this.toast('triangle-alert', 'QuantitÃ© invalide', 'Saisissez un nombre entier supÃ©rieur Ã  0.', 'warn');
             return;
           }
           if (quantite > restantes) {
-            this.toast('triangle-alert', 'Quantité trop élevée', `Il reste seulement ${restantes} place(s) dans ce carton.`, 'warn');
+            this.toast('triangle-alert', 'QuantitÃ© trop Ã©levÃ©e', `Il reste seulement ${restantes} place(s) dans ce carton.`, 'warn');
             return;
           }
 
@@ -2287,15 +2362,15 @@ class Component extends DCLogic {
               prix: cart.prix,
               valise: val.couleur,
               carton: cart.code,
-              site: 'Stock général',
+              site: 'Stock gÃ©nÃ©ral',
               statut: 'stock',
               photo: copie.photo
             }));
             S.set({ montures: [...nouvelles, ...(S.get().montures || [])] });
             S.mouvement({
               sens: 'entree',
-              de: 'Pré-enregistrement',
-              vers: 'Stock général',
+              de: 'PrÃ©-enregistrement',
+              vers: 'Stock gÃ©nÃ©ral',
               ref: cmd.ref,
               motif: 'Duplication',
               qty: quantite,
@@ -2305,7 +2380,7 @@ class Component extends DCLogic {
             });
           }
 
-          this.toast('copy', `${m.ref} dupliquée${quantite > 1 ? 's' : ''}`, `${quantite} exemplaire${quantite > 1 ? 's' : ''} ajouté${quantite > 1 ? 's' : ''}`, 'ok');
+          this.toast('copy', `${m.ref} dupliquÃ©e${quantite > 1 ? 's' : ''}`, `${quantite} exemplaire${quantite > 1 ? 's' : ''} ajoutÃ©${quantite > 1 ? 's' : ''}`, 'ok');
         },
         photoStyle: `width:54px;height:54px;border-radius:14px;flex:none;display:grid;place-items:center;background:${m.photo || 'linear-gradient(140deg,#9AA0AD,#5A6070)'};border:1px solid var(--ink-12);box-shadow:inset 0 1px 0 var(--srf-3);animation:shutter .34s ${ease}`,
         cardStyle: `padding:16px 18px;border-radius:20px;background:${glass};border:1px solid var(--ink-09);backdrop-filter:blur(22px);box-shadow:inset 0 1px 0 var(--srf-9)`,
@@ -2319,7 +2394,7 @@ class Component extends DCLogic {
             }));
           const S = window.LStore;
           if (S) S.set({ montures: (S.get().montures || []).filter(x => x.uid !== m.uid) });
-          this.toast('trash-2', 'Monture supprimée', m.ref, 'info');
+          this.toast('trash-2', 'Monture supprimÃ©e', m.ref, 'info');
         }
         };
       }) : [],
@@ -2347,7 +2422,7 @@ class Component extends DCLogic {
           stockMarqueOpts: group('marque', s.stockMarque, 'stockMarque'),
           stockFormeOpts: group('forme', s.stockForme, 'stockForme'),
           stockGammeOpts: group('gamme', s.stockGamme, 'stockGamme'),
-          stockViewLabel: `${view.length} monture${view.length > 1 ? 's' : ''} affichée${view.length > 1 ? 's' : ''} sur ${dispoAll.length}`,
+          stockViewLabel: `${view.length} monture${view.length > 1 ? 's' : ''} affichÃ©e${view.length > 1 ? 's' : ''} sur ${dispoAll.length}`,
           stockFiltre: view.length !== dispoAll.length,
           resetStockFiltres: () => this.setState({ stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes' }),
           stockAucunResultat: dispoAll.length > 0 && view.length === 0,
@@ -2355,7 +2430,7 @@ class Component extends DCLogic {
           stockFiltresVisible: dispoAll.length > 0,
           stockRows: view.slice().reverse().map(m => ({
             ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
-            couleur: m.couleur || '—', matiere: m.matiere || '—',
+            couleur: m.couleur || 'â€”', matiere: m.matiere || 'â€”',
             prix: this.fcfa(m.prix), uid: m.uid,
             photoStyle: `width:46px;height:46px;border-radius:12px;flex:none;display:grid;place-items:center;background:${m.photo || 'linear-gradient(140deg,#9AA0AD,#5A6070)'};border:1px solid var(--ink-12);box-shadow:inset 0 1px 0 var(--srf-3)`
           }))
@@ -2364,7 +2439,7 @@ class Component extends DCLogic {
       ...(() => {
         const S0 = window.LStore;
         const cfg = S0 ? S0.seuils() : {};
-        const SITE = 'Stock général';
+        const SITE = 'Stock gÃ©nÃ©ral';
         const LOT = (DB.montures || []).filter(x => x.site === SITE && x.statut !== 'transit');
         const CLES = [
           { cle: 'marque', label: 'Marque' }, { cle: 'forme', label: 'Forme' },
@@ -2374,7 +2449,7 @@ class Component extends DCLogic {
         const total = LOT.length;
         const actif = CLES.find(c => c.label === s.compoOnglet) || CLES[0];
         const compte = {};
-        LOT.forEach(x => { const v = x[actif.cle] || '—'; compte[v] = (compte[v] || 0) + 1; });
+        LOT.forEach(x => { const v = x[actif.cle] || 'â€”'; compte[v] = (compte[v] || 0) + 1; });
         const pillC = on => `padding:8px 14px;border-radius:999px;cursor:pointer;font:600 11.5px/1.3 Manrope,sans-serif;white-space:nowrap;transition:all .24s ${ease};` +
           (on ? 'background:rgba(95,194,217,.24);border:1.5px solid rgba(51,135,156,.34);color:var(--ink)'
               : 'background:var(--srf-68);border:1.5px solid var(--ink-1);color:var(--ink-62)');
@@ -2389,7 +2464,7 @@ class Component extends DCLogic {
             const etat = ratio >= 1 ? 'sain' : (ratio >= 0.5 ? 'bas' : 'critique');
             return {
               label: v, nombre: n.toLocaleString('fr-FR'), mini: mini.toLocaleString('fr-FR'),
-              manque: n >= mini ? '—' : `${(mini - n).toLocaleString('fr-FR')} à réassortir`,
+              manque: n >= mini ? 'â€”' : `${(mini - n).toLocaleString('fr-FR')} Ã  rÃ©assortir`,
               etatLabel: etat === 'sain' ? 'Sain' : (etat === 'bas' ? 'Seuil bas' : 'Critique'),
               etatStyle: etat === 'sain' ? tagOk : (etat === 'bas' ? tagWarn : tagMag),
               barStyle: `height:100%;width:${Math.min(100, ratio * 100).toFixed(1)}%;border-radius:999px;background:${COL[etat]};transition:width .5s ${ease}`,
@@ -2413,11 +2488,11 @@ class Component extends DCLogic {
           compoTotalLabel: `${total} monture${total > 1 ? 's' : ''} au total`,
           compoRempli: total > 0,
           santeGroupes: groupes,
-          santeResume: alertes ? `${alertes} catégorie(s) sous le seuil` : 'Toutes les catégories sont au-dessus du seuil',
+          santeResume: alertes ? `${alertes} catÃ©gorie(s) sous le seuil` : 'Toutes les catÃ©gories sont au-dessus du seuil',
           santeAlerteStyle: alertes ? tagWarn : tagOk,
-          santeFormes: `${formes.size} forme(s) différentes`,
+          santeFormes: `${formes.size} forme(s) diffÃ©rentes`,
           santeFormesStyle: formes.size >= (cfg.formesMini || 6) ? tagOk : tagWarn,
-          santeRegle: `Base magasin × ${String(cfg.coefGeneral || 1).replace('.', ',')} : le stock général couvre les ${(((cfg.ventesMoisBoutique || 400) * (cfg.boutiques || 5))).toLocaleString('fr-FR')} ventes mensuelles du réseau, soit deux mois de couverture.`,
+          santeRegle: `Base magasin Ã— ${String(cfg.coefGeneral || 1).replace('.', ',')} : le stock gÃ©nÃ©ral couvre les ${(((cfg.ventesMoisBoutique || 400) * (cfg.boutiques || 5))).toLocaleString('fr-FR')} ventes mensuelles du rÃ©seau, soit deux mois de couverture.`,
           santeRempli: total > 0,
           ...(() => {
             const lignes = [];
@@ -2440,10 +2515,10 @@ class Component extends DCLogic {
             return {
               besoinLignes: lignes.map(l => ({
                 label: `${l.axe} ${l.valeur}`,
-                ecart: `${l.ecart.toLocaleString('fr-FR')} à répartir`,
+                ecart: `${l.ecart.toLocaleString('fr-FR')} Ã  rÃ©partir`,
                 style: 'display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:14px;background:var(--srf-7);border:1px solid var(--ink-08);flex-wrap:wrap'
               })),
-              besoinTotalLabel: `${totalEcart.toLocaleString('fr-FR')} monture(s) à commander`,
+              besoinTotalLabel: `${totalEcart.toLocaleString('fr-FR')} monture(s) Ã  commander`,
               besoinVisible: lignes.length > 0,
               besoinEnvoye: enAttente.length > 0,
               besoinStyle: lignes.length
@@ -2461,12 +2536,12 @@ class Component extends DCLogic {
                     total: totalEcart, lignes: lignes
                   }, ...(S1.get().approvisionnements || [])]
                 });
-                this.toast('send', 'Liste envoyée à l\'administrateur', `${ref} · ${totalEcart} monture(s)`, 'ok');
+                this.toast('send', 'Liste envoyÃ©e Ã  l\'administrateur', `${ref} Â· ${totalEcart} monture(s)`, 'ok');
               },
               approSuivi: appros.slice(0, 4).map(a => ({
                 ref: a.ref, date: a.date,
                 total: `${(a.total || 0).toLocaleString('fr-FR')} monture(s)`,
-                statutLabel: a.statut === 'commande' ? `Commandée · ${a.bonRef || ''}` : (a.statut === 'refuse' ? 'Écartée' : 'En attente de l\'administrateur'),
+                statutLabel: a.statut === 'commande' ? `CommandÃ©e Â· ${a.bonRef || ''}` : (a.statut === 'refuse' ? 'Ã‰cartÃ©e' : 'En attente de l\'administrateur'),
                 statutStyle: tagOf(a.statut),
                 style: 'display:flex;align-items:center;gap:12px;padding:12px 15px;border-radius:15px;background:var(--srf-7);border:1px solid var(--ink-08);flex-wrap:wrap'
               })),
@@ -2480,15 +2555,15 @@ class Component extends DCLogic {
       stockJamaisEnregistre: (DB.montures || []).length === 0,
       stockRowsUnused: stock.slice().reverse().filter(m => !m.sorti).map(m => ({
         ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
-        couleur: m.couleur || '—', matiere: m.matiere || '—',
+        couleur: m.couleur || 'â€”', matiere: m.matiere || 'â€”',
         prix: this.fcfa(m.prix), uid: m.uid
       })),
 
       steps: [
-        { num: '1', titre: 'Réception de la commande', texte: "La commande arrive avec ses valises et ses cartons déjà décrits. Vous vérifiez que ce qui est annoncé correspond à ce qui est physiquement là." },
-        { num: '2', titre: 'Ouverture du carton', texte: "Le scan de l'étiquette ouvre la fiche du carton : gamme, type, prix, genre, formes et marques s'affichent sans saisie." },
-        { num: '3', titre: 'Création des montures', texte: "Pour chaque monture : forme et marque choisies dans les listes du carton, référence imprimée saisie au clavier, puis photo. L'identifiant unique est généré à la validation." },
-        { num: '4', titre: 'Entrée en stock', texte: "Dès la validation, la monture apparaît dans la gestion du stock avec son identifiant. Elle devient commandable par les boutiques." }
+        { num: '1', titre: 'RÃ©ception de la commande', texte: "La commande arrive avec ses valises et ses cartons dÃ©jÃ  dÃ©crits. Vous vÃ©rifiez que ce qui est annoncÃ© correspond Ã  ce qui est physiquement lÃ ." },
+        { num: '2', titre: 'Ouverture du carton', texte: "Le scan de l'Ã©tiquette ouvre la fiche du carton : gamme, type, prix, genre, formes et marques s'affichent sans saisie." },
+        { num: '3', titre: 'CrÃ©ation des montures', texte: "Pour chaque monture : forme et marque choisies dans les listes du carton, rÃ©fÃ©rence imprimÃ©e saisie au clavier, puis photo. L'identifiant unique est gÃ©nÃ©rÃ© Ã  la validation." },
+        { num: '4', titre: 'EntrÃ©e en stock', texte: "DÃ¨s la validation, la monture apparaÃ®t dans la gestion du stock avec son identifiant. Elle devient commandable par les boutiques." }
       ].map(x => ({
         ...x,
         numStyle: `width:38px;height:38px;border-radius:999px;flex:none;display:grid;place-items:center;background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 14px/1.3 'JetBrains Mono',monospace;box-shadow:inset 0 1px 0 var(--srf-4)`
@@ -2507,7 +2582,7 @@ class Component extends DCLogic {
       phonePaired: s.phonePaired,
       phoneNotPaired: !s.phonePaired && !s.pairing,
       pairing: s.pairing,
-      pairCode: s.pairCode || 'Créez le QR d’appairage',
+      pairCode: s.pairCode || 'CrÃ©ez le QR dâ€™appairage',
       pairQrUrl: s.pairQrUrl,
       pairQrReady: !!s.pairQrUrl,
       pairBlocks: Array.from({ length: 144 }, (_, i) => {
@@ -2516,13 +2591,13 @@ class Component extends DCLogic {
         return { style: `width:100%;aspect-ratio:1;background:${x > 46 ? 'var(--ink)' : 'transparent'};border-radius:1px` };
       }),
       startPair: () => this.startMobilePairing(),
-      unpair: () => { if (this.mobileSocket) this.mobileSocket.close(); this.setState({ phonePaired: false, pairQrUrl: '', pairCode: '' }); this.toast('smartphone', 'Téléphone déconnecté', 'Lecteur hors service', 'info'); },
+      unpair: () => { if (this.mobileSocket) this.mobileSocket.close(); this.setState({ phonePaired: false, pairQrUrl: '', pairCode: '' }); this.toast('smartphone', 'TÃ©lÃ©phone dÃ©connectÃ©', 'Lecteur hors service', 'info'); },
 
       manualCode: s.manualCode,
       setManualCode: e => this.setState({ manualCode: e.target.value }),
       manualTargets: cartonsRestants.slice(0, 4).map(({ c, v, k }) => ({
         code: k.code,
-        info: `${v.couleur} · ${k.saisies.length}/${k.qty}`,
+        info: `${v.couleur} Â· ${k.saisies.length}/${k.qty}`,
         onFill: () => this.setState({ manualCode: k.code })
       })),
       submitManual: () => {
@@ -2534,7 +2609,7 @@ class Component extends DCLogic {
         this.openCarton(hit.c.id, hit.v.id, hit.k.id);
       },
 
-      // ✅ MODIFICATION 5 : Ajout des variables photo dans renderVals
+      // âœ… MODIFICATION 5 : Ajout des variables photo dans renderVals
       capturePhoto: this.capturePhoto.bind(this),
       uploadPhoto: this.uploadPhoto.bind(this),
       onPhotoSelected: this.onPhotoSelected.bind(this),
@@ -2554,3 +2629,7 @@ class Component extends DCLogic {
 </script>
 </body>
 </html>
+
+
+
+
