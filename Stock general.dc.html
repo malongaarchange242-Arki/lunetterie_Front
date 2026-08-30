@@ -1318,6 +1318,7 @@ class Component extends DCLogic {
           dateArr: command.arrived_at ? new Date(command.arrived_at).toLocaleDateString('fr-FR') : (command.updated_at ? new Date(command.updated_at).toLocaleDateString('fr-FR') : 'â€”'),
           valises: (cases || []).map(v => ({
             id: String(v.id),
+            code: v.code || `VAL-${String(v.id || '0').padStart(3, '0')}`,
             couleur: v.couleur || 'Sans nom',
             gamme: v.gamme || 'â€”',
             genre: v.genre || 'â€”',
@@ -2618,14 +2619,14 @@ class Component extends DCLogic {
       manualCode: s.manualCode,
       setManualCode: e => this.setState({ manualCode: e.target.value }),
       manualTargets: commandesDB.flatMap(c => c.valises.filter(v => !v.scanned).map(v => ({
-        code: String(v.couleur || v.id || '').toUpperCase(),
+        code: String(v.code || v.couleur || v.id || '').toUpperCase(),
         info: `${v.gamme} · ${v.montures} montures`,
-        onFill: () => this.setState({ manualCode: String(v.couleur || v.id || '').toUpperCase() })
+        onFill: () => this.setState({ manualCode: String(v.code || v.couleur || v.id || '').toUpperCase() })
       }))).slice(0, 4),
       submitManual: () => {
-        const raw = String(s.manualCode || '').trim().toUpperCase();
+        const raw = String(s.manualCode || '').trim().replace(/[\s_-]+/g, '').toUpperCase();
         if (!raw) { this.toast('triangle-alert', 'Code vide', 'Saisissez le code de la valise', 'warn'); return; }
-        const hit = commandesDB.flatMap(c => c.valises.filter(v => !v.scanned).map(v => ({ c, v }))).find(({ v }) => String(v.couleur || v.id || '').toUpperCase() === raw);
+        const hit = commandesDB.flatMap(c => c.valises.filter(v => !v.scanned).map(v => ({ c, v }))).find(({ v }) => String(v.code || v.couleur || v.id || '').replace(/[\s_-]+/g, '').toUpperCase() === raw);
         if (!hit) { this.toast('triangle-alert', 'Valise inconnue', `Aucune valise non scannée ne porte ${s.manualCode.trim() || raw}`, 'warn'); return; }
         this.setState({ manualCode: '' });
         this.scanArrivalCase(hit.c, hit.v);
