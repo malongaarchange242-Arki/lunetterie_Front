@@ -57,7 +57,7 @@ input::placeholder{color:var(--ink-34)}
       <div style="{{ avatarStyle }}"><span data-icon="glasses" style="display:grid;place-items:center;font-size:22px;color:#fff"></span></div>
       <div style="min-width:0">
         <div style="font:600 12.5px/1.3 Manrope,sans-serif;margin-bottom:5px">{{ userName }}</div>
-        <div style="font:500 9px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink)">STOCK GÉNÉRAL</div>
+        <div style="font:500 9px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink)">STOCK Gï¿½Nï¿½RAL</div>
       </div>
     </div>
 
@@ -78,7 +78,7 @@ input::placeholder{color:var(--ink-34)}
         <span data-icon="{{ themeIcon }}" style="display:grid;place-items:center;font-size:16px;flex:none"></span>{{ themeLabel }}
       </button>
       <button onClick="{{ logout }}" style="display:flex;align-items:center;gap:11px;width:100%;padding:13px 15px;border-radius:999px;border:1px solid rgba(242,19,142,.28);background:rgba(242,19,142,.09);color:var(--acc-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;text-align:left;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:#D3117C;color:#fff;border-color:var(--acc-strong)">
-        <span data-icon="log-out" style="display:grid;place-items:center;font-size:16px;flex:none"></span>Déconnexion
+        <span data-icon="log-out" style="display:grid;place-items:center;font-size:16px;flex:none"></span>Dï¿½connexion
       </button>
     </div>
   </aside>
@@ -99,16 +99,16 @@ input::placeholder{color:var(--ink-34)}
     <sc-if value="{{ isCommandes }}" hint-placeholder-val="{{ true }}">
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
         <div style="margin-bottom:30px;padding-right:238px">
-          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">ÉTAPE 1 · RÉCEPTION</div>
-          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande à enregistrer</h1>
-          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Commandes arrivées du pré-enregistrement. Tout est déjà décrit au niveau du carton : il reste à créer chaque monture, une par une, avec sa référence et sa photo.</p>
+          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">ï¿½TAPE 1 ï¿½ Rï¿½CEPTION</div>
+          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande ï¿½ enregistrer</h1>
+          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Commandes arrivï¿½es du prï¿½-enregistrement. Tout est dï¿½jï¿½ dï¿½crit au niveau du carton : il reste ï¿½ crï¿½er chaque monture, une par une, avec sa rï¿½fï¿½rence et sa photo.</p>
         </div>
 
         <sc-if value="{{ cmdAucune }}" hint-placeholder-val="{{ false }}">
           <div style="padding:52px 32px;border-radius:24px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
             <span data-icon="clipboard-list" style="display:grid;place-items:center;font-size:30px;color:var(--ink-3);margin:0 auto 14px"></span>
-            <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Aucune commande arrivée</div>
-            <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56);max-width:52ch;margin:0 auto;text-wrap:pretty">Une commande apparaît ici quand la station de pré-enregistrement expédie un bon vers le stock général.</div>
+            <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Aucune commande arrivï¿½e</div>
+            <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56);max-width:52ch;margin:0 auto;text-wrap:pretty">Une commande apparaï¿½t ici quand la station de prï¿½-enregistrement expï¿½die un bon vers le stock gï¿½nï¿½ral.</div>
           </div>
         </sc-if>
 
@@ -123,7 +123,7 @@ input::placeholder{color:var(--ink-34)}
                 <span style="{{ c.statutStyle }}">{{ c.statutLabel }}</span>
                 <div style="margin-left:auto;display:flex;gap:26px;flex-wrap:wrap">
                   <div><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:6px">PROVENANCE</div><div style="font:600 13px/1.2 Manrope,sans-serif">{{ c.provenance }}</div></div>
-                  <div><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:6px">ARRIVÉE</div><div style="font:500 12.5px/1.2 'JetBrains Mono',monospace">{{ c.dateArr }}</div></div>
+                  <div><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:6px">ARRIVï¿½E</div><div style="font:500 12.5px/1.2 'JetBrains Mono',monospace">{{ c.dateArr }}</div></div>
                   <div><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:6px">MONTURES</div><div style="font:500 12.5px/1.2 'JetBrains Mono',monospace;color:var(--acc-strong)">{{ c.total }}</div></div>
                 </div>
               </div>
@@ -139,13 +139,13 @@ input::placeholder{color:var(--ink-34)}
                 <sc-if value="{{ c.pasRecu }}" hint-placeholder-val="{{ true }}">
                   <div style="padding:18px 20px;border-radius:20px;background:rgba(95,194,217,.1);border:1px solid rgba(51,135,156,.22);margin-bottom:18px">
                     <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px">
-                      <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68)">CONFIRMER L'ARRIVÉE DES VALISES</span>
+                      <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68)">CONFIRMER L'ARRIVï¿½E DES VALISES</span>
                       <span style="margin-left:auto;font:600 11.5px/1.3 'JetBrains Mono',monospace;color:var(--info-ink);white-space:nowrap">{{ c.receptionLabel }}</span>
                     </div>
                     <div style="height:6px;border-radius:999px;background:var(--ink-08);overflow:hidden;margin-bottom:16px">
                       <div style="{{ c.receptionStyle }}"></div>
                     </div>
-                    <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-68);margin-bottom:14px;text-wrap:pretty">Scannez chaque valise pour confirmer sa réception. Le bon passera de « en transit » à « réceptionné » côté pré-enregistrement.</div>
+                    <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-68);margin-bottom:14px;text-wrap:pretty">Scannez chaque valise pour confirmer sa rï¿½ception. Le bon passera de ï¿½ en transit ï¿½ ï¿½ ï¿½ rï¿½ceptionnï¿½ ï¿½ cï¿½tï¿½ prï¿½-enregistrement.</div>
                     <div style="display:flex;flex-direction:column;gap:9px">
                       <sc-for list="{{ c.scanRows }}" as="v" hint-placeholder-count="2">
                         <div style="{{ v.rowStyle }}">
@@ -180,7 +180,7 @@ input::placeholder{color:var(--ink-34)}
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:26px;flex-wrap:wrap;padding-right:238px">
           <button onClick="{{ backToCommandes }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 16px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:15px"></span>Retour</button>
           <div style="padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap">{{ activeRef }}</div>
-          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(95,194,217,.22);border:1px solid rgba(51,135,156,.3);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">Étape 2 · choix de la valise</div>
+          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(95,194,217,.22);border:1px solid rgba(51,135,156,.3);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">ï¿½tape 2 ï¿½ choix de la valise</div>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px">
@@ -212,11 +212,11 @@ input::placeholder{color:var(--ink-34)}
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:26px;flex-wrap:wrap;padding-right:238px">
           <button onClick="{{ backToValises }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 16px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:15px"></span>Retour</button>
           <div style="display:inline-flex;align-items:center;gap:10px;padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap"><span style="{{ curSwatchStyle }}"></span>Valise {{ curCouleur }}</div>
-          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(95,194,217,.22);border:1px solid rgba(51,135,156,.3);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">Étape 3 · scan du carton</div>
+          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(95,194,217,.22);border:1px solid rgba(51,135,156,.3);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">ï¿½tape 3 ï¿½ scan du carton</div>
         </div>
 
         <div style="padding:16px 20px;border-radius:18px;background:rgba(95,194,217,.12);border:1px solid rgba(51,135,156,.22);font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-72);margin-bottom:24px;text-wrap:pretty">
-          Scannez le code-barres d'un carton pour ouvrir sa fiche. Les caractéristiques saisies au pré-enregistrement s'affichent automatiquement.
+          Scannez le code-barres d'un carton pour ouvrir sa fiche. Les caractï¿½ristiques saisies au prï¿½-enregistrement s'affichent automatiquement.
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:18px">
@@ -244,7 +244,7 @@ input::placeholder{color:var(--ink-34)}
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:26px;flex-wrap:wrap;padding-right:238px">
           <button onClick="{{ backToCartons }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 16px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:15px"></span>Retour</button>
           <div style="display:inline-flex;align-items:center;gap:10px;padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap"><span style="{{ curSwatchStyle }}"></span>Carton {{ kNum }} Â· Valise {{ curCouleur }}</div>
-          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(242,19,142,.14);border:1px solid rgba(191,33,120,.32);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">Étape 4 · création des montures</div>
+          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(242,19,142,.14);border:1px solid rgba(191,33,120,.32);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">ï¿½tape 4 ï¿½ crï¿½ation des montures</div>
         </div>
 
         <div style="display:grid;grid-template-columns:340px 1fr;gap:22px;align-items:start">
@@ -252,7 +252,7 @@ input::placeholder{color:var(--ink-34)}
           <div style="padding:24px;border-radius:24px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:0 20px 46px -26px var(--ink-22),inset 0 1px 0 var(--srf-9);position:sticky;top:34px">
             <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--info-ink);margin-bottom:12px">FICHE DU CARTON</div>
             <div style="font:600 18px/1.3 Sora,sans-serif;letter-spacing:-.02em;margin-bottom:8px">{{ kGamme }} Â· {{ kType }}</div>
-            <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:20px;text-wrap:pretty">Renseigné au pré-enregistrement. Ces valeurs s'appliquent à chaque monture du carton.</div>
+            <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:20px;text-wrap:pretty">Renseignï¿½ au prï¿½-enregistrement. Ces valeurs s'appliquent ï¿½ chaque monture du carton.</div>
 
             <div style="display:flex;flex-direction:column;gap:0;margin-bottom:20px">
               <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--ink-08)"><span style="font:400 12.5px/1.4 Manrope,sans-serif;color:var(--ink-66)">Valise</span><span style="font:600 12.5px/1.4 Manrope,sans-serif">{{ curCouleur }}</span></div>
@@ -347,22 +347,22 @@ input::placeholder{color:var(--ink-34)}
                   </div>
                 </div>
 
-                <!-- ? MODIFICATION 2 : Section PHOTO remplacée -->
+                <!-- ? MODIFICATION 2 : Section PHOTO remplacï¿½e -->
                 <div style="display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px">
                   <div>
-                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">RÉFÉRENCE DE LA MONTURE</div>
-                    <input value="{{ fRef }}" onChange="{{ setRef }}" placeholder="Tapez ou scannez la référence depuis la photo de la branche" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 15px/1.3 'JetBrains Mono',monospace;letter-spacing:.04em;cursor:text">
+                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">Rï¿½Fï¿½RENCE DE LA MONTURE</div>
+                    <input value="{{ fRef }}" onChange="{{ setRef }}" placeholder="Tapez ou scannez la rï¿½fï¿½rence depuis la photo de la branche" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 15px/1.3 'JetBrains Mono',monospace;letter-spacing:.04em;cursor:text">
                   </div>
                 </div>
 
                 <div style="display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px">
                   <div>
                     <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">NOMBRE DE COPIES</div>
-                    <input type="number" value="{{ quantiteACreer }}" onChange="{{ setQuantiteACreer }}" min="1" max="999" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer">
+                    <input type="text" inputmode="numeric" pattern="[0-9]*" value="{{ quantiteACreer }}" onChange="{{ setQuantiteACreer }}" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer">
                   </div>
                 </div>
 
-                <!-- Photos reçues du mobile -->
+                <!-- Photos reï¿½ues du mobile -->
                 <sc-if value="{{ photosRecues }}" hint-placeholder-val="{{ false }}">
                   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
                     <div style="border-radius:12px;overflow:hidden;background:var(--srf-86);border:1px solid var(--ink-12)">
@@ -379,8 +379,8 @@ input::placeholder{color:var(--ink-34)}
                     </div>
                     <div style="border-radius:12px;overflow:hidden;background:var(--srf-86);border:1px solid var(--ink-12)">
                       <sc-if value="{{ backPhotoData }}" hint-placeholder-val="{{ false }}">
-                        <img bindSrc="{{ backPhotoData }}" alt="Photo arrière" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
-                        <div style="padding:8px;text-align:center;font:500 11px/1.3 Manrope,sans-serif;color:var(--ok-ink)">? Arrière</div>
+                        <img bindSrc="{{ backPhotoData }}" alt="Photo arriï¿½re" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
+                        <div style="padding:8px;text-align:center;font:500 11px/1.3 Manrope,sans-serif;color:var(--ok-ink)">? Arriï¿½re</div>
                       </sc-if>
                     </div>
                   </div>
@@ -612,11 +612,11 @@ input::placeholder{color:var(--ink-34)}
         <sc-if value="{{ stockTableVisible }}" hint-placeholder-val="{{ true }}">
         <div style="border-radius:24px;overflow:hidden;border:1px solid var(--ink-09);background:linear-gradient(160deg,var(--srf-9),var(--srf-64));backdrop-filter:blur(24px);box-shadow:0 24px 56px -30px var(--ink-2)">
          <div style="overflow-x:auto"><div style="min-width:960px">
-          <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(140px,1.1fr);gap:14px;padding:14px 22px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
-            <div>PHOTO</div><div>RÃ‰FÃ‰RENCE</div><div>MARQUE</div><div>FORME</div><div>COULEUR</div><div>MATIÃˆRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div style="text-align:right">IDENTIFIANT</div>
+          <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(150px,1.1fr) minmax(140px,1.1fr);gap:14px;padding:14px 22px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
+            <div>PHOTO</div><div>RÃ‰FÃ‰RENCE</div><div>MARQUE</div><div>FORME</div><div>GENRE</div><div>COULEUR</div><div>MATIÃˆRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div>EMPLACEMENT</div><div>VALISE / CARTON</div><div style="text-align:right">IDENTIFIANT</div>
           </div>
           <sc-for list="{{ stockRows }}" as="r" hint-placeholder-count="0">
-            <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(140px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
+            <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(150px,1.1fr) minmax(140px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
               <div style="{{ r.photoStyle }}">
                 <sc-if value="{{ r.photoUrl }}" hint-placeholder-val="false"><img bindSrc="{{ r.photoUrl }}" alt="Photo monture" style="display:block;width:100%;height:100%;object-fit:cover"></sc-if>
                 <sc-if value="{{ r.photoMissing }}" hint-placeholder-val="true"><span data-icon="glasses" style="display:grid;place-items:center;font-size:17px;color:var(--srf-9)"></span></sc-if>
@@ -624,10 +624,13 @@ input::placeholder{color:var(--ink-34)}
               <div style="min-width:0;font:600 12.5px/1.3 'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.ref }}</div>
               <div style="min-width:0;font:500 12.5px/1.3 Manrope,sans-serif;color:var(--ink-72)">{{ r.marque }}</div>
               <div style="min-width:0;font:500 12.5px/1.3 Manrope,sans-serif;color:var(--ink-72)">{{ r.forme }}</div>
+              <div style="min-width:0;font:500 12.5px/1.3 Manrope,sans-serif;color:var(--ink-72)">{{ r.genre }}</div>
               <div style="min-width:0;font:500 12px/1.3 Manrope,sans-serif;color:var(--ink-72)">{{ r.couleur }}</div>
               <div style="min-width:0;font:500 12px/1.3 Manrope,sans-serif;color:var(--ink-68)">{{ r.matiere }}</div>
               <div style="min-width:0;font:500 12px/1.3 Manrope,sans-serif;color:var(--ink-68)">{{ r.gamme }}</div>
               <div style="min-width:0;text-align:right;font:500 12px/1.3 'JetBrains Mono',monospace;color:var(--ok-ink);white-space:nowrap">{{ r.prix }}</div>
+              <div style="min-width:0;font:500 11px/1.3 Manrope,sans-serif;color:var(--ink-68);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.emplacement }}</div>
+              <div style="min-width:0;font:500 11px/1.35 Manrope,sans-serif;color:var(--ink-68);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.valiseCarton }}</div>
               <div style="min-width:0;text-align:right;font:500 10.5px/1.4 'JetBrains Mono',monospace;color:var(--info-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.uid }}</div>
             </div>
           </sc-for>
@@ -641,8 +644,8 @@ input::placeholder{color:var(--ink-34)}
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
         <div style="margin-bottom:24px;padding-right:238px">
           <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">SORTIES VERS BOUTIQUES</div>
-          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande à expédier</h1>
-          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:70ch;text-wrap:pretty">Trois origines : l'envoi automatique déclenché quand une catégorie passe sous son minimum, la demande d'un responsable de magasin, et la liste créée par l'administrateur.</p>
+          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande ï¿½ expï¿½dier</h1>
+          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:70ch;text-wrap:pretty">Trois origines : l'envoi automatique dï¿½clenchï¿½ quand une catï¿½gorie passe sous son minimum, la demande d'un responsable de magasin, et la liste crï¿½ï¿½e par l'administrateur.</p>
         </div>
 
         <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px">
@@ -801,7 +804,7 @@ input::placeholder{color:var(--ink-34)}
           <div style="padding:56px 32px;border-radius:24px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
             <span data-icon="history" style="display:grid;place-items:center;font-size:32px;color:var(--ink-3);margin:0 auto 16px"></span>
             <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Aucune expÃ©dition</div>
-            <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56)">Créez un carton depuis « Commande à expédier » pour le voir apparaître ici.</div>
+            <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56)">Crï¿½ez un carton depuis ï¿½ Commande ï¿½ expï¿½dier ï¿½ pour le voir apparaï¿½tre ici.</div>
           </div>
         </sc-if>
 
@@ -935,7 +938,7 @@ input::placeholder{color:var(--ink-34)}
           <div style="padding:26px;border-radius:24px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9)">
             <div style="display:flex;align-items:center;gap:11px;margin-bottom:20px">
               <span data-icon="smartphone" style="display:inline-grid;place-items:center;font-size:19px;color:var(--info-ink);flex:none"></span>
-              <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">Téléphone lecteur</div>
+              <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">Tï¿½lï¿½phone lecteur</div>
             </div>
             <sc-if value="{{ phoneNotPaired }}" hint-placeholder-val="{{ true }}">
               <div style="padding:18px;border-radius:18px;background:var(--card);border:1px solid var(--ink-08);margin-bottom:18px">
@@ -944,31 +947,31 @@ input::placeholder{color:var(--ink-34)}
                     <span style="{{ b.style }}"></span>
                   </sc-for>
                 </div>
-                <sc-if value="{{ pairQrReady }}" hint-placeholder-val="{{ false }}"><img bindSrc="{{ pairQrUrl }}" alt="QR d’appairage" style="display:block;width:100%;max-width:260px;margin:16px auto 0;border-radius:12px;background:#fff"></sc-if>
+                <sc-if value="{{ pairQrReady }}" hint-placeholder-val="{{ false }}"><img bindSrc="{{ pairQrUrl }}" alt="QR dï¿½appairage" style="display:block;width:100%;max-width:260px;margin:16px auto 0;border-radius:12px;background:#fff"></sc-if>
                 <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:2px;display:none">
                 </div>
               </div>
-              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:8px;text-wrap:pretty">Scannez ce code avec l'appareil photo du téléphone, ou saisissez le code d'appairage dans l'application mobile.</div>
+              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:8px;text-wrap:pretty">Scannez ce code avec l'appareil photo du tï¿½lï¿½phone, ou saisissez le code d'appairage dans l'application mobile.</div>
               <div style="font:500 15px/1.3 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink);margin-bottom:20px">{{ pairCode }}</div>
-              <button onClick="{{ startPair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -14px rgba(191,33,120,.6),inset 0 1px 0 var(--srf-5);transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="transform:translateY(-1px)"><span data-icon="link" style="display:grid;place-items:center;font-size:16px"></span>Connecter le téléphone</button>
+              <button onClick="{{ startPair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -14px rgba(191,33,120,.6),inset 0 1px 0 var(--srf-5);transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="transform:translateY(-1px)"><span data-icon="link" style="display:grid;place-items:center;font-size:16px"></span>Connecter le tï¿½lï¿½phone</button>
             </sc-if>
             <sc-if value="{{ pairing }}" hint-placeholder-val="{{ false }}">
               <div style="padding:44px 20px;text-align:center">
                 <span style="display:inline-block;width:26px;height:26px;border-radius:999px;border:2.5px solid rgba(51,135,156,.24);border-top-color:var(--info-ink);animation:spin .8s linear infinite;margin-bottom:18px"></span>
-                <div style="font:600 13.5px/1.3 Manrope,sans-serif;margin-bottom:8px">Appairage en cours…</div>
-                <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-66)">Confirmez la connexion sur le téléphone.</div>
+                <div style="font:600 13.5px/1.3 Manrope,sans-serif;margin-bottom:8px">Appairage en coursï¿½</div>
+                <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-66)">Confirmez la connexion sur le tï¿½lï¿½phone.</div>
               </div>
             </sc-if>
             <sc-if value="{{ phonePaired }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;align-items:center;gap:13px;padding:16px;border-radius:18px;background:rgba(52,201,141,.1);border:1px solid rgba(30,143,99,.28);margin-bottom:18px">
                 <span style="width:11px;height:11px;border-radius:999px;background:#34C98D;box-shadow:0 0 0 4px rgba(52,201,141,.18);flex:none"></span>
                 <div style="flex:1;min-width:0">
-                  <div style="font:600 13px/1.3 Manrope,sans-serif">Téléphone d’Aïssata</div>
-                  <div style="font:500 11px/1.4 'JetBrains Mono',monospace;color:var(--ink-66);margin-top:5px">Lecteur actif · Wi-Fi local</div>
+                  <div style="font:600 13px/1.3 Manrope,sans-serif">Tï¿½lï¿½phone dï¿½Aï¿½ssata</div>
+                  <div style="font:500 11px/1.4 'JetBrains Mono',monospace;color:var(--ink-66);margin-top:5px">Lecteur actif ï¿½ Wi-Fi local</div>
                 </div>
               </div>
-              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Le téléphone envoie chaque lecture directement dans l’écran ouvert.</div>
-              <button onClick="{{ unpair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="unlink" style="display:grid;place-items:center;font-size:15px"></span>Déconnecter</button>
+              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Le tï¿½lï¿½phone envoie chaque lecture directement dans lï¿½ï¿½cran ouvert.</div>
+              <button onClick="{{ unpair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="unlink" style="display:grid;place-items:center;font-size:15px"></span>Dï¿½connecter</button>
             </sc-if>
           </div>
 
@@ -998,30 +1001,30 @@ input::placeholder{color:var(--ink-34)}
     <sc-if value="{{ isProcess }}" hint-placeholder-val="{{ false }}">
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1);max-width:920px">
         <div style="margin-bottom:38px;padding-right:238px">
-          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">POSTE · MAGASINIER STOCK GÉNÉRAL</div>
-          <h1 style="font:600 30px/1.14 Sora,sans-serif;letter-spacing:-.024em;margin:0 0 16px;max-width:26ch;text-wrap:balance">À quoi sert le stock général</h1>
-          <p style="font:300 15px/1.65 Manrope,sans-serif;color:var(--ink-62);margin:0;max-width:68ch;text-wrap:pretty">Votre poste transforme des cartons en montures identifiables une par une. Le pré-enregistrement a décrit les lots ; vous descendez à l'unité. Chaque monture reçoit un identifiant unique, une référence et une photo — c'est ce triplet qui permet de la retrouver, de la vendre et de la tracer jusqu'en boutique.</p>
+          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">POSTE ï¿½ MAGASINIER STOCK Gï¿½Nï¿½RAL</div>
+          <h1 style="font:600 30px/1.14 Sora,sans-serif;letter-spacing:-.024em;margin:0 0 16px;max-width:26ch;text-wrap:balance">ï¿½ quoi sert le stock gï¿½nï¿½ral</h1>
+          <p style="font:300 15px/1.65 Manrope,sans-serif;color:var(--ink-62);margin:0;max-width:68ch;text-wrap:pretty">Votre poste transforme des cartons en montures identifiables une par une. Le prï¿½-enregistrement a dï¿½crit les lots ; vous descendez ï¿½ l'unitï¿½. Chaque monture reï¿½oit un identifiant unique, une rï¿½fï¿½rence et une photo ï¿½ c'est ce triplet qui permet de la retrouver, de la vendre et de la tracer jusqu'en boutique.</p>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:18px;margin-bottom:40px">
           <div style="padding:22px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px)">
             <span data-icon="fingerprint" style="display:inline-grid;place-items:center;font-size:22px;color:var(--info-ink);margin-bottom:16px"></span>
             <div style="font:600 14px/1.3 Sora,sans-serif;margin-bottom:9px">Ce que vous produisez</div>
-            <div style="font:400 12.5px/1.6 Manrope,sans-serif;color:var(--ink-7);text-wrap:pretty">Une fiche par monture : identifiant unique, référence, photo, et les caractéristiques héritées du carton.</div>
+            <div style="font:400 12.5px/1.6 Manrope,sans-serif;color:var(--ink-7);text-wrap:pretty">Une fiche par monture : identifiant unique, rï¿½fï¿½rence, photo, et les caractï¿½ristiques hï¿½ritï¿½es du carton.</div>
           </div>
           <div style="padding:22px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px)">
             <span data-icon="zap" style="display:inline-grid;place-items:center;font-size:22px;color:var(--info-ink);margin-bottom:16px"></span>
             <div style="font:600 14px/1.3 Sora,sans-serif;margin-bottom:9px">Ce qui vous fait gagner du temps</div>
-            <div style="font:400 12.5px/1.6 Manrope,sans-serif;color:var(--ink-7);text-wrap:pretty">Gamme, type, prix, genre, formes et marques arrivent déjà remplis. Vous ne saisissez que ce qui est propre à la monture.</div>
+            <div style="font:400 12.5px/1.6 Manrope,sans-serif;color:var(--ink-7);text-wrap:pretty">Gamme, type, prix, genre, formes et marques arrivent dï¿½jï¿½ remplis. Vous ne saisissez que ce qui est propre ï¿½ la monture.</div>
           </div>
           <div style="padding:22px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px)">
             <span data-icon="store" style="display:inline-grid;place-items:center;font-size:22px;color:var(--info-ink);margin-bottom:16px"></span>
-            <div style="font:600 14px/1.3 Sora,sans-serif;margin-bottom:9px">Qui en dépend</div>
+            <div style="font:600 14px/1.3 Sora,sans-serif;margin-bottom:9px">Qui en dï¿½pend</div>
             <div style="font:400 12.5px/1.6 Manrope,sans-serif;color:var(--ink-7);text-wrap:pretty">Les boutiques : elles commandent sur la base de votre inventaire, monture par monture.</div>
           </div>
         </div>
 
-        <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ink-64);margin-bottom:22px">LES QUATRE ÉTAPES</div>
+        <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ink-64);margin-bottom:22px">LES QUATRE ï¿½TAPES</div>
         <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:40px">
           <sc-for list="{{ steps }}" as="s" hint-placeholder-count="4">
             <div style="display:flex;gap:20px;padding:22px 24px;border-radius:22px;background:linear-gradient(150deg,var(--srf-88),var(--srf-6));border:1px solid var(--ink-08);backdrop-filter:blur(22px)">
@@ -1203,6 +1206,12 @@ class Component extends DCLogic {
     return 'https://api-lunetterie.universearch.com';
   }
 
+  photoUrl(raw) {
+    const value = String(raw || '').trim();
+    const match = value.match(/https?:\/\/[^\s\])'",]+/i);
+    return match ? match[0] : value;
+  }
+
   apiHeaders() {
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
@@ -1224,10 +1233,10 @@ class Component extends DCLogic {
   connectMobileEvents(eventsUrl) {
     const url = new URL(eventsUrl); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     this.mobileSocket = new WebSocket(url.toString());
-    this.mobileSocket.onopen = () => { console.log('? WebSocket connecté:', url.toString()); };
+    this.mobileSocket.onopen = () => { console.log('? WebSocket connectï¿½:', url.toString()); };
     this.mobileSocket.onmessage = event => this.handleMobileEvent(JSON.parse(event.data));
     this.mobileSocket.onerror = (error) => { console.error('? WebSocket erreur:', error); };
-    this.mobileSocket.onclose = () => { console.log('WebSocket fermé'); this.mobileSocket = null; };
+    this.mobileSocket.onclose = () => { console.log('WebSocket fermï¿½'); this.mobileSocket = null; };
   }
   async handleMobileEvent(event) {
     const data = event.data || {};
@@ -1257,7 +1266,7 @@ class Component extends DCLogic {
           const photoData = reader.result;
           if (kind === 'branche') {
             this.setState({ branchPhotoData: photoData });
-            // Extraction de la référence via OCR sur la branche
+            // Extraction de la rï¿½fï¿½rence via OCR sur la branche
             const fd = new FormData();
             fd.append('image', blob, 'branche.jpg');
             try {
@@ -1268,25 +1277,25 @@ class Component extends DCLogic {
               const reference = String(result.reference || '').trim().toUpperCase();
               if (reference) {
                 this.setState({ fRef: reference });
-                this.toast('scan-text', 'Référence lue', reference, 'ok');
+                this.toast('scan-text', 'Rï¿½fï¿½rence lue', reference, 'ok');
               } else {
-                this.toast('triangle-alert', 'Référence non détectée', 'Saisissez-la manuellement.', 'warn');
+                this.toast('triangle-alert', 'Rï¿½fï¿½rence non dï¿½tectï¿½e', 'Saisissez-la manuellement.', 'warn');
               }
             } catch (error) {
-              this.toast('triangle-alert', 'Analyse branche impossible', error.message || 'Saisissez la référence manuellement.', 'warn');
+              this.toast('triangle-alert', 'Analyse branche impossible', error.message || 'Saisissez la rï¿½fï¿½rence manuellement.', 'warn');
             }
             return;
           }
           if (kind === 'arriere') {
-            this.setState({ backPhotoData: photoData, captureLabel: 'Photo arrière reçue ?' });
-            this.toast('camera', 'Photo arrière reçue', 'Le dossier complet est maintenant prêt.', 'ok');
+            this.setState({ backPhotoData: photoData, captureLabel: 'Photo arriï¿½re reï¿½ue ?' });
+            this.toast('camera', 'Photo arriï¿½re reï¿½ue', 'Le dossier complet est maintenant prï¿½t.', 'ok');
             return;
           }
-          this.setState({ photoPreview: photoData, photoData, captureLabel: 'Photo reçue du téléphone ?' });
-          this.toast('camera', 'Photo monture reçue', 'Prête pour validation sur le PC.', 'ok');
+          this.setState({ photoPreview: photoData, photoData, captureLabel: 'Photo reï¿½ue du tï¿½lï¿½phone ?' });
+          this.toast('camera', 'Photo monture reï¿½ue', 'Prï¿½te pour validation sur le PC.', 'ok');
         };
         reader.readAsDataURL(blob);
-      } catch (_) { this.toast('triangle-alert', 'Photo non lisible', 'Réessayez depuis le téléphone.', 'warn'); }
+      } catch (_) { this.toast('triangle-alert', 'Photo non lisible', 'Rï¿½essayez depuis le tï¿½lï¿½phone.', 'warn'); }
     }
   }
   async startValiseScan(command, valise) {
@@ -1305,14 +1314,32 @@ class Component extends DCLogic {
     if (!S) return;
     try {
       const headers = this.apiHeaders();
-      const [shipmentResponse, ordersResponse] = await Promise.all([
+      const [shipmentResponse, ordersResponse, configResponse, needsResponse] = await Promise.all([
         fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/shipment`, { headers }),
-        fetch(`${this.apiBaseUrl()}/api/v1/inventory/expeditions`, { headers })
+        fetch(`${this.apiBaseUrl()}/api/v1/inventory/expeditions`, { headers }),
+        fetch(`${this.apiBaseUrl()}/api/v1/inventory/config/stock-thresholds`, { headers }).catch(() => null),
+        fetch(`${this.apiBaseUrl()}/api/v1/inventory/stock-needs`, { headers }).catch(() => null)
       ]);
       const shipmentPayload = shipmentResponse.ok ? await shipmentResponse.json() : { data: { commands: [] } };
       const shipmentCommands = shipmentPayload.data && Array.isArray(shipmentPayload.data.commands) ? shipmentPayload.data.commands : [];
       const ordersPayload = ordersResponse.ok ? await ordersResponse.json() : { data: { orders: [] } };
       const orders = ordersPayload.data && Array.isArray(ordersPayload.data.orders) ? ordersPayload.data.orders : [];
+
+      // Load configuration thresholds if available
+      if (configResponse && configResponse.ok) {
+        const configPayload = await configResponse.json();
+        if (configPayload.data) {
+          S.setSeuils(configPayload.data);
+        }
+      }
+
+      // Load pre-calculated needs if available
+      if (needsResponse && needsResponse.ok) {
+        const needsPayload = await needsResponse.json();
+        if (needsPayload.data) {
+          S.set({ stockNeeds: needsPayload.data });
+        }
+      }
 
       const mapped = [];
       for (const command of shipmentCommands) {
@@ -1358,24 +1385,66 @@ class Component extends DCLogic {
         });
       }
 
-      S.set({ arrivees: mapped });
-      const stockSummaryResponse = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/glasses?status=EN_STOCK_GENERAL,EN_STOCK_SOUS_STATION`, { headers });
+      const stockSummaryResponse = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/glasses?status=EN_STOCK_GENERAL`, { headers });
+      let glasses = [];
       if (stockSummaryResponse.ok) {
         const stockPayload = await stockSummaryResponse.json();
-        const glasses = stockPayload.data && Array.isArray(stockPayload.data.glasses) ? stockPayload.data.glasses : [];
-        S.set({ montures: glasses.map(item => ({
-          uid: item.id || item.barcode || `${Date.now()}-${Math.random()}`,
-          code: item.barcode || item.code || '',
-          marque: item.marque || 'â€”',
-          forme: item.forme || 'â€”',
-          gamme: item.gamme || 'â€”',
-          type: item.type || 'Vue',
-          prix: Number(item.price) || Number(item.prix) || 0,
-          site: item.station_name || 'Stock gÃ©nÃ©ral',
-          statut: item.status || 'EN_STOCK_GENERAL',
-          photo: item.photo_monture_url || item.photoMontureUrl || ''
-        })) });
+        glasses = stockPayload.data && Array.isArray(stockPayload.data.glasses) ? stockPayload.data.glasses : [];
       }
+      
+      // Synchronize backend glasses with local arrivees cartons
+      const updated_arrivees = mapped.map(cmd => ({
+        ...cmd,
+        valises: cmd.valises.map(v => ({
+          ...v,
+          cartons: v.cartons.map(k => {
+            const matching_glasses = glasses.filter(item => {
+              const item_box_code = item.box_code || item.carton_code || '';
+              const item_cmd_ref = item.reception_command_code || item.ref_bon || '';
+              return item_box_code === k.code || (item_cmd_ref === cmd.ref && item_box_code === k.code);
+            });
+            return {
+              ...k,
+              saisies: k.saisies.length > 0 ? k.saisies : matching_glasses.map(item => ({
+                id: item.barcode || item.id,
+                ref: item.reference || item.ref,
+                forme: item.shape || item.forme,
+                marque: item.brand || item.marque,
+                couleur: item.color || item.couleur,
+                matiere: item.material || item.matiere
+              }))
+            };
+          })
+        }))
+      }));
+      
+      S.set({ 
+        arrivees: updated_arrivees,
+        montures: glasses.map(item => ({
+          uid: item.barcode || item.id || `${Date.now()}-${Math.random()}`,
+          code: item.barcode || item.code || '',
+          ref: item.reference || item.ref || 'â€”',
+          marque: item.brand || item.marque || 'â€”',
+          forme: item.shape || item.forme || 'â€”',
+          genre: item.gender || item.genre || 'â€”',
+          couleur: item.color || item.couleur || 'â€”',
+          matiere: item.material || item.matiere || 'â€”',
+          gamme: item.gamme || item.mount_type || 'â€”',
+          type: item.type || item.mount_type || 'Vue',
+          prix: Number(item.price ?? item.prix) || 0,
+          site: item.station_name || 'Stock gÃ©nÃ©ral',
+          emplacement: item.location_code || item.location || 'â€”',
+          valise: item.valise_code || item.valise_couleur || item.valise || 'â€”',
+          carton: item.box_code || item.carton_code || item.carton || 'â€”',
+          ref_bon: item.reception_command_code || item.ref_bon || 'â€”',
+          cmdId: item.reception_command_id || item.command_id || item.cmdId || null,
+          valId: item.case_id || item.valId || null,
+          cartId: item.box_id || item.cartId || null,
+          statut: item.status || 'EN_STOCK_GENERAL',
+          photo: this.photoUrl(item.photo_monture_url || item.photoMontureUrl || ''),
+          sorti: item.status !== 'EN_STOCK_GENERAL' && item.status !== 'stock'
+        }))
+      });
     } catch (error) {
       console.error('Erreur chargement backend stock gÃ©nÃ©ral:', error);
       this.toast('triangle-alert', 'Connexion backend impossible', 'Les donnÃ©es locales restent visibles.', 'warn');
@@ -1491,8 +1560,27 @@ class Component extends DCLogic {
   valScanned(c) { return c.valises.filter(v => v.scanned).length; }
   cmdRecu(c) { return c.valises.every(v => v.scanned); }
   packed(carton) { return carton.saisies.length; }
-  valiseDone(v) { return v.cartons.reduce((a, k) => a + k.saisies.length, 0); }
-  cmdDone(c) { return c.valises.reduce((a, v) => a + this.valiseDone(v), 0); }
+  valiseDone(v, cmd) {
+    const localCount = v.cartons.reduce((a, k) => a + k.saisies.length, 0);
+    const S = window.LStore ? window.LStore.get() : {};
+    const stock = (S.montures || []).filter(m => {
+      if (!m || m.valise !== v.couleur) return false;
+      if (cmd && ((m.cmdId && String(m.cmdId) === String(cmd.id)) || (m.ref_bon && String(m.ref_bon) === String(cmd.ref)))) return true;
+      return v.cartons.some(k => k.code === m.carton);
+    }).length;
+    return Math.max(localCount, stock);
+  }
+  cmdDone(c) {
+    const localCount = c.valises.reduce((a, v) => a + this.valiseDone(v, c), 0);
+    const S = window.LStore ? window.LStore.get() : {};
+    const stockCount = (S.montures || []).filter(m => {
+      if (!m) return false;
+      if (m.cmdId && String(m.cmdId) === String(c.id)) return true;
+      if (m.ref_bon && String(m.ref_bon) === String(c.ref)) return true;
+      return c.valises.some(v => v.couleur === m.valise && v.cartons.some(k => k.code === m.carton));
+    }).length;
+    return Math.max(localCount, stockCount);
+  }
   cmdTotal(c) { return c.valises.reduce((a, v) => a + v.montures, 0); }
 
   allStock() {
@@ -1575,10 +1663,10 @@ class Component extends DCLogic {
         });
         const openPayload = await openResponse.json().catch(() => ({}));
         if (!openResponse.ok || !openPayload.success) {
-          console.warn('Ouverture du carton non persistée côté backend:', openPayload.error || openResponse.statusText);
+          console.warn('Ouverture du carton non persistï¿½e cï¿½tï¿½ backend:', openPayload.error || openResponse.statusText);
         }
       } catch (openError) {
-        console.warn('Erreur mise à jour du statut du carton:', openError);
+        console.warn('Erreur mise ï¿½ jour du statut du carton:', openError);
       }
 
       const cmd = ((window.LStore ? window.LStore.get().arrivees : []) || []).find(c => c.id === cmdId);
@@ -1810,109 +1898,110 @@ class Component extends DCLogic {
 
     const photoImages = ['linear-gradient(140deg,#7C8AA6,#3D4A63)', 'linear-gradient(140deg,#A68B7C,#63503D)', 'linear-gradient(140deg,#8B7CA6,#4A3D63)', 'linear-gradient(140deg,#7CA69B,#3D635A)'];
 
-    const dispoStock = (DB.montures || []).filter(m => m.site === 'Stock gÃ©nÃ©ral' && m.statut !== 'transit');
+    const estStockGeneral = m => m && (m.statut === 'stock' || m.statut === 'EN_STOCK_GENERAL');
+    const dispoStock = (DB.montures || []).filter(estStockGeneral);
     const kpis = [
       { label: 'DISPONIBLES EN STOCK', value: dispoStock.length.toLocaleString('fr-FR'), color: 'var(--info-ink)' },
-      { label: 'SORTIES VERS BOUTIQUES', value: (DB.montures || []).filter(m => m.site !== 'Stock gÃ©nÃ©ral' || m.statut === 'transit').length.toLocaleString('fr-FR'), color: 'var(--acc-ink)' },
+      { label: 'SORTIES VERS BOUTIQUES', value: (DB.montures || []).filter(m => !estStockGeneral(m)).length.toLocaleString('fr-FR'), color: 'var(--acc-ink)' },
       { label: 'VALEUR DISPONIBLE', value: (dispoStock.reduce((a, m) => a + m.prix, 0) / 1000).toFixed(0) + ' k', color: 'var(--ok-ink)' },
       { label: 'MARQUES DISPONIBLES', value: String(new Set(dispoStock.map(m => m.marque)).size), color: 'var(--ink)' }
     ];
 
     const H = {
       commandes: {
-        titre: 'Commandes à enregistrer',
-        intro: "Les commandes arrivées du pré-enregistrement attendent ici. Le contenu des cartons est déjà décrit ; il vous reste à créer les montures une par une.",
+        titre: 'Commandes ï¿½ enregistrer',
+        intro: "Les commandes arrivï¿½es du prï¿½-enregistrement attendent ici. Le contenu des cartons est dï¿½jï¿½ dï¿½crit ; il vous reste ï¿½ crï¿½er les montures une par une.",
         actions: [
-          "Scannez chaque valise à l'arrivée : le bon passe de « en transit » à « réceptionné » et l'enregistrement se débloque.",
-          "Chaque carte montre l'avancement en montures créées sur le total de la commande.",
+          "Scannez chaque valise ï¿½ l'arrivï¿½e : le bon passe de ï¿½ en transit ï¿½ ï¿½ ï¿½ rï¿½ceptionnï¿½ ï¿½ et l'enregistrement se dï¿½bloque.",
+          "Chaque carte montre l'avancement en montures crï¿½ï¿½es sur le total de la commande.",
           "Les pastilles de couleur rappellent les valises et leur progression.",
-          "« Démarrer l'enregistrement » ouvre la liste des valises."
+          "ï¿½ Dï¿½marrer l'enregistrement ï¿½ ouvre la liste des valises."
         ]
       },
       valises: {
         titre: 'Valises de la commande',
-        intro: "Une valise regroupe des montures de même gamme et même genre. Choisissez celle que vous avez physiquement devant vous.",
+        intro: "Une valise regroupe des montures de mï¿½me gamme et mï¿½me genre. Choisissez celle que vous avez physiquement devant vous.",
         actions: [
-          "La barre de progression suit les montures créées dans la valise.",
-          "« Ouvrir les cartons » affiche les cartons à scanner."
+          "La barre de progression suit les montures crï¿½ï¿½es dans la valise.",
+          "ï¿½ Ouvrir les cartons ï¿½ affiche les cartons ï¿½ scanner."
         ]
       },
       cartons: {
         titre: 'Cartons de la valise',
-        intro: "Chaque carton porte une étiquette imprimée au pré-enregistrement. Le scan ouvre sa fiche pré-remplie.",
+        intro: "Chaque carton porte une ï¿½tiquette imprimï¿½e au prï¿½-enregistrement. Le scan ouvre sa fiche prï¿½-remplie.",
         actions: [
-          "« Scanner ce carton » simule la lecture de l'étiquette.",
-          "Si le lecteur est en panne, passez par l'écran Scan et saisissez le code.",
-          "La pastille indique combien de montures sont déjà créées."
+          "ï¿½ Scanner ce carton ï¿½ simule la lecture de l'ï¿½tiquette.",
+          "Si le lecteur est en panne, passez par l'ï¿½cran Scan et saisissez le code.",
+          "La pastille indique combien de montures sont dï¿½jï¿½ crï¿½ï¿½es."
         ]
       },
       saisie: {
-        titre: 'Création des montures',
-        intro: "La colonne de gauche est la fiche du carton : gamme, type, prix, genre, formes et marques sont hérités et non modifiables. Vous ne saisissez que ce qui est propre à chaque monture.",
+        titre: 'Crï¿½ation des montures',
+        intro: "La colonne de gauche est la fiche du carton : gamme, type, prix, genre, formes et marques sont hï¿½ritï¿½s et non modifiables. Vous ne saisissez que ce qui est propre ï¿½ chaque monture.",
         actions: [
-          "Choisissez la forme, la marque, la couleur et la matière dans les listes du carton.",
-          "La référence est lue automatiquement depuis la photo de la branche.",
-          "Le formulaire n'exige pas de saisie manuelle de référence pour valider.",
-          "« Créer l'identifiant » génère un ID unique et met la monture en stock.",
-          "Une référence déjà utilisée dans ce carton est refusée."
+          "Choisissez la forme, la marque, la couleur et la matiï¿½re dans les listes du carton.",
+          "La rï¿½fï¿½rence est lue automatiquement depuis la photo de la branche.",
+          "Le formulaire n'exige pas de saisie manuelle de rï¿½fï¿½rence pour valider.",
+          "ï¿½ Crï¿½er l'identifiant ï¿½ gï¿½nï¿½re un ID unique et met la monture en stock.",
+          "Une rï¿½fï¿½rence dï¿½jï¿½ utilisï¿½e dans ce carton est refusï¿½e."
         ]
       },
       stock: {
         titre: 'Gestion du stock',
-        intro: "L'inventaire de toutes les montures enregistrées, avec leur identifiant unique.",
+        intro: "L'inventaire de toutes les montures enregistrï¿½es, avec leur identifiant unique.",
         actions: [
-          "Les compteurs en haut donnent le volume, la valeur d'achat et la diversité du stock.",
-          "Le tableau liste chaque monture avec sa référence, sa marque, sa forme et son identifiant."
+          "Les compteurs en haut donnent le volume, la valeur d'achat et la diversitï¿½ du stock.",
+          "Le tableau liste chaque monture avec sa rï¿½fï¿½rence, sa marque, sa forme et son identifiant."
         ]
       },
       scan: {
         titre: 'Lecteur de codes-barres',
-        intro: "Deux façons de lire une étiquette : le téléphone en lecteur sans fil, ou la saisie au clavier en secours.",
+        intro: "Deux faï¿½ons de lire une ï¿½tiquette : le tï¿½lï¿½phone en lecteur sans fil, ou la saisie au clavier en secours.",
         actions: [
-          "« Connecter le téléphone » affiche un code d'appairage à scanner.",
+          "ï¿½ Connecter le tï¿½lï¿½phone ï¿½ affiche un code d'appairage ï¿½ scanner.",
           "En cas de panne, saisissez le code du carton dans le champ de droite.",
-          "La liste des cartons à enregistrer pré-remplit le champ d'un clic."
+          "La liste des cartons ï¿½ enregistrer prï¿½-remplit le champ d'un clic."
         ]
       },
       expedier: {
-        titre: 'Commandes à expédier',
-        intro: "Les boutiques reçoivent du stock de trois façons : automatiquement quand une catégorie passe sous son minimum de genre, de type ou de gamme, sur demande d'un responsable de magasin, ou par une liste que l'administrateur a créée lui-même.",
+        titre: 'Commandes ï¿½ expï¿½dier',
+        intro: "Les boutiques reï¿½oivent du stock de trois faï¿½ons : automatiquement quand une catï¿½gorie passe sous son minimum de genre, de type ou de gamme, sur demande d'un responsable de magasin, ou par une liste que l'administrateur a crï¿½ï¿½e lui-mï¿½me.",
         actions: [
           "Choisissez la ville en haut ; la pastille indique le nombre de demandes en attente.",
-          "Le filtre par origine sépare les envois automatiques, les demandes des responsables et les listes de l'administrateur.",
-          "Ouvrez une demande pour voir la liste des montures à prélever."
+          "Le filtre par origine sï¿½pare les envois automatiques, les demandes des responsables et les listes de l'administrateur.",
+          "Ouvrez une demande pour voir la liste des montures ï¿½ prï¿½lever."
         ]
       },
       demande: {
-        titre: "Préparation d'une expédition",
-        intro: "La liste arrive grisée : chaque ligne donne l'emplacement exact de la monture — valise, carton, référence et identifiant unique. Le scan est ce qui confirme le prélèvement physique.",
+        titre: "Prï¿½paration d'une expï¿½dition",
+        intro: "La liste arrive grisï¿½e : chaque ligne donne l'emplacement exact de la monture ï¿½ valise, carton, rï¿½fï¿½rence et identifiant unique. Le scan est ce qui confirme le prï¿½lï¿½vement physique.",
         actions: [
-          "Scannez chaque monture : la ligne se dégrise et passe au vert.",
-          "Tant qu'il reste une ligne grisée, le carton ne peut pas être créé.",
-          "« Créer le carton » génère un QR code que le responsable du magasin scannera à l'arrivée.",
-          "À la création, les montures sortent du stock — le compteur baisse immédiatement."
+          "Scannez chaque monture : la ligne se dï¿½grise et passe au vert.",
+          "Tant qu'il reste une ligne grisï¿½e, le carton ne peut pas ï¿½tre crï¿½ï¿½.",
+          "ï¿½ Crï¿½er le carton ï¿½ gï¿½nï¿½re un QR code que le responsable du magasin scannera ï¿½ l'arrivï¿½e.",
+          "ï¿½ la crï¿½ation, les montures sortent du stock ï¿½ le compteur baisse immï¿½diatement."
         ]
       },
       historique: {
-        titre: 'Historique des expéditions',
-        intro: "Chaque carton créé apparaît ici et traverse trois états avant l'archivage.",
+        titre: 'Historique des expï¿½ditions',
+        intro: "Chaque carton crï¿½ï¿½ apparaï¿½t ici et traverse trois ï¿½tats avant l'archivage.",
         actions: [
-          "En transit : le carton est parti, la boutique ne l'a pas encore scanné.",
-          "Reçu · en cours d'enregistrement : le code-barres du carton a été scanné en boutique.",
-          "Montures enregistrées : la boutique a scanné chaque monture, le bon peut être archivé.",
-          "Cliquez un bon pour voir la liste des montures envoyées, grises jusqu'à leur scan."
+          "En transit : le carton est parti, la boutique ne l'a pas encore scannï¿½.",
+          "Reï¿½u ï¿½ en cours d'enregistrement : le code-barres du carton a ï¿½tï¿½ scannï¿½ en boutique.",
+          "Montures enregistrï¿½es : la boutique a scannï¿½ chaque monture, le bon peut ï¿½tre archivï¿½.",
+          "Cliquez un bon pour voir la liste des montures envoyï¿½es, grises jusqu'ï¿½ leur scan."
         ]
       },
       expedition: {
-        titre: 'Détail du bon expédié',
-        intro: "La liste des montures envoyées avec ce carton. Elles restent grises jusqu'au scan en boutique.",
+        titre: 'Dï¿½tail du bon expï¿½diï¿½',
+        intro: "La liste des montures envoyï¿½es avec ce carton. Elles restent grises jusqu'au scan en boutique.",
         actions: [
-          "« Scan du carton par la boutique » fait passer le bon en réception.",
-          "« Scanner la monture suivante » simule le travail du responsable de magasin.",
-          "« Archiver ce bon » ne s'active que quand toutes les montures sont enregistrées."
+          "ï¿½ Scan du carton par la boutique ï¿½ fait passer le bon en rï¿½ception.",
+          "ï¿½ Scanner la monture suivante ï¿½ simule le travail du responsable de magasin.",
+          "ï¿½ Archiver ce bon ï¿½ ne s'active que quand toutes les montures sont enregistrï¿½es."
         ]
       },
-      process: { titre: 'Le process du poste', intro: "Page de référence sur le rôle du stock général dans la chaîne.", actions: ["Parcourez les quatre étapes pour situer votre saisie."] }
+      process: { titre: 'Le process du poste', intro: "Page de rï¿½fï¿½rence sur le rï¿½le du stock gï¿½nï¿½ral dans la chaï¿½ne.", actions: ["Parcourez les quatre ï¿½tapes pour situer votre saisie."] }
     };
     const h = H[s.screen] || H.commandes;
 
@@ -1958,7 +2047,11 @@ class Component extends DCLogic {
         if (!k) return;
         this.setState({ hist: h, back: true, screen: k });
       },
-      logout: () => { window.location.href = 'Connexion.dc.html'; },
+      logout: () => { 
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = 'index.html'; 
+      },
       stop: e => e.stopPropagation(),
 
       ...(() => {
@@ -2220,13 +2313,13 @@ class Component extends DCLogic {
       scanTargetKind: s.scanTarget ? s.scanTarget.kind : 'valise',
       scanTargetLabel: s.scanTarget && s.scanTarget.kind === 'carton' ? 'Carton' : 'Valise',
       scanTargetIntro: s.scanTarget && s.scanTarget.kind === 'carton'
-        ? "Connectez votre téléphone comme lecteur, ou saisissez le code d'un carton à la main."
-        : "Connectez votre téléphone comme lecteur, ou saisissez le code d'une valise à la main.",
+        ? "Connectez votre tï¿½lï¿½phone comme lecteur, ou saisissez le code d'un carton ï¿½ la main."
+        : "Connectez votre tï¿½lï¿½phone comme lecteur, ou saisissez le code d'une valise ï¿½ la main.",
       scanManualPrompt: s.scanTarget && s.scanTarget.kind === 'carton'
-        ? 'Recours si le lecteur est en panne. Saisissez le code imprimé sur le carton.'
-        : 'Recours si le lecteur est en panne. Saisissez le code imprimé sur la valise.',
+        ? 'Recours si le lecteur est en panne. Saisissez le code imprimï¿½ sur le carton.'
+        : 'Recours si le lecteur est en panne. Saisissez le code imprimï¿½ sur la valise.',
       scanCodeLabel: s.scanTarget && s.scanTarget.kind === 'carton' ? 'CODE DU CARTON' : 'CODE DE LA VALISE',
-      scanTargetsLabel: s.scanTarget && s.scanTarget.kind === 'carton' ? 'CARTONS À SCANNER' : 'VALISES À SCANNER',
+      scanTargetsLabel: s.scanTarget && s.scanTarget.kind === 'carton' ? 'CARTONS ï¿½ SCANNER' : 'VALISES ï¿½ SCANNER',
       scanManualPlaceholder: s.scanTarget && s.scanTarget.kind === 'carton' ? 'CTN-0004' : 'VAL-0101',
       scanSubmitLabel: s.scanTarget && s.scanTarget.kind === 'carton' ? 'Ouvrir le carton' : 'Valider la valise',
       scanTargetCode: s.scanTarget ? s.scanTarget.code : '',
@@ -2288,19 +2381,19 @@ class Component extends DCLogic {
         ? `display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap;box-shadow:0 14px 30px -14px rgba(191,33,120,${(.6 * glow).toFixed(2)}),inset 0 1px 0 var(--srf-5);transition:all .28s ${ease}`
         : `display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13.5px/1.3 Manrope,sans-serif;cursor:not-allowed;white-space:nowrap`,
       formHint: plein ? 'Carton complet.'
-        : dejaVu ? 'Cette monture existe déjà : utilisez « Dupliquer » sur sa fiche pour en ajouter un exemplaire.'
-        : refTrim.length < 3 ? 'La référence est détectée automatiquement depuis la photo de la branche.'
+        : dejaVu ? 'Cette monture existe dï¿½jï¿½ : utilisez ï¿½ Dupliquer ï¿½ sur sa fiche pour en ajouter un exemplaire.'
+        : refTrim.length < 3 ? 'La rï¿½fï¿½rence est dï¿½tectï¿½e automatiquement depuis la photo de la branche.'
         : !s.fCouleur ? 'Choisissez la couleur de la monture.'
-        : !s.fMatiere ? 'Choisissez la matière de la monture.'
-        : s.quantiteACreer > 1 ? `Prêt. ${s.quantiteACreer} copies seront créées.`
-        : 'Prêt. L\'identifiant sera généré automatiquement.',
+        : !s.fMatiere ? 'Choisissez la matiï¿½re de la monture.'
+        : s.quantiteACreer > 1 ? `Prï¿½t. ${s.quantiteACreer} copies seront crï¿½ï¿½es.`
+        : 'Prï¿½t. L\'identifiant sera gï¿½nï¿½rï¿½ automatiquement.',
       hintColor: dejaVu ? 'var(--acc-ink)' : (canCreate ? 'var(--ok-ink)' : 'var(--ink-6)'),
       
       createMonture: async () => {
         if (!cart) return;
-        if (plein) { this.toast('triangle-alert', 'Carton complet', `${kQty} montures déjà créées`, 'warn'); return; }
-        if (refTrim.length < 3) { this.toast('triangle-alert', 'Référence manquante', 'Au moins 3 caractères', 'warn'); return; }
-        if (dejaVu) { this.toast('triangle-alert', 'Référence en double', refTrim, 'warn'); return; }
+        if (plein) { this.toast('triangle-alert', 'Carton complet', `${kQty} montures dï¿½jï¿½ crï¿½ï¿½es`, 'warn'); return; }
+        if (refTrim.length < 3) { this.toast('triangle-alert', 'Rï¿½fï¿½rence manquante', 'Au moins 3 caractï¿½res', 'warn'); return; }
+        if (dejaVu) { this.toast('triangle-alert', 'Rï¿½fï¿½rence en double', refTrim, 'warn'); return; }
         if (!s.stationId) {
           this.toast('triangle-alert', 'Station inconnue', 'Reconnectez-vous avant de valider.', 'warn');
           return;
@@ -2349,7 +2442,7 @@ class Component extends DCLogic {
         }
         const uid = saved && saved.barcode ? saved.barcode : null;
         if (!uid) {
-          this.toast('triangle-alert', 'Identifiant non reçu', 'Le backend n’a pas renvoyé de code-barres valide.', 'warn');
+          this.toast('triangle-alert', 'Identifiant non reï¿½u', 'Le backend nï¿½a pas renvoyï¿½ de code-barres valide.', 'warn');
           return;
         }
         const monture = { id: saved.glass_id ? 'g' + saved.glass_id : 'glass-' + uid, ref: refTrim, forme: s.fForme, marque: s.fMarque, couleur: s.fCouleur, matiere: s.fMatiere, uid };
@@ -2432,7 +2525,11 @@ class Component extends DCLogic {
               carton: cart.code,
               site: 'Stock gÃ©nÃ©ral',
               statut: 'stock',
-              photo: copie.photo
+              photo: copie.photo,
+              ref_bon: cmd.ref,
+              cmdId: cmd.id,
+              valId: val.id,
+              cartId: cart.id
             }));
             S.set({ montures: [...nouvelles, ...(S.get().montures || [])] });
             S.mouvement({
@@ -2498,10 +2595,16 @@ class Component extends DCLogic {
           stockFiltresVisible: dispoAll.length > 0,
           stockRows: view.slice().reverse().map(m => ({
             ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
-            couleur: m.couleur || 'â€”', matiere: m.matiere || 'â€”',
+            genre: m.genre || 'â€”', couleur: m.couleur || 'â€”', matiere: m.matiere || 'â€”',
             prix: this.fcfa(m.prix), uid: m.uid,
-            photoUrl: m.photo || '',
-            photoMissing: !m.photo,
+            emplacement: m.location || m.emplacement || m.carton || 'â€”',
+            valiseCarton: (m.valise && m.carton)
+              ? `${m.valise} / ${m.carton}`
+              : (m.valise || m.carton)
+                ? `${m.valise || m.carton} / ${m.carton || m.valise || 'â€”'}`
+                : 'â€” / â€”',
+            photoUrl: this.photoUrl(m.photo),
+            photoMissing: !this.photoUrl(m.photo),
             photoStyle: `width:46px;height:46px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden;background:linear-gradient(140deg,#9AA0AD,#5A6070);border:1px solid var(--ink-12);box-shadow:inset 0 1px 0 var(--srf-3)`
           }))
         };
@@ -2565,20 +2668,35 @@ class Component extends DCLogic {
           santeRegle: `Base magasin Ã— ${String(cfg.coefGeneral || 1).replace('.', ',')} : le stock gÃ©nÃ©ral couvre les ${(((cfg.ventesMoisBoutique || 400) * (cfg.boutiques || 5))).toLocaleString('fr-FR')} ventes mensuelles du rÃ©seau, soit deux mois de couverture.`,
           santeRempli: total > 0,
           ...(() => {
-            const lignes = [];
-            const parAxe = {};
-            AXES.forEach(a => {
-              const table = cfg[a.cle] || {};
-              parAxe[a.label] = 0;
-              Object.keys(table).forEach(v => {
-                const n = LOT.filter(x => x[a.cle] === v).length;
-                const mini = S0 ? S0.seuil(a.cle, v, SITE) : table[v];
-                if (!mini || n >= mini) return;
-                parAxe[a.label] += mini - n;
-                lignes.push({ axe: a.label, valeur: v, ecart: mini - n });
+            // Use backend needs if available, otherwise calculate locally
+            let lignes = [];
+            let totalEcart = 0;
+            
+            if (DB.stockNeeds && Array.isArray(DB.stockNeeds)) {
+              // Use pre-calculated needs from backend
+              lignes = DB.stockNeeds.map(item => ({
+                axe: item.category || item.axis || item.type || 'Genre',
+                valeur: item.name || item.value || 'â€”',
+                ecart: Number(item.quantity || item.ecart || 0)
+              }));
+              totalEcart = DB.stockNeeds.reduce((sum, item) => sum + Number(item.quantity || item.ecart || 0), 0);
+            } else {
+              // Fall back to local calculation
+              const parAxe = {};
+              AXES.forEach(a => {
+                const table = cfg[a.cle] || {};
+                parAxe[a.label] = 0;
+                Object.keys(table).forEach(v => {
+                  const n = LOT.filter(x => x[a.cle] === v).length;
+                  const mini = S0 ? S0.seuil(a.cle, v, SITE) : table[v];
+                  if (!mini || n >= mini) return;
+                  parAxe[a.label] += mini - n;
+                  lignes.push({ axe: a.label, valeur: v, ecart: mini - n });
+                });
               });
-            });
-            const totalEcart = Math.max(0, ...Object.values(parAxe));
+              totalEcart = Math.max(0, ...Object.values(parAxe));
+            }
+            
             const appros = (DB.approvisionnements || []);
             const enAttente = appros.filter(a => a.statut === 'attente');
             const tagOf = st => st === 'commande' ? tagOk : (st === 'refuse' ? tagMag : tagWarn);
@@ -2621,7 +2739,7 @@ class Component extends DCLogic {
         };
       })(),
       stockVide: dispoStock.length === 0,
-      stockToutExpedie: dispoStock.length === 0 && (DB.montures || []).length > 0,
+      stockToutExpedie: dispoStock.length === 0 && (DB.montures || []).some(m => !estStockGeneral(m)),
       stockJamaisEnregistre: (DB.montures || []).length === 0,
       stockRowsUnused: stock.slice().reverse().filter(m => !m.sorti).map(m => ({
         ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
@@ -2672,13 +2790,13 @@ class Component extends DCLogic {
           if (!val) return [];
           return val.cartons.filter(k => k.id !== target.cartId).map(k => ({
             code: String(k.code || '').toUpperCase(),
-            info: `${val.gamme} · ${k.qty || k.quantity || 0} montures`,
+            info: `${val.gamme} ï¿½ ${k.qty || k.quantity || 0} montures`,
             onFill: () => this.setState({ manualCode: String(k.code || '').toUpperCase() })
           })).slice(0, 4);
         }
         return commandesDB.flatMap(c => c.valises.filter(v => !v.scanned).map(v => ({
           code: String(v.code || v.couleur || v.id || '').toUpperCase(),
-          info: `${v.gamme} · ${v.montures} montures`,
+          info: `${v.gamme} ï¿½ ${v.montures} montures`,
           onFill: () => this.setState({ manualCode: String(v.code || v.couleur || v.id || '').toUpperCase() })
         }))).slice(0, 4);
       })(),
@@ -2705,7 +2823,7 @@ class Component extends DCLogic {
 
         const hit = commandesDB.flatMap(c => c.valises.filter(v => !v.scanned).map(v => ({ c, v }))).find(({ v }) => String(v.code || v.couleur || v.id || '').replace(/[\s_-]+/g, '').toUpperCase() === raw);
         if (!hit) {
-          this.toast('triangle-alert', 'Valise inconnue', `Aucune valise non scannée ne porte ${s.manualCode.trim() || raw}`, 'warn');
+          this.toast('triangle-alert', 'Valise inconnue', `Aucune valise non scannï¿½e ne porte ${s.manualCode.trim() || raw}`, 'warn');
           return;
         }
         this.setState({ manualCode: '' });

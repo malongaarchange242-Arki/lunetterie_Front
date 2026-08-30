@@ -338,6 +338,10 @@ input::placeholder{color:var(--ink-34)}
                     </select>
                   </div>
                   <div>
+                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">GENRE</div>
+                    <input value="{{ fGenre }}" readonly style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:default">
+                  </div>
+                  <div>
                     <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">MATIÈRE</div>
                     <select value="{{ fMatiere }}" onChange="{{ setMatiere }}" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer">
                       <sc-for list="{{ matiereOpts }}" as="o" hint-placeholder-count="2">
@@ -584,11 +588,11 @@ input::placeholder{color:var(--ink-34)}
         <sc-if value="{{ stockTableVisible }}" hint-placeholder-val="{{ true }}">
         <div style="border-radius:24px;overflow:hidden;border:1px solid var(--ink-09);background:linear-gradient(160deg,var(--srf-9),var(--srf-64));backdrop-filter:blur(24px);box-shadow:0 24px 56px -30px var(--ink-2)">
          <div style="overflow-x:auto"><div style="min-width:960px">
-          <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(140px,1.1fr);gap:14px;padding:14px 22px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
-            <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>COULEUR</div><div>MATIÈRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div style="text-align:right">IDENTIFIANT</div>
+          <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(140px,1.1fr);gap:14px;padding:14px 22px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
+            <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>GENRE</div><div>COULEUR</div><div>MATIÈRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div style="text-align:right">IDENTIFIANT</div>
           </div>
           <sc-for list="{{ stockRows }}" as="r" hint-placeholder-count="0">
-            <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(140px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
+            <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(140px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
               <div style="{{ r.photoStyle }}">
                 <sc-if value="{{ r.photoUrl }}" hint-placeholder-val="false"><img bindSrc="{{ r.photoUrl }}" alt="Photo monture" style="display:block;width:100%;height:100%;object-fit:cover"></sc-if>
                 <sc-if value="{{ r.photoMissing }}" hint-placeholder-val="true"><span data-icon="glasses" style="display:grid;place-items:center;font-size:17px;color:var(--srf-9)"></span></sc-if>
@@ -596,6 +600,7 @@ input::placeholder{color:var(--ink-34)}
               <div style="min-width:0;font:600 12.5px/1.3 'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.ref }}</div>
               <div style="min-width:0;font:500 12.5px/1.3 Manrope,sans-serif;color:var(--ink-72)">{{ r.marque }}</div>
               <div style="min-width:0;font:500 12.5px/1.3 Manrope,sans-serif;color:var(--ink-72)">{{ r.forme }}</div>
+              <div style="min-width:0;font:500 12.5px/1.3 Manrope,sans-serif;color:var(--ink-72)">{{ r.genre }}</div>
               <div style="min-width:0;font:500 12px/1.3 Manrope,sans-serif;color:var(--ink-72)">{{ r.couleur }}</div>
               <div style="min-width:0;font:500 12px/1.3 Manrope,sans-serif;color:var(--ink-68)">{{ r.matiere }}</div>
               <div style="min-width:0;font:500 12px/1.3 Manrope,sans-serif;color:var(--ink-68)">{{ r.gamme }}</div>
@@ -1067,7 +1072,7 @@ class Component extends DCLogic {
   state = {
     screen: 'commandes',
     cmdId: null, valId: null, cartId: null,
-    fForme: '', fMarque: '', fCouleur: '', fMatiere: '', fRef: '', photo: false, photoPreview: null, photoData: null, captureLabel: 'Prendre une photo',
+    fForme: '', fMarque: '', fCouleur: '', fMatiere: '', fGenre: '', fRef: '', photo: false, photoPreview: null, photoData: null, captureLabel: 'Prendre une photo',
     scanning: false, helpOpen: false, toast: null,
     manualCode: '', phonePaired: false, pairing: false,
     stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes', compoOnglet: 'Marque',
@@ -1145,6 +1150,12 @@ class Component extends DCLogic {
     if (window.lucide) run(); else setTimeout(run, 400);
   }
 
+  photoUrl(raw) {
+    const value = String(raw || '').trim();
+    const match = value.match(/https?:\/\/[^\s\])'",]+/i);
+    return match ? match[0] : value;
+  }
+
   fcfa(n) { return (n || 0).toLocaleString('fr-FR') + ' F CFA'; }
   dateFr() {
     const d = new Date();
@@ -1180,8 +1191,27 @@ class Component extends DCLogic {
   valScanned(c) { return c.valises.filter(v => v.scanned).length; }
   cmdRecu(c) { return c.valises.every(v => v.scanned); }
   packed(carton) { return carton.saisies.length; }
-  valiseDone(v) { return v.cartons.reduce((a, k) => a + k.saisies.length, 0); }
-  cmdDone(c) { return c.valises.reduce((a, v) => a + this.valiseDone(v), 0); }
+  valiseDone(v, cmd) {
+    const localCount = v.cartons.reduce((a, k) => a + k.saisies.length, 0);
+    const S = window.LStore ? window.LStore.get() : {};
+    const stock = (S.montures || []).filter(m => {
+      if (!m || m.valise !== v.couleur) return false;
+      if (cmd && ((m.cmdId && String(m.cmdId) === String(cmd.id)) || (m.ref_bon && String(m.ref_bon) === String(cmd.ref)))) return true;
+      return v.cartons.some(k => k.code === m.carton);
+    }).length;
+    return Math.max(localCount, stock);
+  }
+  cmdDone(c) {
+    const localCount = c.valises.reduce((a, v) => a + this.valiseDone(v, c), 0);
+    const S = window.LStore ? window.LStore.get() : {};
+    const stockCount = (S.montures || []).filter(m => {
+      if (!m) return false;
+      if (m.cmdId && String(m.cmdId) === String(c.id)) return true;
+      if (m.ref_bon && String(m.ref_bon) === String(c.ref)) return true;
+      return c.valises.some(v => v.couleur === m.valise && v.cartons.some(k => k.code === m.carton));
+    }).length;
+    return Math.max(localCount, stockCount);
+  }
   cmdTotal(c) { return c.valises.reduce((a, v) => a + v.montures, 0); }
 
   allStock() {
@@ -1235,6 +1265,7 @@ class Component extends DCLogic {
         fMarque: cart ? (cart.marques[0] || '') : '',
         fCouleur: cart ? ((cart.couleurs || [])[0] || '') : '',
         fMatiere: cart ? ((cart.matieres || [])[0] || '') : '',
+        fGenre: val ? (val.genre || '') : '',
         fRef: '', photo: false
       });
       this.toast('badge-check', 'Carton ouvert', cart ? `${cart.code} · ${cart.qty} montures` : '', 'ok');
@@ -1454,10 +1485,11 @@ class Component extends DCLogic {
 
     const photoImages = ['linear-gradient(140deg,#7C8AA6,#3D4A63)', 'linear-gradient(140deg,#A68B7C,#63503D)', 'linear-gradient(140deg,#8B7CA6,#4A3D63)', 'linear-gradient(140deg,#7CA69B,#3D635A)'];
 
-    const dispoStock = (DB.montures || []).filter(m => m.site === 'Stock général' && m.statut !== 'transit');
+    const estStockGeneral = m => m && (m.statut === 'stock' || m.statut === 'EN_STOCK_GENERAL');
+    const dispoStock = (DB.montures || []).filter(estStockGeneral);
     const kpis = [
       { label: 'DISPONIBLES EN STOCK', value: dispoStock.length.toLocaleString('fr-FR'), color: 'var(--info-ink)' },
-      { label: 'SORTIES VERS BOUTIQUES', value: (DB.montures || []).filter(m => m.site !== 'Stock général' || m.statut === 'transit').length.toLocaleString('fr-FR'), color: 'var(--acc-ink)' },
+      { label: 'SORTIES VERS BOUTIQUES', value: (DB.montures || []).filter(m => !estStockGeneral(m)).length.toLocaleString('fr-FR'), color: 'var(--acc-ink)' },
       { label: 'VALEUR DISPONIBLE', value: (dispoStock.reduce((a, m) => a + m.prix, 0) / 1000).toFixed(0) + ' k', color: 'var(--ok-ink)' },
       { label: 'MARQUES DISPONIBLES', value: String(new Set(dispoStock.map(m => m.marque)).size), color: 'var(--ink)' }
     ];
@@ -1601,7 +1633,11 @@ class Component extends DCLogic {
         if (!k) return;
         this.setState({ hist: h, back: true, screen: k });
       },
-      logout: () => { window.location.href = 'Connexion.dc.html'; },
+      logout: () => { 
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = 'index.html'; 
+      },
       stop: e => e.stopPropagation(),
 
       ...(() => {
@@ -1894,11 +1930,12 @@ class Component extends DCLogic {
       marqueOpts: cart ? cart.marques.map(m => ({ label: m, value: m })) : [],
       couleurOpts: cart ? (cart.couleurs || []).map(c => ({ label: c, value: c })) : [],
       matiereOpts: cart ? (cart.matieres || []).map(m => ({ label: m, value: m })) : [],
-      fForme: s.fForme, fMarque: s.fMarque, fCouleur: s.fCouleur, fMatiere: s.fMatiere, fRef: s.fRef,
+      fForme: s.fForme, fMarque: s.fMarque, fCouleur: s.fCouleur, fMatiere: s.fMatiere, fGenre: s.fGenre || (val ? val.genre : ''), fRef: s.fRef,
       setForme: e => this.setState({ fForme: e.target.value }),
       setMarque: e => this.setState({ fMarque: e.target.value }),
       setCouleur: e => this.setState({ fCouleur: e.target.value }),
       setMatiere: e => this.setState({ fMatiere: e.target.value }),
+      setGenre: e => this.setState({ fGenre: e.target.value }),
       setRef: e => this.setState({ fRef: e.target.value }),
 
       // ✅ MODIFICATION 6 : Suppression des anciennes variables photo et ajout des nouvelles
@@ -1924,7 +1961,7 @@ class Component extends DCLogic {
           this.toast('triangle-alert', 'Identifiant non reçu', 'Le backend n’a pas renvoyé de code-barres valide.', 'warn');
           return;
         }
-        const monture = { id: saved.glass_id ? 'g' + saved.glass_id : 'glass-' + uid, ref: refTrim, forme: s.fForme, marque: s.fMarque, couleur: s.fCouleur, matiere: s.fMatiere, uid, photo: s.photoData };
+        const monture = { id: saved.glass_id ? 'g' + saved.glass_id : 'glass-' + uid, ref: refTrim, forme: s.fForme, marque: s.fMarque, couleur: s.fCouleur, matiere: s.fMatiere, genre: s.fGenre || (val && val.genre ? val.genre : ''), uid, photo: s.photoData };
         this.setArrivees(list => list.map(c => c.id !== cmd.id ? c : {
             ...c,
             valises: c.valises.map(v => v.id !== val.id ? v : {
@@ -1935,7 +1972,7 @@ class Component extends DCLogic {
         this.setState({ fRef: '', photoPreview: null, photoData: null, captureLabel: 'Prendre une photo' });
         const S = window.LStore;
         if (S) {
-          S.set({ montures: [{ uid, ref: refTrim, marque: s.fMarque, forme: s.fForme, couleur: s.fCouleur, matiere: s.fMatiere, gamme: cart.gamme, type: cart.type, genre: val.genre, prix: cart.prix, valise: val.couleur, carton: cart.code, site: 'Stock général', statut: 'stock', photo: s.photoData }, ...(S.get().montures || [])] });
+          S.set({ montures: [{ uid, ref: refTrim, marque: s.fMarque, forme: s.fForme, couleur: s.fCouleur, matiere: s.fMatiere, gamme: cart.gamme, type: cart.type, genre: s.fGenre || val.genre, prix: cart.prix, valise: val.couleur, carton: cart.code, site: 'Stock général', statut: 'stock', photo: s.photoData, ref_bon: cmd.ref, cmdId: cmd.id, valId: val.id, cartId: cart.id }, ...(S.get().montures || [])] });
           S.mouvement({ sens: 'entree', de: 'Pré-enregistrement', vers: 'Stock général', ref: cmd.ref, motif: 'Enregistrement', qty: 1, valise: val.couleur, carton: cart.code, monture: refTrim });
         }
         this.toast('fingerprint', 'Monture enregistrée', uid, 'ok');
@@ -1944,7 +1981,7 @@ class Component extends DCLogic {
       saisies: cart ? cart.saisies.slice().reverse().map(m => {
         const jumeaux = cart.saisies.filter(x => x.ref.toLowerCase() === m.ref.toLowerCase() && x.couleur === m.couleur && x.matiere === m.matiere).length;
         return {
-        ref: m.ref, forme: m.forme, marque: m.marque, couleur: m.couleur, matiere: m.matiere, uid: m.uid,
+        ref: m.ref, forme: m.forme, marque: m.marque, couleur: m.couleur, matiere: m.matiere, genre: m.genre || val.genre, uid: m.uid,
         exemplaires: jumeaux > 1 ? `×${jumeaux} en stock` : '1 exemplaire',
         exemplairesStyle: jumeaux > 1
           ? 'display:inline-flex;padding:3px 9px;border-radius:999px;white-space:nowrap;font:600 10px/1.4 Manrope,sans-serif;background:rgba(52,201,141,.14);border:1px solid rgba(30,143,99,.3);color:var(--ok-ink)'
@@ -2005,7 +2042,11 @@ class Component extends DCLogic {
               carton: cart.code,
               site: 'Stock général',
               statut: 'stock',
-              photo: copie.photo
+              photo: copie.photo,
+              ref_bon: cmd.ref,
+              cmdId: cmd.id,
+              valId: val.id,
+              cartId: cart.id
             }));
             S.set({ montures: [...nouvelles, ...(S.get().montures || [])] });
             S.mouvement({
@@ -2071,10 +2112,10 @@ class Component extends DCLogic {
           stockFiltresVisible: dispoAll.length > 0,
           stockRows: view.slice().reverse().map(m => ({
             ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
-            couleur: m.couleur || '—', matiere: m.matiere || '—',
+            genre: m.genre || '—', couleur: m.couleur || '—', matiere: m.matiere || '—',
             prix: this.fcfa(m.prix), uid: m.uid,
-            photoUrl: m.photo || '',
-            photoMissing: !m.photo,
+            photoUrl: this.photoUrl(m.photo),
+            photoMissing: !this.photoUrl(m.photo),
             photoStyle: `width:46px;height:46px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden;background:linear-gradient(140deg,#9AA0AD,#5A6070);border:1px solid var(--ink-12);box-shadow:inset 0 1px 0 var(--srf-3)`
           }))
         };
@@ -2194,7 +2235,7 @@ class Component extends DCLogic {
         };
       })(),
       stockVide: dispoStock.length === 0,
-      stockToutExpedie: dispoStock.length === 0 && (DB.montures || []).length > 0,
+      stockToutExpedie: dispoStock.length === 0 && (DB.montures || []).some(m => !estStockGeneral(m)),
       stockJamaisEnregistre: (DB.montures || []).length === 0,
       stockRowsUnused: stock.slice().reverse().filter(m => !m.sorti).map(m => ({
         ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
