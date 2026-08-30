@@ -220,6 +220,7 @@ class Component extends DCLogic {
     { label: 'Magasinier stock Generale', code: 'RÔLE · STOCK GÉNÉRAL', titre: 'Magasinier stock Generale', desc: 'Suivi des montures et verres en stock, entrées et sorties, inventaire tournant en boutique.', icon: 'glasses' },
     { label: 'Magasinier Pre-enregistrment', code: 'RÔLE · PRÉ-ENREGISTREMENT', titre: 'Magasinier Pre-enregistrment', desc: 'Déclaration des arrivages fournisseurs avant contrôle physique et mise en rayon.', icon: 'clipboard-list' },
     { label: 'Responsable magasin', code: 'RÔLE · RESPONSABLE MAGASIN', titre: 'Responsable magasin', desc: 'Réception des cartons en boutique, stock du magasin, demandes de réassort et transferts entre magasins.', icon: 'store' },
+    { label: 'Catalogue', code: 'RÔLE · CATALOGUE', titre: 'Catalogue', desc: 'Sélection des modèles disponibles au stock général et préparation des commandes catalogue.', icon: 'shopping-bag' },
     { label: 'Admin', code: 'RÔLE · ADMINISTRATEUR', titre: 'Admin', desc: 'Bons de commande fournisseurs, validation des listes, vue du réseau et expéditions internes.', icon: 'shield-check' }
   ];
 
@@ -367,7 +368,7 @@ class Component extends DCLogic {
         if (data.success && data.data && data.data.token) {
           localStorage.setItem('token', data.data.token);
           localStorage.setItem('user', JSON.stringify(data.data.user));
-          const routes = ['Stock general.dc.html', 'Pre-enregistrement.dc.html', 'Responsable magasin.dc.html', 'Admin.dc.html'];
+          const routes = ['Stock general.dc.html', 'Pre-enregistrement.dc.html', 'Responsable magasin.dc.html', 'Catalogue.html', 'Admin.dc.html'];
           window.location.href = routes[selIdx] || 'Stock general.dc.html';
         } else {
           this.setState({ loading: false, error: true });

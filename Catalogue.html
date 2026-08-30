@@ -54,9 +54,6 @@
     </div>
 
     <div style="margin-top:auto;display:flex;flex-direction:column;gap:12px">
-      <button onClick="{{ seed }}" style="display:flex;align-items:center;gap:11px;width:100%;padding:13px 15px;border-radius:999px;border:1px dashed rgba(166,106,5,.4);background:rgba(245,165,36,.12);color:var(--warn-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;text-align:left;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(245,165,36,.2)">
-        <span data-icon="flask-conical" style="display:grid;place-items:center;font-size:16px;flex:none"></span>Montures de test
-      </button>
       <button onClick="{{ goMagasin }}" style="display:flex;align-items:center;gap:11px;width:100%;padding:13px 15px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-6);color:var(--ink-72);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;text-align:left;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-9);color:var(--ink)">
         <span data-icon="corner-up-left" style="display:grid;place-items:center;font-size:16px;flex:none"></span>{{ retourLabel }}
       </button>
@@ -333,9 +330,62 @@ class Component extends DCLogic {
       const v = L.version(), t = L.theme();
       if (v !== this._v || t !== this._t) { this._v = v; this._t = t; this.setState({ _tick: Date.now() }); }
     }, 500);
+    this.loadBackendStock();
   }
   componentDidUpdate() { this.icons(); this.paintBg(); }
   componentWillUnmount() { clearTimeout(this.tt); clearInterval(this._poll); if (this._sub) this._sub(); }
+
+  apiBaseUrl() {
+    return 'https://api-lunetterie.universearch.com';
+  }
+  apiHeaders() {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+  async loadBackendStock() {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        this._backendStock = [];
+        return;
+      }
+      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/glasses?status=EN_STOCK_GENERAL`, {
+        headers: this.apiHeaders()
+      });
+      if (!response.ok) {
+        this._backendStock = [];
+        return;
+      }
+      const payload = await response.json();
+      const list = payload && payload.data && Array.isArray(payload.data.glasses) ? payload.data.glasses : [];
+      this._backendStock = list
+        .filter(item => (item.status || '').toUpperCase() === 'EN_STOCK_GENERAL')
+        .map(item => ({
+          uid: item.barcode || item.id || `${Date.now()}-${Math.random()}`,
+          ref: item.reference || item.barcode || '',
+          marque: item.brand || '—',
+          forme: item.shape || '—',
+          couleur: item.color || 'Sans couleur',
+          matiere: item.material || '—',
+          gamme: item.gamme || '—',
+          type: item.mount_type || '—',
+          genre: item.gender || '—',
+          prix: Number(item.price || 0),
+          valise: item.valise_code || '',
+          carton: item.location_code || '',
+          site: item.station_name || 'Stock général',
+          statut: 'stock',
+          photo: item.photo_monture_url || null,
+          photoBranche: null,
+          sorti: false,
+          test: false
+        }));
+      this.setState({ _tick: Date.now() });
+    } catch (error) {
+      console.error('Catalogue:', error);
+      this._backendStock = [];
+    }
+  }
   paintBg() {
     const t = window.LStore ? window.LStore.theme() : 'light';
     try { document.body.style.background = (t === 'dark') ? '#0F0E13' : '#EFEBF2'; } catch (e) {}
@@ -372,7 +422,14 @@ class Component extends DCLogic {
 
   /* Regroupe les montures disponibles au stock général en modèles */
   modelesSrc() {
-    const stock = (this.db().montures || []).filter(m => (m.site || 'Stock général') === 'Stock général' && (m.statut || 'stock') === 'stock' && !m.sorti);
+    const localStock = this.db().montures || [];
+    const hasToken = !!localStorage.getItem('token');
+    const backendStock = Array.isArray(this._backendStock) ? this._backendStock : [];
+    const stock = (hasToken ? backendStock : localStock).filter(m => {
+      const site = (m.site || 'Stock général');
+      const statut = (m.statut || 'stock');
+      return site === 'Stock général' && (statut === 'stock' || statut === 'reserve') && !m.sorti;
+    });
     const map = new Map();
     stock.forEach(m => {
       const key = [m.marque, m.forme, m.type, m.gamme, m.genre].join('|');
@@ -398,41 +455,6 @@ class Component extends DCLogic {
     const v = Math.max(0, Math.min(max, qty));
     if (!v) delete p[id]; else p[id] = v;
     this.setState({ panier: p });
-  }
-
-  /* Jeu d'essai : montures fictives au stock général, avec valise et carton */
-  MODELES_TEST = [
-    { marque: 'Okulo', forme: 'Aviator', type: 'Solaire', gamme: 'Moyenne gamme', genre: 'Homme', matiere: 'Métal', prix: 90000, valise: 'Rouge', carton: 'RO-0060-001', couleurs: { Noir: 4, 'Doré': 3, 'Bleu nuit': 2 } },
-    { marque: 'Coline', forme: 'Œil de chat', type: 'Solaire', gamme: 'Moyenne gamme', genre: 'Femme', matiere: 'Acétate', prix: 90000, valise: 'Rouge', carton: 'RO-0060-002', couleurs: { 'Rose transparent': 4, 'Guépard': 3, 'Écaille': 2 } },
-    { marque: 'Jane Austen', forme: 'Papillon', type: 'Vue', gamme: 'Classique', genre: 'Femme', matiere: 'Acétate', prix: 70000, valise: 'Noire', carton: 'NO-0040-001', couleurs: { Cristal: 3, Havane: 3 } },
-    { marque: 'Level', forme: 'Rectangulaire', type: 'Lecture', gamme: 'Classique', genre: 'Mixte', matiere: 'TR90', prix: 70000, valise: 'Noire', carton: 'NO-0040-002', couleurs: { Noir: 4, 'Argenté': 2 } },
-    { marque: 'Louis Carter', forme: 'Polygone', type: 'Vue', gamme: 'Luxe', genre: 'Mixte', matiere: 'Titane', prix: 180000, valise: 'Violette', carton: 'VI-0020-001', couleurs: { 'Transparent fumé': 2, Tricolore: 2, 'Bicolore noir-doré': 2 } },
-    { marque: 'MY Mojo', forme: 'Ronde', type: 'Vue', gamme: 'Enfant', genre: 'Enfant', matiere: 'TR90', prix: 45000, valise: 'Jaune', carton: 'JA-0030-001', couleurs: { 'Bleu nuit': 3, 'Rose transparent': 3 } }
-  ];
-  seedTest() {
-    const S = window.LStore;
-    if (!S) return 0;
-    const out = [];
-    let n = 0;
-    this.MODELES_TEST.forEach(mo => {
-      Object.keys(mo.couleurs).forEach(coul => {
-        for (let i = 0; i < mo.couleurs[coul]; i++) {
-          n++;
-          const seq = String(n).padStart(3, '0');
-          out.push({
-            uid: `${mo.carton}-T${seq}`,
-            ref: `${mo.marque.slice(0, 2).toUpperCase()}-${4400 + n}-${coul.slice(0, 2).toUpperCase()}`,
-            marque: mo.marque, forme: mo.forme, couleur: coul, matiere: mo.matiere,
-            gamme: mo.gamme, type: mo.type, genre: mo.genre, prix: mo.prix,
-            valise: mo.valise, carton: mo.carton, cartonNum: mo.carton.slice(-2),
-            site: 'Stock général', statut: 'stock', photo: n % 4, test: true
-          });
-        }
-      });
-    });
-    const reste = (S.get().montures || []).filter(m => !m.test);
-    S.set({ montures: out.concat(reste) });
-    return out.length;
   }
 
   renderVals() {
@@ -598,10 +620,6 @@ class Component extends DCLogic {
       themeIcon: theme === 'dark' ? 'sun' : 'moon',
       themeLabel: theme === 'dark' ? 'Mode clair' : 'Mode sombre',
       toggleTheme: () => { if (S) S.setTheme(theme === 'dark' ? 'light' : 'dark'); },
-      seed: () => {
-        const n = this.seedTest();
-        this.toast('flask-conical', 'Montures de test chargées', `${n} montures fictives au stock général · ${this.MODELES_TEST.length} modèles`, 'ok');
-      },
       retourLabel: this.fromAdmin() ? 'Poste administrateur' : 'Poste responsable magasin',
       goMagasin: () => { window.location.href = this.fromAdmin() ? 'Admin.dc.html' : 'Responsable magasin.dc.html'; },
       logout: () => { window.location.href = 'Connexion.dc.html'; },
