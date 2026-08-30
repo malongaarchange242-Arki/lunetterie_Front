@@ -201,6 +201,9 @@ input::placeholder{color:var(--ink-34)}
                 <div style="{{ b.barcodeStyle }}"></div>
                 <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ink-68);margin-top:8px;text-align:center">{{ b.barcodeNum }}</div>
               </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+                <button onClick="{{ b.onImprimer }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;flex:1;min-width:140px;padding:12px 16px;border-radius:999px;border:1px solid rgba(95,194,217,.34);background:rgba(95,194,217,.14);color:var(--info-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.26)"><span data-icon="printer" style="display:grid;place-items:center;font-size:16px"></span>Imprimer & télécharger</button>
+              </div>
             </div>
           </sc-for>
         </div>
@@ -875,6 +878,131 @@ class Component extends DCLogic {
     return sc >= k.lignes.length ? 'finalisee' : 'reception';
   }
 
+  generateBarcodeAsCanvas(seed, width = 500, height = 88) {
+    // Générer le code barre en utilisant la même logique que la fonction barcode()
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    
+    // Fond blanc
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Générer les barres
+    let s = 0;
+    for (let i = 0; i < String(seed).length; i++) s += String(seed).charCodeAt(i) * (i + 3);
+    
+    let x = 0;
+    ctx.fillStyle = '#17171C'; // couleur du texte/barre
+    
+    for (let i = 0; i < 44; i++) {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      const barWidth = 1 + (s >> 8) % 3;
+      const gap = 1 + (s >> 16) % 2;
+      
+      // Adapter à la largeur du canvas
+      const scaleX = width / (44 * 2.5); // approximation de la largeur finale
+      const scaledBarWidth = Math.max(1, barWidth * scaleX);
+      const scaledX = x * scaleX;
+      
+      ctx.fillRect(scaledX, height * 0.1, scaledBarWidth, height * 0.7);
+      x += barWidth + gap;
+    }
+    
+    // Ajouter le texte en bas
+    ctx.fillStyle = '#17171C';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(seed), width / 2, height * 0.95);
+    
+    return canvas;
+  }
+
+  downloadBarcodePNG(barcodeNum, ref) {
+    try {
+      const canvas = this.generateBarcodeAsCanvas(barcodeNum, 500, 88);
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/png');
+      link.download = `barcode-${ref}-${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      this.toast('check', 'Code barre téléchargé', `${ref}.png`, 'ok');
+    } catch (error) {
+      console.error('Erreur téléchargement code barre:', error);
+      this.toast('triangle-alert', 'Téléchargement échoué', 'Impossible de générer le PNG', 'warn');
+    }
+  }
+
+  printBonDeCommande(bon) {
+    try {
+      const printWindow = window.open('', '_blank');
+      const barcodeCanvas = this.generateBarcodeAsCanvas(bon.barcodeNum, 600, 100);
+      const barcodePNG = barcodeCanvas.toDataURL('image/png');
+      
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Bon de commande - ${bon.ref}</title>
+          <style>
+            body { font-family: 'JetBrains Mono', monospace; margin: 20px; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .title { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
+            .subtitle { font-size: 14px; color: #666; }
+            .content { margin: 20px 0; }
+            .row { display: flex; justify-content: space-between; margin: 10px 0; }
+            .barcode { text-align: center; margin: 30px 0; }
+            .barcode img { max-width: 100%; }
+            .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #999; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="title">BON DE COMMANDE</div>
+            <div class="subtitle">${bon.ref}</div>
+          </div>
+          
+          <div class="content">
+            <div class="row">
+              <span><strong>Fournisseur:</strong></span>
+              <span>${bon.fournisseur}</span>
+            </div>
+            <div class="row">
+              <span><strong>Provenance:</strong></span>
+              <span>${bon.provenance}</span>
+            </div>
+            <div class="row">
+              <span><strong>Lunettes:</strong></span>
+              <span>${bon.unites}</span>
+            </div>
+            <div class="row">
+              <span><strong>Date d'envoi:</strong></span>
+              <span>${bon.date}</span>
+            </div>
+          </div>
+          
+          <div class="barcode">
+            <img src="${barcodePNG}" alt="Code barre">
+            <div>${bon.barcodeNum}</div>
+          </div>
+          
+          <div class="footer">
+            Imprimé le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}
+          </div>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      setTimeout(() => printWindow.print(), 250);
+    } catch (error) {
+      console.error('Erreur impression:', error);
+      this.toast('triangle-alert', 'Impression impossible', 'Erreur lors de la génération du document', 'warn');
+    }
+  }
+
   store() { return window.LStore ? window.LStore.get() : {}; }
   loadBons() {
     const token = localStorage.getItem('token');
@@ -1193,7 +1321,8 @@ class Component extends DCLogic {
       barcodeNum: b.barcodeNum || b.ref,
       barcodeStyle: this.barcode(b.barcodeNum || b.ref, 44),
       statutLabel: (bonStatuts[b.statut] || bonStatuts.attente).label, statutStyle: (bonStatuts[b.statut] || bonStatuts.attente).style,
-      cardStyle: `padding:22px 24px;border-radius:22px;background:${glass};border:1px solid ${b.statut === 'arrive' ? 'rgba(30,143,99,.24)' : 'var(--ink-09)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9)`
+      cardStyle: `padding:22px 24px;border-radius:22px;background:${glass};border:1px solid ${b.statut === 'arrive' ? 'rgba(30,143,99,.24)' : 'var(--ink-09)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9)`,
+      onImprimer: () => this.printBonDeCommande({ ref: b.ref, fournisseur: b.fournisseur, provenance: b.provenance, unites: b.unites.toLocaleString('fr-FR'), date: b.date, barcodeNum: b.barcodeNum || b.ref })
     }));
 
     // --- validations ---

@@ -1226,6 +1226,9 @@ class Component extends DCLogic {
     const S = window.LStore;
     if (S) this._sub = S.subscribe(() => this.setState({ _tick: Date.now() }));
     this.loadCurrentUser();
+    // Charger les données du cache local immédiatement
+    this.loadCachedData();
+    // Puis actualiser avec les données du backend
     this.loadBackendData();
   }
   componentDidUpdate() { this.icons(); this.paintBg(); }
@@ -1327,6 +1330,25 @@ class Component extends DCLogic {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
+  loadCachedData() {
+    // Charger les données depuis le cache local (window.LStore)
+    const S = window.LStore;
+    if (!S) return;
+    
+    try {
+      const cached = S.get();
+      const bons = cached.bons || [];
+      if (bons.length > 0) {
+        // Les données en cache vont mettre à jour le state via le subscription
+        // ou via le rendu qui lit directement depuis S.get()
+        // Rien d'autre à faire ici, le rendu lira automatiquement
+      }
+    } catch (error) {
+      console.error('Erreur chargement cache:', error);
+    }
+  }
+  }
+
   async loadBackendData() {
     const S = window.LStore;
     if (!S) return;
@@ -1393,7 +1415,8 @@ class Component extends DCLogic {
       }
 
       S.set({ bons });
-      this.setState({ refreshing: false, shipmentDataCache: shipmentCache });
+      // Force re-render to show the loaded data
+      this.setState({ refreshing: false, shipmentDataCache: shipmentCache, _tick: Date.now() });
       this.toast('refresh-cw', 'Liste actualisée', `${bons.length} commande(s) chargée(s)`, 'info');
     } catch (error) {
       console.error('Erreur chargement pré-enregistrement:', error);
