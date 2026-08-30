@@ -1021,17 +1021,35 @@ class Component extends DCLogic {
     const headers = { Authorization: `Bearer ${token}` };
     return Promise.all([
       fetch('https://api-lunetterie.universearch.com/api/v1/inventory/supplier-orders', { headers }),
-      fetch('https://api-lunetterie.universearch.com/api/v1/inventory/reception-commands', { headers })
+      fetch('https://api-lunetterie.universearch.com/api/v1/inventory/reception-commands', { headers }),
+      fetch('https://api-lunetterie.universearch.com/api/v1/inventory/glasses', { headers })
     ])
-      .then(async ([ordersResponse, commandsResponse]) => {
+      .then(async ([ordersResponse, commandsResponse, glassesResponse]) => {
         if (!ordersResponse.ok || !commandsResponse.ok) throw new Error('Chargement des bons impossible');
         const ordersPayload = await ordersResponse.json();
         const commandsPayload = await commandsResponse.json();
+        const glassesPayload = glassesResponse && glassesResponse.ok ? await glassesResponse.json() : { data: { glasses: [] } };
         const orders = (ordersPayload.data && ordersPayload.data.orders) || [];
         const commands = (commandsPayload.data && commandsPayload.data.commands) || [];
+        const glasses = (glassesPayload.data && glassesPayload.data.glasses) || [];
+        const stockByReceptionCommand = {};
+        glasses.forEach(g => {
+          const cmdId = g.reception_command_id ?? g.receptionCommandId;
+          if (cmdId == null) return;
+          const key = Number(cmdId);
+          if (!Number.isFinite(key)) return;
+          stockByReceptionCommand[key] = (stockByReceptionCommand[key] || 0) + 1;
+        });
         const apiBons = orders.map(order => {
           const command = commands.find(c => Number(c.supplier_order_id) === Number(order.id));
-          const status = command && command.status === 'active' ? 'preenr' : (order.status || 'attente');
+          const commandId = command ? Number(command.id) : null;
+          const registeredCount = Number(command && command.registered_count) || 0;
+          const shipmentStatus = command && (command.shipment_status || command.shipmentStatus);
+          const stockForOrder = commandId != null ? (stockByReceptionCommand[commandId] || 0) : 0;
+          const hasArrivedStock = stockForOrder > 0 || shipmentStatus === 'arrived' || command && command.status === 'completed';
+          const status = hasArrivedStock
+            ? 'arrive'
+            : (command && command.status === 'active' ? (registeredCount > 0 ? 'arrive' : 'preenr') : (order.status || 'attente'));
           return {
             id: order.id, ref: order.reference, fournisseur: order.supplier,
             provenance: order.provenance || '', destination: order.destination || 'Stock général',
