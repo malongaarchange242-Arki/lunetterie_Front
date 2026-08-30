@@ -365,6 +365,30 @@ input::placeholder{color:var(--ink-34)}
                   </div>
                 </div>
 
+                <!-- Photos reçues du mobile -->
+                <sc-if value="{{ photosRecues }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
+                    <div style="border-radius:12px;overflow:hidden;background:var(--srf-86);border:1px solid var(--ink-12)">
+                      <sc-if value="{{ photoPreview }}" hint-placeholder-val="{{ false }}">
+                        <img src="{{ photoPreview }}" alt="Photo monture" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
+                        <div style="padding:8px;text-align:center;font:500 11px/1.3 Manrope,sans-serif;color:var(--ok-ink)">✓ Monture</div>
+                      </sc-if>
+                    </div>
+                    <div style="border-radius:12px;overflow:hidden;background:var(--srf-86);border:1px solid var(--ink-12)">
+                      <sc-if value="{{ branchPhotoData }}" hint-placeholder-val="{{ false }}">
+                        <img src="{{ branchPhotoData }}" alt="Photo branche" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
+                        <div style="padding:8px;text-align:center;font:500 11px/1.3 Manrope,sans-serif;color:var(--ok-ink)">✓ Branche</div>
+                      </sc-if>
+                    </div>
+                    <div style="border-radius:12px;overflow:hidden;background:var(--srf-86);border:1px solid var(--ink-12)">
+                      <sc-if value="{{ backPhotoData }}" hint-placeholder-val="{{ false }}">
+                        <img src="{{ backPhotoData }}" alt="Photo arrière" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
+                        <div style="padding:8px;text-align:center;font:500 11px/1.3 Manrope,sans-serif;color:var(--ok-ink)">✓ Arrière</div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </sc-if>
+
                 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
                   <button onClick="{{ createMonture }}" style="{{ createStyle }}"><span data-icon="fingerprint" style="display:grid;place-items:center;font-size:17px"></span>{{ createButtonLabel }}</button>
                   <span style="font:400 12px/1.5 Manrope,sans-serif;color:{{ hintColor }};flex:1;min-width:180px;text-wrap:pretty">{{ formHint }}</span>
@@ -1077,7 +1101,7 @@ class Component extends DCLogic {
   state = {
     screen: 'commandes',
     cmdId: null, valId: null, cartId: null,
-    fForme: '', fMarque: '', fCouleur: '', fMatiere: '', fRef: '', photo: false, photoPreview: null, photoData: null, captureLabel: 'Prendre une photo', quantiteACreer: 1,
+    fForme: '', fMarque: '', fCouleur: '', fMatiere: '', fRef: '', photo: false, photoPreview: null, photoData: null, branchPhotoData: null, backPhotoData: null, captureLabel: 'Prendre une photo', quantiteACreer: 1,
     scanning: false, helpOpen: false, toast: null,
     manualCode: '', phonePaired: false, pairing: false, pairCode: '', pairQrUrl: '', scanTarget: null, userName: 'Utilisateur',
     stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes', compoOnglet: 'Marque',
@@ -1565,7 +1589,7 @@ class Component extends DCLogic {
         fMarque: cart ? (cart.marques[0] || '') : '',
         fCouleur: cart ? ((cart.couleurs || [])[0] || '') : '',
         fMatiere: cart ? ((cart.matieres || [])[0] || '') : '',
-        fRef: '', photo: false, photoPreview: null, photoData: null, branchPhotoData: null, captureLabel: 'Prendre une photo'
+        fRef: '', photo: false, photoPreview: null, photoData: null, branchPhotoData: null, backPhotoData: null, captureLabel: 'Prendre une photo'
       });
       this.toast('badge-check', 'Carton vÃ©rifiÃ©', cart ? `${cart.code} Â· ${cart.qty || cart.quantity} montures` : '', 'ok');
     } catch (error) {
@@ -1621,8 +1645,10 @@ class Component extends DCLogic {
 
   clearPhoto() {
     this.setState({ 
-      photoPreview: null, 
+      photoPreview: null,
       photoData: null,
+      branchPhotoData: null,
+      backPhotoData: null,
     branchPhotoData: null,
     captureLabel: 'Prendre une photo'
     });
@@ -2285,6 +2311,11 @@ class Component extends DCLogic {
           for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
           return new Blob([bytes], { type: mime });
         };
+        const appendImage = (fieldName, dataUrl, fileName) => {
+          if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return;
+          const blob = dataUrlToBlob(dataUrl);
+          if (blob && blob.size > 0) fd.append(fieldName, blob, fileName);
+        };
         const fd = new FormData();
         fd.append('station_id', String(s.stationId));
         fd.append('reference', refTrim);
@@ -2295,8 +2326,12 @@ class Component extends DCLogic {
         fd.append('material', s.fMatiere || '');
         fd.append('gender', val && val.genre ? val.genre : '');
         fd.append('gamme', cart.gamme || '');
+        fd.append('mount_type', cart.type || '');
         fd.append('reception_command_code', cmd.ref || '');
         if (cart.prix != null) fd.append('price', String(cart.prix));
+        appendImage('image', s.photoData, 'monture.jpg');
+        appendImage('branch_image', s.branchPhotoData, 'branche.jpg');
+        appendImage('rear_image', s.backPhotoData, 'arriere.jpg');
         let saved;
         try {
           const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception`, { method: 'POST', headers: this.apiHeaders(), body: fd });
@@ -2320,7 +2355,7 @@ class Component extends DCLogic {
               cartons: v.cartons.map(k => k.id !== cart.id ? k : { ...k, saisies: [...k.saisies, monture] })
             })
           }));
-        this.setState({ fRef: '', photoPreview: null, photoData: null, branchPhotoData: null, captureLabel: 'Prendre une photo' });
+        this.setState({ fRef: '', photoPreview: null, photoData: null, branchPhotoData: null, backPhotoData: null, captureLabel: 'Prendre une photo' });
         const S = window.LStore;
         if (S) {
           S.set({ montures: [{ uid, ref: refTrim, marque: s.fMarque, forme: s.fForme, couleur: s.fCouleur, matiere: s.fMatiere, gamme: cart.gamme, type: cart.type, genre: val.genre, prix: cart.prix, valise: val.couleur, carton: cart.code, site: 'Stock gÃ©nÃ©ral', statut: 'stock', photo: s.photoData, photoBranche: s.branchPhotoData, backendId: saved.glass_id, location: saved.location_code || saved.location }, ...(S.get().montures || [])] });
@@ -2670,13 +2705,16 @@ class Component extends DCLogic {
         this.scanArrivalCase(hit.c, hit.v);
       },
 
-      // âœ… MODIFICATION 5 : Ajout des variables photo dans renderVals
+      // ✅ MODIFICATION 5 : Ajout des variables photo dans renderVals
       capturePhoto: this.capturePhoto.bind(this),
       uploadPhoto: this.uploadPhoto.bind(this),
       onPhotoSelected: this.onPhotoSelected.bind(this),
       clearPhoto: this.clearPhoto.bind(this),
       photoPreview: s.photoPreview,
       photoData: s.photoData,
+      branchPhotoData: s.branchPhotoData,
+      backPhotoData: s.backPhotoData,
+      photosRecues: !!(s.photoPreview || s.branchPhotoData || s.backPhotoData),
       captureLabel: s.captureLabel,
 
       toastOn: !!t,
