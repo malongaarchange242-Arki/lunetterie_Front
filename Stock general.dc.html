@@ -57,7 +57,7 @@ input::placeholder{color:var(--ink-34)}
       <div style="{{ avatarStyle }}"><span data-icon="glasses" style="display:grid;place-items:center;font-size:22px;color:#fff"></span></div>
       <div style="min-width:0">
         <div style="font:600 12.5px/1.3 Manrope,sans-serif;margin-bottom:5px">{{ userName }}</div>
-        <div style="font:500 9px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink)">STOCK GÃ‰NÃ‰RAL</div>
+        <div style="font:500 9px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink)">STOCK GÉNÉRAL</div>
       </div>
     </div>
 
@@ -78,7 +78,7 @@ input::placeholder{color:var(--ink-34)}
         <span data-icon="{{ themeIcon }}" style="display:grid;place-items:center;font-size:16px;flex:none"></span>{{ themeLabel }}
       </button>
       <button onClick="{{ logout }}" style="display:flex;align-items:center;gap:11px;width:100%;padding:13px 15px;border-radius:999px;border:1px solid rgba(242,19,142,.28);background:rgba(242,19,142,.09);color:var(--acc-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;text-align:left;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:#D3117C;color:#fff;border-color:var(--acc-strong)">
-        <span data-icon="log-out" style="display:grid;place-items:center;font-size:16px;flex:none"></span>DÃ©connexion
+        <span data-icon="log-out" style="display:grid;place-items:center;font-size:16px;flex:none"></span>Déconnexion
       </button>
     </div>
   </aside>
@@ -99,15 +99,15 @@ input::placeholder{color:var(--ink-34)}
     <sc-if value="{{ isCommandes }}" hint-placeholder-val="{{ true }}">
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
         <div style="margin-bottom:30px;padding-right:238px">
-          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">Ã‰TAPE 1 Â· RÃ‰CEPTION</div>
-          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande Ã  enregistrer</h1>
-          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Commandes arrivÃ©es du prÃ©-enregistrement. Tout est dÃ©jÃ  dÃ©crit au niveau du carton : il reste Ã  crÃ©er chaque monture, une par une, avec sa rÃ©fÃ©rence et sa photo.</p>
+          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">ÉTAPE 1 · RÉCEPTION</div>
+          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande à enregistrer</h1>
+          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Commandes arrivées du pré-enregistrement. Tout est déjà décrit au niveau du carton : il reste à créer chaque monture, une par une, avec sa référence et sa photo.</p>
         </div>
 
         <sc-if value="{{ cmdAucune }}" hint-placeholder-val="{{ false }}">
           <div style="padding:52px 32px;border-radius:24px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
             <span data-icon="clipboard-list" style="display:grid;place-items:center;font-size:30px;color:var(--ink-3);margin:0 auto 14px"></span>
-            <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Aucune commande arrivÃ©e</div>
+            <div style="font:600 15px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:8px">Aucune commande arrivée</div>
             <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-56);max-width:52ch;margin:0 auto;text-wrap:pretty">Une commande apparaÃ®t ici quand la station de prÃ©-enregistrement expÃ©die un bon vers le stock gÃ©nÃ©ral.</div>
           </div>
         </sc-if>
@@ -917,7 +917,7 @@ input::placeholder{color:var(--ink-34)}
         <div style="margin-bottom:30px;padding-right:238px">
           <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">LECTEUR DE CODES-BARRES</div>
           <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Scan</h1>
-          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Connectez votre tÃ©lÃ©phone comme lecteur, ou saisissez le code d'un carton Ã  la main.</p>
+          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Connectez votre téléphone comme lecteur, ou saisissez le code d'un carton à la main.</p>
           <sc-if value="{{ scanTargetReady }}" hint-placeholder-val="{{ false }}">
             <div style="display:inline-flex;align-items:center;gap:9px;margin-top:14px;padding:9px 13px;border-radius:12px;background:rgba(245,165,36,.14);border:1px solid rgba(166,106,5,.3);color:var(--warn-ink);font:600 12px/1.3 Manrope,sans-serif">Carton attendu : {{ scanTargetCode }}</div>
           </sc-if>
@@ -927,7 +927,7 @@ input::placeholder{color:var(--ink-34)}
           <div style="padding:26px;border-radius:24px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9)">
             <div style="display:flex;align-items:center;gap:11px;margin-bottom:20px">
               <span data-icon="smartphone" style="display:inline-grid;place-items:center;font-size:19px;color:var(--info-ink);flex:none"></span>
-              <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">TÃ©lÃ©phone lecteur</div>
+              <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">Téléphone lecteur</div>
             </div>
             <sc-if value="{{ phoneNotPaired }}" hint-placeholder-val="{{ true }}">
               <div style="padding:18px;border-radius:18px;background:var(--card);border:1px solid var(--ink-08);margin-bottom:18px">
@@ -936,31 +936,31 @@ input::placeholder{color:var(--ink-34)}
                     <span style="{{ b.style }}"></span>
                   </sc-for>
                 </div>
-                <sc-if value="{{ pairQrReady }}" hint-placeholder-val="{{ false }}"><img bindSrc="{{ pairQrUrl }}" alt="QR dâ€™appairage" style="display:block;width:100%;max-width:260px;margin:16px auto 0;border-radius:12px;background:#fff"></sc-if>
+                <sc-if value="{{ pairQrReady }}" hint-placeholder-val="{{ false }}"><img bindSrc="{{ pairQrUrl }}" alt="QR d’appairage" style="display:block;width:100%;max-width:260px;margin:16px auto 0;border-radius:12px;background:#fff"></sc-if>
                 <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:2px;display:none">
                 </div>
               </div>
-              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:8px;text-wrap:pretty">Scannez ce code avec l'appareil photo du tÃ©lÃ©phone, ou saisissez le code d'appairage dans l'application mobile.</div>
+              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:8px;text-wrap:pretty">Scannez ce code avec l'appareil photo du téléphone, ou saisissez le code d'appairage dans l'application mobile.</div>
               <div style="font:500 15px/1.3 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink);margin-bottom:20px">{{ pairCode }}</div>
-              <button onClick="{{ startPair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -14px rgba(191,33,120,.6),inset 0 1px 0 var(--srf-5);transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="transform:translateY(-1px)"><span data-icon="link" style="display:grid;place-items:center;font-size:16px"></span>Connecter le tÃ©lÃ©phone</button>
+              <button onClick="{{ startPair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -14px rgba(191,33,120,.6),inset 0 1px 0 var(--srf-5);transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="transform:translateY(-1px)"><span data-icon="link" style="display:grid;place-items:center;font-size:16px"></span>Connecter le téléphone</button>
             </sc-if>
             <sc-if value="{{ pairing }}" hint-placeholder-val="{{ false }}">
               <div style="padding:44px 20px;text-align:center">
                 <span style="display:inline-block;width:26px;height:26px;border-radius:999px;border:2.5px solid rgba(51,135,156,.24);border-top-color:var(--info-ink);animation:spin .8s linear infinite;margin-bottom:18px"></span>
-                <div style="font:600 13.5px/1.3 Manrope,sans-serif;margin-bottom:8px">Appairage en coursâ€¦</div>
-                <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-66)">Confirmez la connexion sur le tÃ©lÃ©phone.</div>
+                <div style="font:600 13.5px/1.3 Manrope,sans-serif;margin-bottom:8px">Appairage en cours…</div>
+                <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-66)">Confirmez la connexion sur le téléphone.</div>
               </div>
             </sc-if>
             <sc-if value="{{ phonePaired }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;align-items:center;gap:13px;padding:16px;border-radius:18px;background:rgba(52,201,141,.1);border:1px solid rgba(30,143,99,.28);margin-bottom:18px">
                 <span style="width:11px;height:11px;border-radius:999px;background:#34C98D;box-shadow:0 0 0 4px rgba(52,201,141,.18);flex:none"></span>
                 <div style="flex:1;min-width:0">
-                  <div style="font:600 13px/1.3 Manrope,sans-serif">TÃ©lÃ©phone d'AÃ¯ssata</div>
-                  <div style="font:500 11px/1.4 'JetBrains Mono',monospace;color:var(--ink-66);margin-top:5px">Lecteur actif Â· Wi-Fi local</div>
+                  <div style="font:600 13px/1.3 Manrope,sans-serif">Téléphone d’Aïssata</div>
+                  <div style="font:500 11px/1.4 'JetBrains Mono',monospace;color:var(--ink-66);margin-top:5px">Lecteur actif · Wi-Fi local</div>
                 </div>
               </div>
-              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Le tÃ©lÃ©phone envoie chaque lecture directement dans l'Ã©cran ouvert.</div>
-              <button onClick="{{ unpair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="unlink" style="display:grid;place-items:center;font-size:15px"></span>DÃ©connecter</button>
+              <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Le téléphone envoie chaque lecture directement dans l’écran ouvert.</div>
+              <button onClick="{{ unpair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="unlink" style="display:grid;place-items:center;font-size:15px"></span>Déconnecter</button>
             </sc-if>
           </div>
 
@@ -969,10 +969,10 @@ input::placeholder{color:var(--ink-34)}
               <span data-icon="keyboard" style="display:inline-grid;place-items:center;font-size:19px;color:var(--warn-ink);flex:none"></span>
               <div style="font:600 15px/1.3 Sora,sans-serif;letter-spacing:-.01em;flex:1">Saisie manuelle</div>
             </div>
-            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Recours si le lecteur est en panne. Saisissez le code imprimÃ© sur le carton.</div>
+            <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:18px;text-wrap:pretty">Recours si le lecteur est en panne. Saisissez le code imprimé sur le carton.</div>
             <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:11px">CODE DU CARTON</div>
             <input value="{{ manualCode }}" onChange="{{ setManualCode }}" placeholder="RO-1800-001" style="width:100%;padding:15px 17px;border-radius:16px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 16px/1.3 'JetBrains Mono',monospace;letter-spacing:.06em;margin-bottom:14px">
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">CARTONS Ã€ ENREGISTRER</div>
+            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">CARTONS À ENREGISTRER</div>
             <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
               <sc-for list="{{ manualTargets }}" as="t" hint-placeholder-count="3">
                 <button onClick="{{ t.onFill }}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:14px;border:1px solid var(--ink-09);background:var(--srf-62);cursor:pointer;text-align:left;transition:all .24s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.16);border-color:rgba(51,135,156,.3)">
