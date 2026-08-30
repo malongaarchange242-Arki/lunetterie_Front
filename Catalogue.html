@@ -357,7 +357,10 @@ class Component extends DCLogic {
         return;
       }
       const payload = await response.json();
-      const list = payload && payload.data && Array.isArray(payload.data.glasses) ? payload.data.glasses : [];
+      const rawList = Array.isArray(payload)
+        ? payload
+        : (payload && Array.isArray(payload.glasses) ? payload.glasses : (payload && payload.data && Array.isArray(payload.data.glasses) ? payload.data.glasses : []));
+      const list = rawList;
       this._backendStock = list
         .filter(item => (item.status || '').toUpperCase() === 'EN_STOCK_GENERAL')
         .map(item => ({

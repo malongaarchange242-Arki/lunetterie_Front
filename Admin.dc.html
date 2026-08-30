@@ -1031,7 +1031,9 @@ class Component extends DCLogic {
         const glassesPayload = glassesResponse && glassesResponse.ok ? await glassesResponse.json() : { data: { glasses: [] } };
         const orders = (ordersPayload.data && ordersPayload.data.orders) || [];
         const commands = (commandsPayload.data && commandsPayload.data.commands) || [];
-        const glasses = (glassesPayload.data && glassesPayload.data.glasses) || [];
+        const glasses = Array.isArray(glassesPayload)
+          ? glassesPayload
+          : (Array.isArray(glassesPayload.glasses) ? glassesPayload.glasses : (glassesPayload.data && Array.isArray(glassesPayload.data.glasses) ? glassesPayload.data.glasses : []));
         const stockByReceptionCommand = {};
         glasses.forEach(g => {
           const cmdId = g.reception_command_id ?? g.receptionCommandId;
@@ -1093,7 +1095,9 @@ class Component extends DCLogic {
       .then(async response => {
         if (!response.ok) throw new Error('Chargement du stock impossible');
         const payload = await response.json();
-        const glasses = (payload && payload.data && payload.data.glasses) || [];
+        const glasses = Array.isArray(payload)
+          ? payload
+          : (Array.isArray(payload.glasses) ? payload.glasses : (payload && payload.data && Array.isArray(payload.data.glasses) ? payload.data.glasses : []));
         const mappedInventory = glasses.map((g, index) => ({
           id: g.id,
           uid: g.barcode || '',
