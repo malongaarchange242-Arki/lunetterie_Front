@@ -369,7 +369,9 @@ class Component extends DCLogic {
           localStorage.setItem('token', data.data.token);
           localStorage.setItem('user', JSON.stringify(data.data.user));
           const routes = ['Stock general.dc.html', 'Pre-enregistrement.dc.html', 'Responsable magasin.dc.html', 'Catalogue.html', 'Admin.dc.html'];
-          window.location.href = routes[selIdx] || 'Stock general.dc.html';
+          const targetUrl = routes[selIdx] || 'Stock general.dc.html';
+          console.log('Login success, redirecting to:', targetUrl, 'from roleIndex:', selIdx);
+          window.location.href = targetUrl;
         } else {
           this.setState({ loading: false, error: true });
         }
