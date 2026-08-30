@@ -1763,7 +1763,7 @@ class Component extends DCLogic {
     const plein = cart && saisiesCount >= kQty;
     const refTrim = (s.fRef || '').trim();
     const dejaVu = cart ? cart.saisies.some(m => m.ref.toLowerCase() === refTrim.toLowerCase()) : false;
-    const canCreate = cart && !plein && refTrim.length >= 3 && s.photoData && s.branchPhotoData && s.fForme && s.fMarque && s.fCouleur && s.fMatiere && !dejaVu;
+    const canCreate = cart && !plein && refTrim.length >= 3 && s.fForme && s.fMarque && s.fCouleur && s.fMatiere && !dejaVu;
 
     const photoImages = ['linear-gradient(140deg,#7C8AA6,#3D4A63)', 'linear-gradient(140deg,#A68B7C,#63503D)', 'linear-gradient(140deg,#8B7CA6,#4A3D63)', 'linear-gradient(140deg,#7CA69B,#3D635A)'];
 
@@ -2234,29 +2234,18 @@ class Component extends DCLogic {
         ? `display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap;box-shadow:0 14px 30px -14px rgba(191,33,120,${(.6 * glow).toFixed(2)}),inset 0 1px 0 var(--srf-5);transition:all .28s ${ease}`
         : `display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13.5px/1.3 Manrope,sans-serif;cursor:not-allowed;white-space:nowrap`,
       formHint: plein ? 'Carton complet.'
-        : dejaVu ? 'Cette monture existe dÃ©jÃ  : utilisez Â« Dupliquer Â» sur sa fiche pour en ajouter un exemplaire.'
-        : refTrim.length < 3 ? 'Saisissez la rÃ©fÃ©rence imprimÃ©e sur la monture.'
+        : dejaVu ? 'Cette monture existe déjà : utilisez « Dupliquer » sur sa fiche pour en ajouter un exemplaire.'
+        : refTrim.length < 3 ? 'Saisissez la référence imprimée sur la monture.'
         : !s.fCouleur ? 'Choisissez la couleur de la monture.'
-        : !s.fMatiere ? 'Choisissez la matiÃ¨re de la monture.'
-        : !s.photoData ? 'La photo de face est obligatoire avant de crÃ©er l\'identifiant.'
-        : !s.branchPhotoData ? 'La photo de branche est obligatoire pour lire la rÃ©fÃ©rence.'
-        : 'PrÃªt. L\'identifiant sera gÃ©nÃ©rÃ© automatiquement.',
+        : !s.fMatiere ? 'Choisissez la matière de la monture.'
+        : 'Prêt. L\'identifiant sera généré automatiquement.',
       hintColor: dejaVu ? 'var(--acc-ink)' : (canCreate ? 'var(--ok-ink)' : 'var(--ink-6)'),
       
-      // âœ… MODIFICATION 7 & 8 : createMonture avec vÃ©rification photo et stockage base64
       createMonture: async () => {
         if (!cart) return;
-        if (plein) { this.toast('triangle-alert', 'Carton complet', `${kQty} montures dÃ©jÃ  crÃ©Ã©es`, 'warn'); return; }
-        if (refTrim.length < 3) { this.toast('triangle-alert', 'RÃ©fÃ©rence manquante', 'Au moins 3 caractÃ¨res', 'warn'); return; }
-        if (dejaVu) { this.toast('triangle-alert', 'RÃ©fÃ©rence en double', refTrim, 'warn'); return; }
-        if (!s.photoData) {
-          this.toast('triangle-alert', 'Photo monture manquante', 'Prenez ou importez la photo de face', 'warn');
-          return;
-        }
-        if (!s.branchPhotoData) {
-          this.toast('triangle-alert', 'Photo branche manquante', 'Envoyez la photo de la branche depuis le tÃ©lÃ©phone', 'warn');
-          return;
-        }
+        if (plein) { this.toast('triangle-alert', 'Carton complet', `${kQty} montures déjà créées`, 'warn'); return; }
+        if (refTrim.length < 3) { this.toast('triangle-alert', 'Référence manquante', 'Au moins 3 caractères', 'warn'); return; }
+        if (dejaVu) { this.toast('triangle-alert', 'Référence en double', refTrim, 'warn'); return; }
         if (!s.stationId) {
           this.toast('triangle-alert', 'Station inconnue', 'Reconnectez-vous avant de valider.', 'warn');
           return;
@@ -2282,8 +2271,6 @@ class Component extends DCLogic {
         fd.append('gamme', cart.gamme || '');
         fd.append('reception_command_code', cmd.ref || '');
         if (cart.prix != null) fd.append('price', String(cart.prix));
-        fd.append('image', dataUrlToBlob(s.photoData), 'monture.jpg');
-        fd.append('branch_image', dataUrlToBlob(s.branchPhotoData), 'branche.jpg');
         let saved;
         try {
           const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception`, { method: 'POST', headers: this.apiHeaders(), body: fd });
@@ -2294,9 +2281,12 @@ class Component extends DCLogic {
           this.toast('triangle-alert', 'Enregistrement impossible', error.message || 'Backend indisponible', 'warn');
           return;
         }
-        const seq = saisiesCount + 1;
-        const uid = saved.barcode || `${cart.code}-${String(seq).padStart(3, '0')}`;
-        const monture = { id: saved.glass_id ? 'g' + saved.glass_id : 'm' + Date.now(), ref: refTrim, forme: s.fForme, marque: s.fMarque, couleur: s.fCouleur, matiere: s.fMatiere, uid, photo: s.photoData, photoBranche: s.branchPhotoData };
+        const uid = saved && saved.barcode ? saved.barcode : null;
+        if (!uid) {
+          this.toast('triangle-alert', 'Identifiant non reçu', 'Le backend n’a pas renvoyé de code-barres valide.', 'warn');
+          return;
+        }
+        const monture = { id: saved.glass_id ? 'g' + saved.glass_id : 'glass-' + uid, ref: refTrim, forme: s.fForme, marque: s.fMarque, couleur: s.fCouleur, matiere: s.fMatiere, uid };
         this.setArrivees(list => list.map(c => c.id !== cmd.id ? c : {
             ...c,
             valises: c.valises.map(v => v.id !== val.id ? v : {

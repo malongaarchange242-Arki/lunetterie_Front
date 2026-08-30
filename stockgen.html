@@ -1921,9 +1921,12 @@ class Component extends DCLogic {
           this.toast('triangle-alert', 'Photo manquante', 'Prenez ou importez une photo', 'warn');
           return;
         }
-        const seq = saisiesCount + 1;
-        const uid = `${cart.code}-${String(seq).padStart(3, '0')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-        const monture = { id: 'm' + Date.now(), ref: refTrim, forme: s.fForme, marque: s.fMarque, couleur: s.fCouleur, matiere: s.fMatiere, uid, photo: s.photoData };
+        const uid = saved && saved.barcode ? saved.barcode : null;
+        if (!uid) {
+          this.toast('triangle-alert', 'Identifiant non reçu', 'Le backend n’a pas renvoyé de code-barres valide.', 'warn');
+          return;
+        }
+        const monture = { id: saved.glass_id ? 'g' + saved.glass_id : 'glass-' + uid, ref: refTrim, forme: s.fForme, marque: s.fMarque, couleur: s.fCouleur, matiere: s.fMatiere, uid, photo: s.photoData };
         this.setArrivees(list => list.map(c => c.id !== cmd.id ? c : {
             ...c,
             valises: c.valises.map(v => v.id !== val.id ? v : {
