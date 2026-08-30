@@ -1385,9 +1385,9 @@ class Component extends DCLogic {
           couleur: v.couleur,
           info: `${v.gamme} · ${v.genre} · ${v.montures} u.`,
           dotStyle: `width:16px;height:16px;border-radius:5px;flex:none;background:${this.COLORS[v.couleur] || '#888'};border:1px solid var(--ink-16)`,
-          rowStyle: `display:flex;align-items:center;gap:12px;padding:12px 15px;border-radius:16px;border:1px solid ${v.scanned ? 'rgba(30,143,99,.3)' : 'var(--ink-09)'};background:${v.scanned ? 'rgba(52,201,141,.1)' : 'var(--srf-62)'};transition:all .3s ${ease}`,
+          rowStyle: `display:flex;align-items:center;gap:12px;padding:12px 15px;border-radius:16px;border:1px solid ${v.scanned ? 'rgba(30,143,99,.3)' : 'var(--ink-09)'};background:${v.scanned ? 'rgba(52,201,141,.1)' : 'var(--srf-62)'};transition:all .3s ${ease};justify-content:space-between`,
           btnIcon: v.scanned ? 'badge-check' : 'scan-barcode',
-          btnStyle: `width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none;cursor:${v.scanned ? 'default' : 'pointer'};transition:all .26s ${ease};` +
+          btnStyle: `width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none;margin-left:auto;cursor:${v.scanned ? 'default' : 'pointer'};transition:all .26s ${ease};` +
             (v.scanned ? 'background:rgba(52,201,141,.16);border:1px solid rgba(30,143,99,.34);color:var(--ok-ink)'
                        : 'background:rgba(95,194,217,.16);border:1px solid rgba(51,135,156,.34);color:var(--info-ink)'),
           onScan: () => {
