@@ -435,15 +435,30 @@ class Component extends DCLogic {
     const hasToken = !!localStorage.getItem('token');
     const backendStock = Array.isArray(this._backendStock) ? this._backendStock : [];
     console.log('modelesSrc: hasToken =', hasToken, 'backendStock.length =', backendStock.length, 'localStock.length =', localStock.length);
-    const stock = (hasToken ? backendStock : localStock).filter(m => {
-      const site = (m.site || 'Stock général');
-      const statut = (m.statut || 'stock');
-      const passes = site === 'Stock général' && (statut === 'stock' || statut === 'reserve') && !m.sorti;
-      if (!passes) {
-        console.log('modelesSrc: filtered out item:', { marque: m.marque, site, statut, sorti: m.sorti });
-      }
-      return passes;
-    });
+    
+    let stock;
+    if (hasToken) {
+      // Pour les données du backend, on fait confiance au filtrage status=EN_STOCK_GENERAL
+      // Pas besoin de vérifier site === 'Stock général'
+      stock = backendStock.filter(m => {
+        const passes = !m.sorti;
+        if (!passes) {
+          console.log('modelesSrc: filtered out item:', { marque: m.marque, site: m.site, statut: m.statut, sorti: m.sorti });
+        }
+        return passes;
+      });
+    } else {
+      // Pour les données locales, filtrer par site et statut
+      stock = localStock.filter(m => {
+        const site = (m.site || 'Stock général');
+        const statut = (m.statut || 'stock');
+        const passes = site === 'Stock général' && (statut === 'stock' || statut === 'reserve') && !m.sorti;
+        if (!passes) {
+          console.log('modelesSrc: filtered out local item:', { marque: m.marque, site, statut, sorti: m.sorti });
+        }
+        return passes;
+      });
+    }
     console.log('modelesSrc: After filter, stock.length =', stock.length);
     const map = new Map();
     stock.forEach(m => {
