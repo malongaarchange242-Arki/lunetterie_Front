@@ -1582,6 +1582,7 @@ class Component extends DCLogic {
 
     const t = s.toast;
     const toneBg = { ok: '#34C98D', warn: '#F5A524', info: '#5FC2D9' };
+    const normalizeCartonCode = value => String(value || '').replace(/[\s_-]+/g, '').toUpperCase();
 
     const cartonsRestants = [];
     commandesDB.forEach(c => c.valises.forEach(v => v.cartons.forEach(k => {
@@ -2268,10 +2269,10 @@ class Component extends DCLogic {
         onFill: () => this.setState({ manualCode: k.code })
       })),
       submitManual: () => {
-        const raw = (s.manualCode || '').trim().toUpperCase();
+        const raw = normalizeCartonCode(s.manualCode);
         if (!raw) { this.toast('triangle-alert', 'Code vide', 'Saisissez le code du carton', 'warn'); return; }
-        const hit = cartonsRestants.find(x => x.k.code.toUpperCase() === raw);
-        if (!hit) { this.toast('triangle-alert', 'Code inconnu', `Aucun carton ouvert ne porte ${raw}`, 'warn'); return; }
+        const hit = cartonsRestants.find(x => normalizeCartonCode(x.k.code) === raw);
+        if (!hit) { this.toast('triangle-alert', 'Code inconnu', `Aucun carton ouvert ne porte ${s.manualCode.trim() || raw}`, 'warn'); return; }
         this.setState({ manualCode: '' });
         this.openCarton(hit.c.id, hit.v.id, hit.k.id);
       },

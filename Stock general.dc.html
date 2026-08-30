@@ -1220,16 +1220,17 @@ class Component extends DCLogic {
   }
   async handleMobileEvent(event) {
     const data = event.data || {};
+    const normalizeCartonCode = value => String(value || '').replace(/[\s_-]+/g, '').toUpperCase();
     if (event.type === 'device.connected') { this.setState({ phonePaired: true }); this.toast('smartphone', 'TÃ©lÃ©phone connectÃ©', 'Lecteur et camÃ©ra actifs.', 'ok'); return; }
     if (event.type === 'barcode.scanned') {
-      const barcode = String(data.barcode || '').trim().toUpperCase();
+      const barcode = normalizeCartonCode(data.barcode);
       const target = this.state.scanTarget;
-      if (target && barcode !== String(target.code).toUpperCase()) {
+      if (target && barcode !== normalizeCartonCode(target.code)) {
         this.toast('triangle-alert', 'Mauvais carton', `${barcode} lu, ${target.code} attendu.`, 'warn');
         return;
       }
       const arrivals = (window.LStore ? window.LStore.get().arrivees : []) || [];
-      const hit = arrivals.flatMap(c => c.valises.flatMap(v => v.cartons.map(k => ({ c, v, k })))).find(x => String(x.k.code).toUpperCase() === barcode);
+      const hit = arrivals.flatMap(c => c.valises.flatMap(v => v.cartons.map(k => ({ c, v, k })))).find(x => normalizeCartonCode(x.k.code) === barcode);
       if (hit) { this.openCarton(hit.c.id, hit.v.id, hit.k.id); this.toast('scan-barcode', 'Code reÃ§u du tÃ©lÃ©phone', barcode, 'ok'); }
       else this.toast('triangle-alert', 'Code reÃ§u', `${barcode} ne correspond Ã  aucun carton ouvert`, 'warn');
       return;
@@ -1876,6 +1877,7 @@ class Component extends DCLogic {
 
     const t = s.toast;
     const toneBg = { ok: '#34C98D', warn: '#F5A524', info: '#5FC2D9' };
+    const normalizeCartonCode = value => String(value || '').replace(/[\s_-]+/g, '').toUpperCase();
 
     const cartonsRestants = [];
     commandesDB.forEach(c => c.valises.forEach(v => v.cartons.forEach(k => {
@@ -2601,10 +2603,10 @@ class Component extends DCLogic {
         onFill: () => this.setState({ manualCode: k.code })
       })),
       submitManual: () => {
-        const raw = (s.manualCode || '').trim().toUpperCase();
+        const raw = normalizeCartonCode(s.manualCode);
         if (!raw) { this.toast('triangle-alert', 'Code vide', 'Saisissez le code du carton', 'warn'); return; }
-        const hit = cartonsRestants.find(x => x.k.code.toUpperCase() === raw);
-        if (!hit) { this.toast('triangle-alert', 'Code inconnu', `Aucun carton ouvert ne porte ${raw}`, 'warn'); return; }
+        const hit = cartonsRestants.find(x => normalizeCartonCode(x.k.code) === raw);
+        if (!hit) { this.toast('triangle-alert', 'Code inconnu', `Aucun carton ouvert ne porte ${s.manualCode.trim() || raw}`, 'warn'); return; }
         this.setState({ manualCode: '' });
         this.openCarton(hit.c.id, hit.v.id, hit.k.id);
       },
