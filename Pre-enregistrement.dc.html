@@ -1334,7 +1334,7 @@ class Component extends DCLogic {
     // Charger les données depuis le cache local (window.LStore)
     const S = window.LStore;
     if (!S) return;
-    
+
     try {
       const cached = S.get();
       const bons = cached.bons || [];
@@ -1346,7 +1346,6 @@ class Component extends DCLogic {
     } catch (error) {
       console.error('Erreur chargement cache:', error);
     }
-  }
   }
 
   async loadBackendData() {
