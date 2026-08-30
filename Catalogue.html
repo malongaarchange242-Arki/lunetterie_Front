@@ -434,11 +434,17 @@ class Component extends DCLogic {
     const localStock = this.db().montures || [];
     const hasToken = !!localStorage.getItem('token');
     const backendStock = Array.isArray(this._backendStock) ? this._backendStock : [];
+    console.log('modelesSrc: hasToken =', hasToken, 'backendStock.length =', backendStock.length, 'localStock.length =', localStock.length);
     const stock = (hasToken ? backendStock : localStock).filter(m => {
       const site = (m.site || 'Stock général');
       const statut = (m.statut || 'stock');
-      return site === 'Stock général' && (statut === 'stock' || statut === 'reserve') && !m.sorti;
+      const passes = site === 'Stock général' && (statut === 'stock' || statut === 'reserve') && !m.sorti;
+      if (!passes) {
+        console.log('modelesSrc: filtered out item:', { marque: m.marque, site, statut, sorti: m.sorti });
+      }
+      return passes;
     });
+    console.log('modelesSrc: After filter, stock.length =', stock.length);
     const map = new Map();
     stock.forEach(m => {
       const key = [m.marque, m.forme, m.type, m.gamme, m.genre].join('|');
@@ -454,7 +460,9 @@ class Component extends DCLogic {
       if (!g.couleurs.has(c)) g.couleurs.set(c, []);
       g.couleurs.get(c).push(m.uid);
     });
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+    const result = Array.from(map.values()).sort((a, b) => b.total - a.total);
+    console.log('modelesSrc: Final result =', result.length, 'groupes');
+    return result;
   }
 
   panierQty(key, couleur) { return this.state.panier[key + '||' + couleur] || 0; }
