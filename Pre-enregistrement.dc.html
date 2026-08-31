@@ -2556,7 +2556,7 @@ class Component extends DCLogic {
           fd.append('kind', kind);
           const data = source.startsWith('data:') ? this.dataUrlToBlob(source) : await fetch(source).then(r => r.blob());
           fd.append('image', data, `${kind}-${Date.now()}.jpg`);
-          const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes/upload-photo`, {
+          const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(caseCode)}/boxes/upload-photo`, {
             method: 'POST',
             headers: this.apiHeaders(),
             body: fd
@@ -2566,7 +2566,7 @@ class Component extends DCLogic {
           uploaded.push({
             id: photo.id || undefined,
             kind,
-            url: payload.data && payload.data.url ? payload.data.url : photo.url || '',
+            url: payload.url || payload.data?.url || photo.url || '',
             src: photo.src || '',
             name: photo.name || undefined
           });
@@ -2611,8 +2611,9 @@ class Component extends DCLogic {
             const createdBox = (createdCase && Array.isArray(createdCase.cartons) && createdCase.cartons.length)
               ? createdCase.cartons[createdCase.cartons.length - 1]
               : null;
-            const uploadedPhotos = createdBox && (s.kPhotos || []).length
-              ? await this.uploadBoxPhotos(cur.code, createdBox.code, (s.kPhotos || []).filter(Boolean))
+            const caseCode = createdCase ? createdCase.code : cur.code;
+            const uploadedPhotos = createdBox && (s.kPhotos || []).length && caseCode
+              ? await this.uploadBoxPhotos(caseCode, createdBox.code, (s.kPhotos || []).filter(Boolean))
               : [];
             if (createdBox && uploadedPhotos.length) {
               const updateRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes/${encodeURIComponent(createdBox.id)}/photos`, {
