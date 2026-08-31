@@ -2257,7 +2257,7 @@ class Component extends DCLogic {
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                barcode: m.uid,
+                barcode: '',
                 reference: m.ref || '',
                 price: Number(cart.prix) || 0,
                 photo_monture_url: m.photoFace || '',
