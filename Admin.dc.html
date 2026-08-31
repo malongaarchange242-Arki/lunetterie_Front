@@ -853,6 +853,39 @@ class Component extends DCLogic {
   }
   fcfa(n) { return (n || 0).toLocaleString('fr-FR') + ' F CFA'; }
   milliers(n) { return Math.round((n || 0) / 1000).toLocaleString('fr-FR') + ' k'; }
+  normalizeSiteName(raw) {
+    const s = String(raw ?? '').trim();
+    if (!s) return 'Stock général';
+    const norm = s.toLowerCase().replace(/\s+/g, ' ').trim();
+    const aliases = {
+      'stock general': 'Stock général',
+      'stock général': 'Stock général',
+      'stock magasin': 'Stock général',
+      'stock magasin (pointe-noire)': 'Stock général',
+      'magasin': 'Stock général',
+      'stock': 'Stock général',
+      'station pointe-noire': 'Pointe-Noire',
+      'pointe-noire': 'Pointe-Noire',
+      'pointe noire': 'Pointe-Noire',
+      'station brazzaville': 'Brazzaville',
+      'brazzaville': 'Brazzaville',
+      'station kinshasa': 'Kinshasa',
+      'kinshasa': 'Kinshasa',
+      'station lubumbashi': 'Lubumbashi',
+      'lubumbashi': 'Lubumbashi',
+      'station kolwezi': 'Kolwezi',
+      'kolwezi': 'Kolwezi'
+    };
+    if (aliases[norm]) return aliases[norm];
+    if (norm.startsWith('station ')) return String(s).replace(/^\s*Station\s+/i, '').trim() || 'Stock général';
+    if (norm.startsWith('stock ')) return 'Stock général';
+    if (norm.includes('pointe')) return 'Pointe-Noire';
+    if (norm.includes('brazzaville')) return 'Brazzaville';
+    if (norm.includes('kinshasa')) return 'Kinshasa';
+    if (norm.includes('lubumbashi')) return 'Lubumbashi';
+    if (norm.includes('kolwezi')) return 'Kolwezi';
+    return s;
+  }
   barcode(seed, h) {
     let s = 0;
     for (let i = 0; i < String(seed).length; i++) s += String(seed).charCodeAt(i) * (i + 3);
@@ -1107,7 +1140,7 @@ class Component extends DCLogic {
           couleur: g.color || '—',
           gamme: g.gamme || 'Toutes',
           genre: g.gender || 'Tous',
-          site: g.station_name || 'Stock général',
+          site: this.normalizeSiteName(g.station_name || g.stationName || 'Stock général'),
           prix: Number(g.price) || 0,
           statut: g.status === 'EN_STOCK_GENERAL' ? 'stock' : (g.status === 'EN_STOCK_SOUS_STATION' ? 'boutique' : (g.status === 'RESERVEE_ENVOI' ? 'transit' : 'stock')),
           valise: g.location_code || '—',

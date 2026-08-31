@@ -1493,7 +1493,7 @@ class Component extends DCLogic {
           gamme: item.gamme || item.mount_type || '—',
           type: item.type || item.mount_type || 'Vue',
           prix: Number(item.price ?? item.prix) || 0,
-          site: item.station_name || 'Stock général',
+          site: this.normalizeSiteName(item.station_name || item.stationName || 'Stock général'),
           emplacement: item.location_code || item.location || '—',
           valise: item.case_code || item.valise_code || item.valise_couleur || item.valise || '—',
           carton: item.box_code || item.location_code || item.carton_code || item.carton || '—',
@@ -1587,6 +1587,39 @@ class Component extends DCLogic {
   }
 
   fcfa(n) { return (n || 0).toLocaleString('fr-FR') + ' F CFA'; }
+  normalizeSiteName(raw) {
+    const s = String(raw ?? '').trim();
+    if (!s) return 'Stock général';
+    const norm = s.toLowerCase().replace(/\s+/g, ' ').trim();
+    const aliases = {
+      'stock general': 'Stock général',
+      'stock général': 'Stock général',
+      'stock magasin': 'Stock général',
+      'stock magasin (pointe-noire)': 'Stock général',
+      'magasin': 'Stock général',
+      'stock': 'Stock général',
+      'station pointe-noire': 'Pointe-Noire',
+      'pointe-noire': 'Pointe-Noire',
+      'pointe noire': 'Pointe-Noire',
+      'station brazzaville': 'Brazzaville',
+      'brazzaville': 'Brazzaville',
+      'station kinshasa': 'Kinshasa',
+      'kinshasa': 'Kinshasa',
+      'station lubumbashi': 'Lubumbashi',
+      'lubumbashi': 'Lubumbashi',
+      'station kolwezi': 'Kolwezi',
+      'kolwezi': 'Kolwezi'
+    };
+    if (aliases[norm]) return aliases[norm];
+    if (norm.startsWith('station ')) return String(s).replace(/^\s*Station\s+/i, '').trim() || 'Stock général';
+    if (norm.startsWith('stock ')) return 'Stock général';
+    if (norm.includes('pointe')) return 'Pointe-Noire';
+    if (norm.includes('brazzaville')) return 'Brazzaville';
+    if (norm.includes('kinshasa')) return 'Kinshasa';
+    if (norm.includes('lubumbashi')) return 'Lubumbashi';
+    if (norm.includes('kolwezi')) return 'Kolwezi';
+    return s;
+  }
   dateFr() {
     const d = new Date();
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
