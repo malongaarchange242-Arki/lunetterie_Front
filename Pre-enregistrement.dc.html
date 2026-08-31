@@ -2404,7 +2404,7 @@ class Component extends DCLogic {
         return 'var(--ink-48)';
       })(),
       createBtnStyle: magentaBtn(false),
-      createValise: () => {
+      createValise: async () => {
         const nb = parseInt(s.fMontures, 10);
         const editing = s.vEditId ? s.valises.find(v => v.id === s.vEditId) : null;
         const budget = editing ? remaining + editing.montures : remaining;
@@ -2424,9 +2424,34 @@ class Component extends DCLogic {
         }
         const id = 'v' + Date.now();
         const code = `${s.fColor.slice(0, 2).toUpperCase()}-VAL-${String(nb)}`;
+        const localCase = { id, couleur: s.fColor.trim(), hex: s.fHex, gamme: s.fGamme, genre: s.fGenre, montures: nb, cartons: [], validated: false, code };
+        const commandCode = active && (active.receptionCode || active.code || active.ref || active.id);
+        if (commandCode) {
+          try {
+            const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(commandCode)}/cases`, {
+              method: 'POST',
+              headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ couleur: s.fColor.trim(), hex: s.fHex, gamme: s.fGamme, genre: s.fGenre, montures: nb })
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload || !payload.success || !payload.data || !payload.data.case) {
+              throw new Error((payload && payload.error) ? payload.error : 'Création de la valise impossible');
+            }
+            const createdCase = payload.data.case;
+            const backendId = createdCase && (createdCase.id ?? createdCase.case_id ?? createdCase.backendId);
+            this.setState(st => ({
+              valises: [...st.valises, { ...localCase, backendId: backendId ? Number(backendId) : undefined }],
+              formOpen: false, curValise: id, fMontures: ''
+            }));
+            this.toast('check', `Valise ${s.fColor} créée`, `${nb.toLocaleString('fr-FR')} montures · enregistrée côté serveur`, 'ok');
+            return;
+          } catch (error) {
+            console.warn('Création backend de valise impossible, fallback local:', error);
+          }
+        }
         this.setState(st => ({
-          valises: [...st.valises, { id, couleur: st.fColor.trim(), hex: st.fHex, gamme: st.fGamme, genre: st.fGenre, montures: nb, cartons: [], validated: false, code }],
-          formOpen: false, fMontures: ''
+          valises: [...st.valises, localCase],
+          formOpen: false, curValise: id, fMontures: ''
         }));
         this.toast('check', `Valise ${s.fColor} créée`, `${nb.toLocaleString('fr-FR')} montures à emballer`, 'ok');
       },
