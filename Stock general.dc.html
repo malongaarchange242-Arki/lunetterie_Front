@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -244,15 +244,16 @@ input::placeholder{color:var(--ink-34)}
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:26px;flex-wrap:wrap;padding-right:238px">
           <button onClick="{{ backToCartons }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 16px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-92)"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:15px"></span>Retour</button>
           <div style="display:inline-flex;align-items:center;gap:10px;padding:11px 18px;border-radius:999px;background:linear-gradient(145deg,var(--srf-92),var(--srf-7));border:1px solid var(--ink-09);font:600 12.5px/1.3 Manrope,sans-serif;white-space:nowrap"><span style="{{ curSwatchStyle }}"></span>Carton {{ kNum }} · Valise {{ curCouleur }}</div>
-          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(242,19,142,.14);border:1px solid rgba(191,33,120,.32);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">�tape 4 � cr�ation des montures</div>
+          <div style="margin-left:auto;padding:11px 18px;border-radius:999px;background:rgba(242,19,142,.14);border:1px solid rgba(191,33,120,.32);font:600 12px/1.3 Manrope,sans-serif;color:var(--ink);white-space:nowrap">Étape 4 · création des montures</div>
         </div>
 
-        <div style="display:grid;grid-template-columns:340px 1fr;gap:22px;align-items:start">
+        <div style="display:grid;grid-template-columns:356px 1fr;gap:22px;align-items:start">
 
-          <div style="padding:24px;border-radius:24px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:0 20px 46px -26px var(--ink-22),inset 0 1px 0 var(--srf-9);position:sticky;top:34px">
+          <div style="position:sticky;top:34px;display:flex;flex-direction:column;gap:16px;max-height:calc(100vh - 68px);overflow-y:auto;padding-right:4px">
+          <div style="padding:24px;border-radius:24px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:0 20px 46px -26px var(--ink-22),inset 0 1px 0 var(--srf-9)">
             <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--info-ink);margin-bottom:12px">FICHE DU CARTON</div>
             <div style="font:600 18px/1.3 Sora,sans-serif;letter-spacing:-.02em;margin-bottom:8px">{{ kGamme }} · {{ kType }}</div>
-            <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:20px;text-wrap:pretty">Renseign� au pr�-enregistrement. Ces valeurs s'appliquent � chaque monture du carton.</div>
+            <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:20px;text-wrap:pretty">Renseigné au pré-enregistrement. Ces valeurs s'appliquent à chaque monture du carton.</div>
 
             <div style="display:flex;flex-direction:column;gap:0;margin-bottom:20px">
               <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--ink-08)"><span style="font:400 12.5px/1.4 Manrope,sans-serif;color:var(--ink-66)">Valise</span><span style="font:600 12.5px/1.4 Manrope,sans-serif">{{ curCouleur }}</span></div>
@@ -261,35 +262,79 @@ input::placeholder{color:var(--ink-34)}
               <div style="display:flex;justify-content:space-between;gap:12px;padding:11px 0"><span style="font:400 12.5px/1.4 Manrope,sans-serif;color:var(--ink-66)">Quantité</span><span style="font:600 12.5px/1.4 'JetBrains Mono',monospace">{{ kQty }} montures</span></div>
             </div>
 
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">FORMES DU CARTON</div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
-              <sc-for list="{{ kFormesList }}" as="f" hint-placeholder-count="2">
-                <span style="{{ f.style }}">{{ f.label }}</span>
-              </sc-for>
-            </div>
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">MARQUES DU CARTON</div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
-              <sc-for list="{{ kMarquesList }}" as="m" hint-placeholder-count="2">
-                <span style="{{ m.style }}">{{ m.label }}</span>
-              </sc-for>
-            </div>
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">COULEURS DU CARTON</div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
-              <sc-for list="{{ kCouleursList }}" as="c" hint-placeholder-count="2">
+            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">CE QUI VARIE DANS LE CARTON</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">
+              <sc-for list="{{ kVarChips }}" as="c" hint-placeholder-count="6">
                 <span style="{{ c.style }}">{{ c.label }}</span>
               </sc-for>
             </div>
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">MATIÈRES DU CARTON</div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">
-              <sc-for list="{{ kMatieresList }}" as="m" hint-placeholder-count="2">
-                <span style="{{ m.style }}">{{ m.label }}</span>
-              </sc-for>
-            </div>
 
-            <div style="padding:14px 14px 11px;border-radius:14px;background:var(--card);border:1px solid var(--ink-1)">
+            <div style="padding:14px 14px 11px;border-radius:14px;background:var(--card);border:1px solid var(--ink-1);margin-bottom:16px">
               <div style="{{ kBarcodeStyle }}"></div>
               <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ink-68);margin-top:8px;text-align:center">{{ kCode }}</div>
             </div>
+
+            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">QR DU CARTON · APPAIRAGE TÉLÉPHONE</div>
+            <div style="display:flex;gap:14px;align-items:flex-start">
+              <div style="flex:none;width:104px;padding:9px;border-radius:12px;background:var(--card);border:1px solid var(--ink-1)">
+                <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:1px">
+                  <sc-for list="{{ kQrBlocks }}" as="b" hint-placeholder-count="144">
+                    <span style="{{ b.style }}"></span>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-64);margin-bottom:10px;text-wrap:pretty">{{ phoneHint }}</div>
+                <button onClick="{{ togglePhone }}" style="{{ phoneBtnStyle }}"><span data-icon="{{ phoneIcon }}" style="display:grid;place-items:center;font-size:14px"></span>{{ phoneLabel }}</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding:22px;border-radius:24px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:0 20px 46px -26px var(--ink-22),inset 0 1px 0 var(--srf-9)">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px">
+              <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--info-ink)">PHOTOS DU CARTON</span>
+              <span style="margin-left:auto;font:600 10.5px/1.4 'JetBrains Mono',monospace;color:var(--ink-66);white-space:nowrap">{{ poolLabel }}</span>
+            </div>
+            <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-64);margin-bottom:14px;text-wrap:pretty">Glissez une photo sur le cadre d'une ligne, ou cliquez la photo puis le cadre. Cliquez une photo posée pour dire si c'est la vue de face ou la vue arrière.</div>
+            <sc-if value="{{ poolVide }}" hint-placeholder-val="{{ true }}">
+              <div style="padding:26px 18px;border-radius:16px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
+                <span data-icon="image-off" style="display:grid;place-items:center;font-size:22px;color:var(--ink-3);margin:0 auto 10px"></span>
+                <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-56);text-wrap:pretty">Aucune photo jointe à ce carton au pré-enregistrement. Les lignes restent enregistrables sans photo.</div>
+              </div>
+            </sc-if>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:9px">
+              <sc-for list="{{ pool }}" as="p" hint-placeholder-count="0">
+                <button draggable="true" onDragStart="{{ p.onDragStart }}" onClick="{{ p.onPick }}" title="{{ p.title }}" style="{{ p.style }}">
+                  <span style="{{ p.imgStyle }}"></span>
+                  <span style="{{ p.badgeStyle }}">{{ p.badge }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="padding:22px;border-radius:24px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:0 20px 46px -26px var(--ink-22),inset 0 1px 0 var(--srf-9)">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px">
+              <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--acc-ink)">RÉFS LUES SUR LES BRANCHES</span>
+              <span style="margin-left:auto;font:600 10.5px/1.4 'JetBrains Mono',monospace;color:var(--ink-66);white-space:nowrap">{{ refPoolLabel }}</span>
+            </div>
+            <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-64);margin-bottom:14px;text-wrap:pretty">Chaque lecture du téléphone tombe ici. Glissez une réf sur la ligne correspondante, ou cliquez-la puis cliquez la ligne. Une fois posée, elle reste modifiable.</div>
+            <sc-if value="{{ refPoolVide }}" hint-placeholder-val="{{ true }}">
+              <div style="padding:22px 18px;border-radius:16px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
+                <span data-icon="scan-barcode" style="display:grid;place-items:center;font-size:20px;color:var(--ink-3);margin:0 auto 9px"></span>
+                <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-56);text-wrap:pretty">{{ refPoolEmptyHint }}</div>
+              </div>
+            </sc-if>
+            <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:13px">
+              <sc-for list="{{ refPool }}" as="r" hint-placeholder-count="0">
+                <button draggable="true" onDragStart="{{ r.onDragStart }}" onClick="{{ r.onPick }}" title="{{ r.title }}" style="{{ r.style }}">
+                  <span data-icon="{{ r.icon }}" style="display:grid;place-items:center;font-size:13px;flex:none"></span>
+                  <span style="flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.ref }}</span>
+                  <span style="font:500 9.5px/1.3 Manrope,sans-serif;opacity:.7;white-space:nowrap">{{ r.meta }}</span>
+                </button>
+              </sc-for>
+            </div>
+            <button onClick="{{ readRef }}" style="{{ readRefStyle }}"><span data-icon="smartphone" style="display:grid;place-items:center;font-size:15px"></span>{{ readRefLabel }}</button>
+          </div>
           </div>
 
           <div>
@@ -304,92 +349,76 @@ input::placeholder{color:var(--ink-34)}
               </div>
             </div>
 
-            <sc-if value="{{ cartonOuvert }}" hint-placeholder-val="{{ true }}">
-              <div style="padding:26px;border-radius:24px;background:linear-gradient(150deg,var(--srf-94),var(--srf-7));border:1px solid var(--ink-09);backdrop-filter:blur(24px);box-shadow:0 20px 46px -26px var(--ink-2),inset 0 1px 0 var(--srf-9);margin-bottom:20px">
-                <div style="font:600 16px/1.3 Sora,sans-serif;letter-spacing:-.015em;margin-bottom:6px">Nouvelle monture</div>
-                <div style="font:400 12.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:22px">L'identifiant est généré à la validation, il ne se saisit pas.</div>
+            <div style="padding:14px 18px;border-radius:16px;background:rgba(95,194,217,.1);border:1px solid rgba(51,135,156,.22);font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-72);margin-bottom:16px;text-wrap:pretty">
+              Une ligne par monture attendue dans le carton. Scannez le QR du carton pour y connecter votre téléphone : les réfs qu'il lit tombent dans la réserve, à glisser sur la bonne ligne comme les photos. Complétez ce qui varie dans ce carton, puis enregistrez — l'identifiant unique s'ajoute et la ligne passe au vert.
+            </div>
 
-                <div style="display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px">
-                  <div>
-                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">FORME</div>
-                    <select value="{{ fForme }}" onChange="{{ setForme }}" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer">
-                      <sc-for list="{{ formeOpts }}" as="o" hint-placeholder-count="2">
-                        <option value="{{ o.value }}">{{ o.label }}</option>
-                      </sc-for>
-                    </select>
-                  </div>
-                  <div>
-                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">MARQUE</div>
-                    <select value="{{ fMarque }}" onChange="{{ setMarque }}" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer">
-                      <sc-for list="{{ marqueOpts }}" as="o" hint-placeholder-count="2">
-                        <option value="{{ o.value }}">{{ o.label }}</option>
-                      </sc-for>
-                    </select>
-                  </div>
-                </div>
+            <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">
+              <sc-for list="{{ lignes }}" as="l" hint-placeholder-count="4">
+                <div style="{{ l.rowStyle }}">
+                  <div style="{{ l.numStyle }}">{{ l.n }}</div>
 
-                <div style="display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px">
-                  <div>
-                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">COULEUR</div>
-                    <select value="{{ fCouleur }}" onChange="{{ setCouleur }}" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer">
-                      <sc-for list="{{ couleurOpts }}" as="o" hint-placeholder-count="2">
-                        <option value="{{ o.value }}">{{ o.label }}</option>
-                      </sc-for>
-                    </select>
+                  <div onDragOver="{{ l.onDragOver }}" onDrop="{{ l.onDrop }}" onClick="{{ l.onWellClick }}" style="{{ l.wellStyle }}">
+                    <sc-for list="{{ l.photos }}" as="ph" hint-placeholder-count="0">
+                      <button onClick="{{ ph.onClick }}" title="{{ ph.title }}" style="{{ ph.style }}">
+                        <span style="{{ ph.imgStyle }}"></span>
+                        <span style="{{ ph.tagStyle }}">{{ ph.tag }}</span>
+                      </button>
+                    </sc-for>
+                    <sc-if value="{{ l.wellEmpty }}" hint-placeholder-val="{{ true }}">
+                      <span data-icon="image-plus" style="display:grid;place-items:center;font-size:17px;color:var(--ink-3)"></span>
+                    </sc-if>
+                    <sc-if value="{{ l.menuOpen }}" hint-placeholder-val="{{ false }}">
+                      <div style="position:absolute;top:calc(100% + 7px);left:0;z-index:30;width:180px;padding:8px;border-radius:14px;background:var(--srf-96);border:1px solid var(--ink-12);backdrop-filter:blur(30px);box-shadow:0 20px 44px -20px var(--ink-3);display:flex;flex-direction:column;gap:5px">
+                        <sc-for list="{{ l.menuOpts }}" as="o" hint-placeholder-count="3">
+                          <button onClick="{{ o.onClick }}" style="{{ o.style }}"><span data-icon="{{ o.icon }}" style="display:grid;place-items:center;font-size:13px"></span>{{ o.label }}</button>
+                        </sc-for>
+                      </div>
+                    </sc-if>
                   </div>
-                  <div>
-                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">MATIÈRE</div>
-                    <select value="{{ fMatiere }}" onChange="{{ setMatiere }}" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer">
-                      <sc-for list="{{ matiereOpts }}" as="o" hint-placeholder-count="2">
-                        <option value="{{ o.value }}">{{ o.label }}</option>
-                      </sc-for>
-                    </select>
-                  </div>
-                </div>
 
-                <!-- ? MODIFICATION 2 : Section PHOTO remplac�e -->
-                <div style="display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px">
-                  <div>
-                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">R�F�RENCE DE LA MONTURE</div>
-                    <input value="{{ fRef }}" onChange="{{ setRef }}" placeholder="Tapez ou scannez la r�f�rence depuis la photo de la branche" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:500 15px/1.3 'JetBrains Mono',monospace;letter-spacing:.04em;cursor:text">
+                  <div style="flex:none;width:150px;min-width:0">
+                    <div style="font:600 11.5px/1.35 Manrope,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.emplacement }}</div>
+                    <div style="font:400 10.5px/1.45 Manrope,sans-serif;color:var(--ink-64);margin-top:4px;text-wrap:pretty">{{ l.fixe }}</div>
                   </div>
-                </div>
 
-                <div style="display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px">
-                  <div>
-                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:10px">NOMBRE DE COPIES</div>
-                    <input type="text" inputmode="numeric" pattern="[0-9]*" value="{{ quantiteACreer }}" onChange="{{ setQuantiteACreer }}" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-86);border:1.5px solid var(--ink-12);color:var(--ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer">
-                  </div>
-                </div>
-
-                <!-- Photos re�ues du mobile -->
-                <sc-if value="{{ photosRecues }}" hint-placeholder-val="{{ false }}">
-                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
-                    <div style="border-radius:12px;overflow:hidden;background:var(--srf-86);border:1px solid var(--ink-12)">
-                      <sc-if value="{{ photoPreview }}" hint-placeholder-val="{{ false }}">
-                        <img bindSrc="{{ photoPreview }}" alt="Photo monture" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
-                        <div style="padding:8px;text-align:center;font:500 11px/1.3 Manrope,sans-serif;color:var(--ok-ink)">? Monture</div>
-                      </sc-if>
+                  <sc-for list="{{ l.selects }}" as="sel" hint-placeholder-count="0">
+                    <div style="flex:none;width:130px">
+                      <div style="font:500 8.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-6);margin-bottom:6px">{{ sel.label }}</div>
+                      <select value="{{ sel.value }}" onChange="{{ sel.onChange }}" style="{{ sel.style }}">
+                        <sc-for list="{{ sel.opts }}" as="o" hint-placeholder-count="2">
+                          <option value="{{ o.value }}">{{ o.label }}</option>
+                        </sc-for>
+                      </select>
                     </div>
-                    <div style="border-radius:12px;overflow:hidden;background:var(--srf-86);border:1px solid var(--ink-12)">
-                      <sc-if value="{{ branchPhotoData }}" hint-placeholder-val="{{ false }}">
-                        <img bindSrc="{{ branchPhotoData }}" alt="Photo branche" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
-                        <div style="padding:8px;text-align:center;font:500 11px/1.3 Manrope,sans-serif;color:var(--ok-ink)">? Branche</div>
-                      </sc-if>
-                    </div>
-                    <div style="border-radius:12px;overflow:hidden;background:var(--srf-86);border:1px solid var(--ink-12)">
-                      <sc-if value="{{ backPhotoData }}" hint-placeholder-val="{{ false }}">
-                        <img bindSrc="{{ backPhotoData }}" alt="Photo arri�re" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
-                        <div style="padding:8px;text-align:center;font:500 11px/1.3 Manrope,sans-serif;color:var(--ok-ink)">? Arri�re</div>
-                      </sc-if>
-                    </div>
-                  </div>
-                </sc-if>
+                  </sc-for>
 
-                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                  <button onClick="{{ createMonture }}" style="{{ createStyle }}"><span data-icon="fingerprint" style="display:grid;place-items:center;font-size:17px"></span>{{ createButtonLabel }}</button>
-                  <span style="font:400 12px/1.5 Manrope,sans-serif;color:{{ hintColor }};flex:1;min-width:180px;text-wrap:pretty">{{ formHint }}</span>
+                  <div style="flex:1;min-width:184px">
+                    <div style="font:500 8.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-6);margin-bottom:6px">RÉF · LUE PAR LE TÉLÉPHONE</div>
+                    <sc-if value="{{ l.hasRef }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ l.refBoxStyle }}">
+                        <input value="{{ l.ref }}" onChange="{{ l.onRefEdit }}" onClick="{{ l.stop }}" title="Corrigez la réf si la lecture est fausse" style="{{ l.refInputStyle }}">
+                        <button onClick="{{ l.onClearRef }}" title="Détacher la référence" style="{{ l.clearStyle }}"><span data-icon="x" style="display:grid;place-items:center;font-size:11px"></span></button>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ l.noRef }}" hint-placeholder-val="{{ true }}">
+                      <div onDragOver="{{ l.onRefDragOver }}" onDrop="{{ l.onRefDrop }}" onClick="{{ l.onRefClick }}" style="{{ l.refDropStyle }}">
+                        <span data-icon="{{ l.refDropIcon }}" style="display:grid;place-items:center;font-size:14px;flex:none"></span>{{ l.refDropLabel }}
+                      </div>
+                    </sc-if>
+                    <div style="{{ l.insightStyle }}">{{ l.insight }}</div>
+                  </div>
+
+                  <div style="flex:none;width:152px;display:flex;flex-direction:column;gap:7px">
+                    <div style="{{ l.uidStyle }}">{{ l.uidLabel }}</div>
+                  </div>
                 </div>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{ showGlobalSave }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;justify-content:flex-end;margin:8px 0 18px">
+                <button onClick="{{ saveAllLines }}" style="{{ saveAllStyle }}"><span data-icon="save" style="display:grid;place-items:center;font-size:14px"></span>Enregistrer</button>
               </div>
             </sc-if>
 
@@ -404,33 +433,6 @@ input::placeholder{color:var(--ink-34)}
               </div>
             </sc-if>
 
-            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-66);margin-bottom:14px">DERNIÈRES MONTURES CRÉÉES</div>
-            <sc-if value="{{ aucuneSaisie }}" hint-placeholder-val="{{ true }}">
-              <div style="padding:40px 28px;border-radius:22px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
-                <span data-icon="glasses" style="display:grid;place-items:center;font-size:28px;color:var(--ink-3);margin:0 auto 14px"></span>
-                <div style="font:600 14px/1.3 Sora,sans-serif;color:var(--ink-62);margin-bottom:7px">Aucune monture enregistrée</div>
-                <div style="font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-56)">Saisissez la référence de la première monture du carton.</div>
-              </div>
-            </sc-if>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:14px">
-              <sc-for list="{{ saisies }}" as="m" hint-placeholder-count="0">
-                <div style="{{ m.cardStyle }}">
-                  <div style="display:flex;gap:14px;align-items:flex-start">
-                    <div style="{{ m.photoStyle }}"><span data-icon="glasses" style="display:grid;place-items:center;font-size:20px;color:var(--srf-9)"></span></div>
-                    <div style="flex:1;min-width:0">
-                      <div style="font:600 13px/1.3 'JetBrains Mono',monospace;margin-bottom:7px">{{ m.ref }}</div>
-                      <div style="font:500 11px/1.4 Manrope,sans-serif;color:var(--ink-66);margin-bottom:9px">{{ m.marque }} · {{ m.forme }}<br>{{ m.couleur }} · {{ m.matiere }}</div>
-                      <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--info-ink);word-break:break-all;margin-bottom:10px">{{ m.uid }}</div>
-                      <span style="{{ m.exemplairesStyle }}">{{ m.exemplaires }}</span>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:7px;flex:none">
-                      <button onClick="{{ m.onDuplicate }}" title="Dupliquer cette monture" style="width:28px;height:28px;border-radius:9px;border:1px solid rgba(51,135,156,.3);background:rgba(95,194,217,.14);color:var(--info-ink);cursor:pointer;display:grid;place-items:center;transition:all .22s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.28)"><span data-icon="copy" style="display:grid;place-items:center;font-size:13px"></span></button>
-                      <button onClick="{{ m.onDelete }}" title="Supprimer" style="width:28px;height:28px;border-radius:9px;border:1px solid rgba(242,19,142,.26);background:rgba(242,19,142,.08);color:var(--acc-ink);cursor:pointer;display:grid;place-items:center;transition:all .22s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(242,19,142,.18)"><span data-icon="trash-2" style="display:grid;place-items:center;font-size:13px"></span></button>
-                    </div>
-                  </div>
-                </div>
-              </sc-for>
-            </div>
           </div>
         </div>
       </div>
@@ -1106,6 +1108,7 @@ class Component extends DCLogic {
     cmdId: null, valId: null, cartId: null,
     fForme: '', fMarque: '', fCouleur: '', fMatiere: '', fRef: '', photo: false, photoPreview: null, photoData: null, branchPhotoData: null, backPhotoData: null, captureLabel: 'Prendre une photo', quantiteACreer: 1,
     scanning: false, helpOpen: false, toast: null,
+    lignes: {}, pickPhoto: null, viewMenu: null, phoneCarton: null, refRead: {}, pickRef: null,
     manualCode: '', phonePaired: false, pairing: false, pairCode: '', pairQrUrl: '', scanTarget: null, userName: 'Utilisateur',
     stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes', compoOnglet: 'Marque',
     magasin: 'Pointe-Noire', origFilter: 'tous', demId: null, sorties: 0,
@@ -1124,15 +1127,15 @@ class Component extends DCLogic {
           {
             id: 'v1', couleur: 'Rouge', gamme: 'Moyenne gamme', genre: 'Homme', montures: 60, scanned: false,
             cartons: [
-              { id: 'k1', qty: 30, code: 'RO-0060-001', gamme: 'Moyenne gamme', type: 'Vue', prix: 90000, formes: { Aviator: 15, Ronde: 15 }, marques: ['Okulo', 'Milano'], couleurs: ['Noir', 'Écaille', 'Bleu nuit'], matieres: ['Acétate', 'Acétate + métal'], saisies: [] },
-              { id: 'k2', qty: 30, code: 'RO-0060-002', gamme: 'Moyenne gamme', type: 'Solaire', prix: 90000, formes: { 'Œil de chat': 30 }, marques: ['Coline'], couleurs: ['Rose transparent', 'Guépard'], matieres: ['Acétate'], saisies: [] }
+              { id: 'k1', qty: 30, code: 'CTN-0001', gamme: 'Moyenne gamme', type: 'Vue', prix: 90000, formes: { Aviator: 15, Ronde: 15 }, marques: ['Okulo', 'Milano'], couleurs: ['Noir', 'Écaille', 'Bleu nuit'], matieres: ['Acétate', 'Acétate + métal'], saisies: [] },
+              { id: 'k2', qty: 30, code: 'CTN-0002', gamme: 'Moyenne gamme', type: 'Solaire', prix: 90000, formes: { 'Œil de chat': 30 }, marques: ['Coline'], couleurs: ['Rose transparent', 'Guépard'], matieres: ['Acétate'], saisies: [] }
             ]
           },
           {
             id: 'v2', couleur: 'Noire', gamme: 'Classique', genre: 'Femme', montures: 40, scanned: false,
             cartons: [
-              { id: 'k3', qty: 20, code: 'NO-0040-001', gamme: 'Classique', type: 'Vue', prix: 70000, formes: { Papillon: 20 }, marques: ['Jane Austen'], couleurs: ['Cristal', 'Havane'], matieres: ['Acétate', 'Métal'], saisies: [] },
-              { id: 'k4', qty: 20, code: 'NO-0040-002', gamme: 'Classique', type: 'Lecture', prix: 70000, formes: { Rectangulaire: 12, Browline: 8 }, marques: ['Level', 'Lapo'], couleurs: ['Noir', 'Doré', 'Bicolore noir-doré'], matieres: ['Métal', 'Titane'], saisies: [] }
+              { id: 'k3', qty: 20, code: 'CTN-0003', gamme: 'Classique', type: 'Vue', prix: 70000, formes: { Papillon: 20 }, marques: ['Jane Austen'], couleurs: ['Cristal', 'Havane'], matieres: ['Acétate', 'Métal'], saisies: [] },
+              { id: 'k4', qty: 20, code: 'CTN-0004', gamme: 'Classique', type: 'Lecture', prix: 70000, formes: { Rectangulaire: 12, Browline: 8 }, marques: ['Level', 'Lapo'], couleurs: ['Noir', 'Doré', 'Bicolore noir-doré'], matieres: ['Métal', 'Titane'], saisies: [] }
             ]
           }
         ]
@@ -1276,7 +1279,14 @@ class Component extends DCLogic {
               const result = analysisPayload.data || analysisPayload;
               const reference = String(result.reference || '').trim().toUpperCase();
               if (reference) {
-                this.setState({ fRef: reference });
+                // Update both the form field and the reference pool
+                const s = this.state;
+                const currentCartId = s.cartId;
+                const currentReadN = (s.refRead || {})[currentCartId] || 0;
+                this.setState(st => ({
+                  fRef: reference,
+                  refRead: { ...(st.refRead || {}), [currentCartId]: currentReadN + 1 }
+                }));
                 this.toast('scan-text', 'R�f�rence lue', reference, 'ok');
               } else {
                 this.toast('triangle-alert', 'R�f�rence non d�tect�e', 'Saisissez-la manuellement.', 'warn');
@@ -1307,6 +1317,51 @@ class Component extends DCLogic {
   async startCartonScan(cmdId, valId, cartId, code) {
     this.setState({ screen: 'scan', scanTarget: { cmdId, valId, cartId, kind: 'carton', code: String(code).toUpperCase() } });
     await this.startMobilePairing();
+  }
+  parseJsonField(value, fallback) {
+    if (value == null || value === '') return fallback;
+    if (typeof value !== 'string') return value;
+    try { return JSON.parse(value); } catch (error) { return fallback; }
+  }
+
+  normalizeCartonPhotos(photos) {
+    const asArray = value => {
+      if (Array.isArray(value)) return value;
+      if (!value || typeof value !== 'object') return [];
+      if (Array.isArray(value.photos)) return value.photos;
+      if (Array.isArray(value.items)) return value.items;
+      return [value];
+    };
+
+    const parsed = this.parseJsonField(photos, []);
+    const list = asArray(parsed).length ? asArray(parsed) : asArray(photos);
+    return list
+      .map((p, i) => {
+        const raw = (typeof p === 'string') ? p : (p && {
+          src: p.src,
+          url: p.url,
+          photo_url: p.photo_url,
+          image_url: p.image_url,
+          data_url: p.data_url,
+          path: p.path,
+          public_url: p.public_url,
+          href: p.href,
+          link: p.link
+        });
+        const rawSrc = (typeof raw === 'string')
+          ? raw
+          : (raw && (raw.src || raw.url || raw.photo_url || raw.image_url || raw.data_url || raw.path || raw.public_url || raw.href || raw.link || ''));
+        const src = String(rawSrc || '').trim();
+        if (!src) return null;
+        const normalized = this.photoUrl(src);
+        return {
+          id: String((p && (p.id || p.photo_id || p.storage_path || p.path || p.name || p.filename)) || `photo-${i}-${normalized.slice(-24)}`),
+          src: normalized,
+          kind: String((p && (p.kind || p.type || '')) || '').toLowerCase(),
+          name: (p && (p.name || p.filename || p.file_name)) || `Photo ${i + 1}`
+        };
+      })
+      .filter(Boolean);
   }
 
   async loadBackendData() {
@@ -1379,6 +1434,7 @@ class Component extends DCLogic {
               marques: box.marques || [],
               couleurs: box.couleurs || [],
               matieres: box.matieres || [],
+              photos: this.normalizeCartonPhotos(box.photos || box.images || box.photo_urls || box.image_urls),
               saisies: []
             }))
           }))
@@ -1551,6 +1607,23 @@ class Component extends DCLogic {
     return `height:${h}px;width:100%;background-image:linear-gradient(90deg,${bars.join(',')});background-size:${x}px 100%;background-repeat:repeat-x`;
   }
 
+  refFor(l) {
+    const mk = String(l.marque || 'XX').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'XX';
+    const seed = String(l.marque || '') + '|' + String(l.forme || '');
+    let h = 0;
+    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 9000;
+    const cc = String(l.couleur || 'XX').replace(/[^A-Za-zÀ-ÿ]/g, '').slice(0, 2).toUpperCase() || 'XX';
+    return mk + '-' + (1000 + h) + '-' + cc;
+  }
+
+  qrBlocks(code) {
+    return Array.from({ length: 144 }, (_, i) => {
+      let x = (i * 2654435761 + String(code || 'x').charCodeAt(0) * 7919) % 4294967296;
+      x = (x ^ (x >> 15)) % 100;
+      return { style: `width:100%;aspect-ratio:1;background:${x > 46 ? 'var(--ink)' : 'transparent'};border-radius:1px` };
+    });
+  }
+
   toast(icon, title, sub, tone) {
     this.setState({ toast: { icon, title, sub, tone } });
     clearTimeout(this.tt);
@@ -1686,6 +1759,78 @@ class Component extends DCLogic {
       console.error('Erreur vérification carton:', error);
       this.toast('triangle-alert', 'Carton refusé', error.message || 'Impossible de vérifier ce carton.', 'warn');
     }
+  }
+
+  cartonRefs(cart) {
+    if (!cart) return [];
+    const formes = Object.keys(cart.formes || {});
+    const marques = cart.marques || [];
+    const couleurs = cart.couleurs || [];
+    const out = [];
+    let i = 0;
+    formes.forEach(f => {
+      const n = cart.formes[f] || 0;
+      for (let j = 0; j < n; j++) {
+        const item = {
+          marque: marques.length ? marques[i % marques.length] : '',
+          forme: f,
+          couleur: couleurs.length ? couleurs[i % couleurs.length] : ''
+        };
+        out.push({
+          id: cart.id + '-r' + i,
+          ref: this.refFor(item),
+          meta: [item.marque, f, item.couleur].filter(Boolean).join(' · ')
+        });
+        i++;
+      }
+    });
+    return out;
+  }
+
+  buildLignes(cart) {
+    if (!cart) return [];
+    const one = a => (a && a.length === 1) ? a[0] : '';
+    const formes = Object.keys(cart.formes || {});
+    const saved = (cart.saisies || []).map((m, i) => ({
+      key: 'S' + (m.id || i), saved: true, ref: m.ref || '', uid: m.uid || '',
+      couleur: m.couleur || '', forme: m.forme || '', matiere: m.matiere || '', marque: m.marque || '',
+      refId: m.refId || '', photos: (m.photos || []).slice()
+    }));
+    const rest = Array.from({ length: Math.max(0, (cart.qty || 0) - saved.length) }, (_, i) => ({
+      key: 'N' + i, saved: false, ref: '', uid: '', refId: '',
+      couleur: one(cart.couleurs), forme: formes.length === 1 ? formes[0] : '',
+      matiere: one(cart.matieres), marque: one(cart.marques), photos: []
+    }));
+    return saved.concat(rest);
+  }
+
+  refParts(ref) {
+    const t = String(ref || '').trim().toUpperCase();
+    const seg = t.split(/[^A-Z0-9]+/).filter(Boolean);
+    if (seg.length < 2) return { base: t, suffix: '' };
+    return { base: seg.slice(0, -1).join('-'), suffix: seg[seg.length - 1] };
+  }
+
+  allMontures() {
+    const out = [];
+    ((window.LStore ? window.LStore.get().arrivees : []) || []).forEach(c =>
+      (c.valises || []).forEach(v => (v.cartons || []).forEach(k => (k.saisies || []).forEach(m => out.push(m)))));
+    return out;
+  }
+
+  refInsight(ref, couleur) {
+    const t = String(ref || '').trim();
+    if (t.length < 3) return null;
+    const p = this.refParts(t);
+    const all = this.allMontures();
+    const same = all.filter(m => String(m.ref || '').trim().toUpperCase() === t.toUpperCase() && (!couleur || m.couleur === couleur));
+    const variantes = Array.from(new Set(all
+      .filter(m => this.refParts(m.ref).base === p.base)
+      .map(m => m.couleur)
+      .filter(c => c && c !== couleur)));
+    if (same.length) return { kind: 'exemplaire', text: `${same.length + 1}ᵉ exemplaire du même modèle${couleur ? ' en ' + couleur : ''}` };
+    if (variantes.length) return { kind: 'variante', text: `Modèle déjà en stock en ${variantes.join(', ')}` };
+    return { kind: 'neuf', text: 'Nouveau modèle pour le stock' };
   }
 
   // ✅ MODIFICATION 3 : Méthodes de capture photo
@@ -1897,6 +2042,251 @@ class Component extends DCLogic {
     const canCreate = cart && !plein && refTrim.length >= 3 && s.fForme && s.fMarque && s.fCouleur && s.fMatiere && !dejaVu;
 
     const photoImages = ['linear-gradient(140deg,#7C8AA6,#3D4A63)', 'linear-gradient(140deg,#A68B7C,#63503D)', 'linear-gradient(140deg,#8B7CA6,#4A3D63)', 'linear-gradient(140deg,#7CA69B,#3D635A)'];
+
+    // --- Computed properties for saisie screen (pool, lignes, refPool) ---
+    const saisieVals = (() => {
+      if (!cart) return {
+        lignes: [], pool: [], poolVide: true, poolLabel: '—', kVarChips: [],
+        refPool: [], refPoolVide: true, refPoolLabel: '—', refPoolEmptyHint: '',
+        kQrBlocks: [], phoneHint: '', phoneIcon: 'qr-code', phoneLabel: '', phoneBtnStyle: '',
+        togglePhone: () => {}, readRef: () => {}, readRefLabel: '', readRefStyle: ''
+      };
+
+      const chipF = 'padding:4px 10px;border-radius:999px;white-space:nowrap;font:600 10.5px/1.4 Manrope,sans-serif;background:rgba(95,194,217,.18);border:1px solid rgba(51,135,156,.3);color:var(--info-ink)';
+      const chipMq = 'padding:4px 10px;border-radius:999px;white-space:nowrap;font:600 10.5px/1.4 Manrope,sans-serif;background:var(--srf-7);border:1px solid var(--ink-12);color:var(--ink-72)';
+      const chipC = 'padding:4px 10px;border-radius:999px;white-space:nowrap;font:600 10.5px/1.4 Manrope,sans-serif;background:rgba(242,19,142,.1);border:1px solid rgba(191,33,120,.26);color:var(--acc-ink)';
+      const chipMa = 'padding:4px 10px;border-radius:999px;white-space:nowrap;font:600 10.5px/1.4 Manrope,sans-serif;background:rgba(245,165,36,.14);border:1px solid rgba(166,106,5,.3);color:var(--warn-ink)';
+      const formes = Object.keys(cart.formes || {});
+      const kVarChips = formes.map(f => ({ label: f, style: chipF }))
+        .concat((cart.marques || []).map(m => ({ label: m, style: chipMq })))
+        .concat((cart.couleurs || []).map(c => ({ label: c, style: chipC })))
+        .concat((cart.matieres || []).map(m => ({ label: m, style: chipMa })));
+
+      const photos = cart.photos || [];
+      const lignesState = (s.lignes || {})[cart.id] || this.buildLignes(cart);
+
+      const setLigne = (key, patch) => this.setState(st => {
+        const curL = (st.lignes || {})[cart.id] || lignesState;
+        return { lignes: { ...(st.lignes || {}), [cart.id]: curL.map(l => l.key === key ? { ...l, ...patch } : l) } };
+      });
+
+      const pool = photos.map((p, i) => {
+        const picked = s.pickPhoto === p.id;
+        return {
+          imgStyle: `position:absolute;inset:0;display:block;background:var(--srf-7) center/cover no-repeat url("${p.src}")`,
+          title: picked ? 'Sélectionnée — cliquez le cadre d\'une ligne' : 'Glissez-la sur une ligne',
+          style: `position:relative;aspect-ratio:1;padding:0;overflow:hidden;border-radius:13px;background:var(--srf-7);cursor:grab;border:1.5px solid ${picked ? 'var(--acc-strong)' : 'var(--ink-12)'};opacity:1;box-shadow:${picked ? '0 0 0 3px rgba(242,19,142,.22)' : 'none'};transition:all .22s ${ease}`,
+          badge: String(i + 1),
+          badgeStyle: `position:absolute;top:4px;left:4px;padding:1px 5px;border-radius:999px;font:600 8.5px/1.5 'JetBrains Mono',monospace;color:#fff;background:rgba(0,0,0,.52)`,
+          onDragStart: e => { try { e.dataTransfer.setData('text/plain', p.id); } catch (err) {} this.dragPhoto = p.id; },
+          onPick: () => this.setState(st => ({ pickPhoto: st.pickPhoto === p.id ? null : p.id }))
+        };
+      });
+
+      const need = photos.length > 0 ? 2 : 0;
+      const lineReady = line => {
+        const refT = (line.ref || '').trim();
+        return refT.length >= 3 && ((line.photos || []).length >= need);
+      };
+
+      const connected = s.phoneCarton === cart.id;
+      const allRefs = this.cartonRefs(cart);
+      const readN = Math.min(allRefs.length, (s.refRead || {})[cart.id] || 0);
+      const readRefs = allRefs.slice(0, readN);
+
+      const refPool = readRefs.map(r => {
+        const picked = s.pickRef === r.id;
+        return {
+          ref: r.ref, meta: r.meta,
+          icon: 'scan-barcode',
+          title: picked ? 'Sélectionnée — cliquez le champ réf d\'une ligne' : 'Glissez-la sur une ligne',
+          style: `display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;border-radius:12px;font:600 11.5px/1.3 'JetBrains Mono',monospace;cursor:grab;transition:all .22s ${ease};opacity:1;border:1.5px solid ${picked ? 'var(--acc-strong)' : 'var(--ink-12)'};background:var(--srf-8);color:var(--ink-72);box-shadow:${picked ? '0 0 0 3px rgba(242,19,142,.2)' : 'none'}`,
+          onDragStart: e => { try { e.dataTransfer.setData('text/plain', r.id); } catch (err) {} this.dragRef = r.id; },
+          onPick: () => this.setState(st => ({ pickRef: st.pickRef === r.id ? null : r.id }))
+        };
+      });
+
+      const lignes = lignesState.map((l, idx) => ({
+        n: String(idx + 1).padStart(2, '0'),
+        rowStyle: `display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;padding:14px 16px;border-radius:20px;backdrop-filter:blur(20px);transition:all .3s ${ease};box-shadow:inset 0 1px 0 var(--srf-9);border:1px solid ${l.saved ? 'rgba(30,143,99,.34)' : 'var(--ink-09)'};background:${l.saved ? 'rgba(52,201,141,.11)' : glass}`,
+        numStyle: `flex:none;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;align-self:center;font:600 11px/1 'JetBrains Mono',monospace;background:${l.saved ? 'rgba(52,201,141,.2)' : 'var(--srf-7)'};border:1px solid ${l.saved ? 'rgba(30,143,99,.34)' : 'var(--ink-12)'};color:${l.saved ? 'var(--ok-ink)' : 'var(--ink-6)'}`,
+        emplacement: `Valise ${val ? val.couleur : '—'} · ${cart.code}`,
+        fixe: [val ? val.genre : '', cart.gamme, cart.type].filter(Boolean).join(' · '),
+        selects: [],
+        photos: (l.photos || []).map((ph, pi) => ({
+          imgStyle: `position:absolute;inset:0;display:block;background:var(--srf-7) center/cover no-repeat url("${ph.src}")`,
+          title: (ph.view === 'face' ? 'Vue de face' : 'Vue arrière') + ' — cliquez pour changer',
+          style: `position:absolute;top:2px;left:${pi * 28}px;z-index:${pi + 2};width:52px;height:52px;padding:0;overflow:hidden;border-radius:12px;background:var(--srf-8);cursor:pointer;box-shadow:0 8px 18px -10px var(--ink-3);border:1.5px solid ${ph.view === 'face' ? 'rgba(51,135,156,.65)' : 'rgba(191,33,120,.6)'}`,
+          tag: ph.view === 'face' ? 'F' : 'A',
+          tagStyle: `position:absolute;bottom:2px;right:2px;width:14px;height:14px;border-radius:5px;display:grid;place-items:center;font:600 8px/1 'JetBrains Mono',monospace;color:#fff;background:${ph.view === 'face' ? '#33879C' : '#BF2178'}`,
+          onClick: e => { e.stopPropagation(); }
+        })),
+        wellEmpty: (l.photos || []).length === 0,
+        wellStyle: `position:relative;flex:none;width:86px;height:56px;border-radius:14px;display:grid;place-items:center;cursor:${s.pickPhoto ? 'copy' : 'default'};border:1.5px dashed ${(l.photos || []).length ? 'transparent' : 'var(--ink-16)'};background:${(l.photos || []).length ? 'transparent' : 'var(--srf-5)'}`,
+        onDragOver: e => e.preventDefault(),
+        onDrop: e => {
+          e.preventDefault();
+          const draggedPhotoId = this.dragPhoto;
+          if (!draggedPhotoId) return;
+          const draggedPhoto = (cart.photos || []).find(p => p.id === draggedPhotoId);
+          if (!draggedPhoto) return;
+          const isAlreadyInThisLine = (l.photos || []).some(p => p.id === draggedPhotoId);
+          if (isAlreadyInThisLine) return;
+          setLigne(l.key, { photos: [...(l.photos || []), { ...draggedPhoto, view: 'face' }] });
+          this.dragPhoto = null;
+        },
+        onWellClick: () => {
+          const pickedPhotoId = s.pickPhoto;
+          if (!pickedPhotoId) return;
+          const pickedPhoto = (cart.photos || []).find(p => p.id === pickedPhotoId);
+          if (!pickedPhoto) return;
+          const isAlreadyInThisLine = (l.photos || []).some(p => p.id === pickedPhotoId);
+          if (isAlreadyInThisLine) return;
+          setLigne(l.key, { photos: [...(l.photos || []), { ...pickedPhoto, view: 'face' }] });
+          this.setState({ pickPhoto: null });
+        },
+        menuOpen: false,
+        menuOpts: [],
+        ref: l.ref || '',
+        hasRef: (l.ref || '').trim().length > 0,
+        noRef: (l.ref || '').trim().length === 0,
+        refBoxStyle: `display:flex;align-items:center;gap:8px;width:100%;padding:10px 10px 10px 13px;border-radius:12px;color:var(--ink);font:500 13px/1.3 'JetBrains Mono',monospace;letter-spacing:.04em;background:${l.saved ? 'var(--srf-6)' : 'var(--srf-86)'};border:1.5px solid ${l.saved ? 'rgba(30,143,99,.34)' : 'var(--ink-12)'}`,
+        refInputStyle: `flex:1;min-width:0;padding:0;border:0;outline:none;background:transparent;color:var(--ink);font:500 13px/1.3 'JetBrains Mono',monospace;letter-spacing:.04em;cursor:${l.saved ? 'default' : 'text'}`,
+        refDropIcon: 'scan-barcode',
+        refDropLabel: 'Glissez une réf lue',
+        refDropStyle: `display:flex;align-items:center;gap:9px;width:100%;padding:11px 13px;border-radius:12px;font:600 11.5px/1.3 Manrope,sans-serif;border:1.5px dashed var(--ink-16);background:var(--srf-5);color:var(--ink-5)`,
+        onRefDragOver: e => e.preventDefault(),
+        onRefDrop: e => {
+          e.preventDefault();
+          const draggedRefId = this.dragRef;
+          if (!draggedRefId) return;
+          const draggedRef = readRefs.find(r => r.id === draggedRefId);
+          if (!draggedRef) return;
+          if (l.refId === draggedRefId) return;
+          setLigne(l.key, { ref: draggedRef.ref, refId: draggedRef.id });
+          this.dragRef = null;
+        },
+        onRefClick: () => {
+          const pickedRefId = s.pickRef;
+          if (!pickedRefId) return;
+          const pickedRef = readRefs.find(r => r.id === pickedRefId);
+          if (!pickedRef) return;
+          if (l.refId === pickedRefId) return;
+          setLigne(l.key, { ref: pickedRef.ref, refId: pickedRef.id });
+          this.setState({ pickRef: null });
+        },
+        insight: '',
+        insightStyle: `margin-top:6px;min-height:14px;font:500 10px/1.4 Manrope,sans-serif;color:transparent`,
+        uidLabel: l.saved ? l.uid : 'ID à l\'enregistrement',
+        uidStyle: `font:500 9.5px/1.4 'JetBrains Mono',monospace;letter-spacing:.06em;word-break:break-all;color:${l.saved ? 'var(--ok-ink)' : 'var(--ink-5)'}`,
+        saveLabel: l.saved ? 'Rouvrir' : 'Enregistrer',
+        saveIcon: l.saved ? 'undo-2' : 'lock',
+        saveStyle: `display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px 14px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-66);color:var(--ink-36);font:600 11.5px/1.3 Manrope,sans-serif;cursor:not-allowed`,
+        onSave: () => {}
+      }));
+
+      const saveAllLines = () => {
+        const pending = lignesState.filter(line => !line.saved && lineReady(line));
+        if (!pending.length) return;
+
+        const existingSaisies = cart.saisies || [];
+        const added = pending.map((line, offset) => {
+          const refT = (line.ref || '').trim();
+          const seq = existingSaisies.length + offset + 1;
+          const uid = `${cart.code}-${String(seq).padStart(3, '0')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+          const face = (line.photos || []).find(p => p.view === 'face');
+          const back = (line.photos || []).find(p => p.view === 'arriere');
+          return {
+            id: 'm' + Date.now() + offset + Math.random().toString(36).slice(2, 5),
+            ref: refT,
+            refId: line.refId || '',
+            forme: line.forme,
+            marque: line.marque,
+            couleur: line.couleur,
+            matiere: line.matiere,
+            uid,
+            photos: (line.photos || []).slice(),
+            photo: photoImages[seq % photoImages.length],
+            photoFace: face ? face.src : '',
+            photoDos: back ? back.src : ''
+          };
+        });
+
+        const savedByKey = {};
+        added.forEach((m, i) => { savedByKey[pending[i].key] = m.uid; });
+
+        this.setArrivees(list => list.map(c => c.id !== cmd.id ? c : {
+          ...c,
+          valises: c.valises.map(v => v.id !== val.id ? v : {
+            ...v,
+            cartons: v.cartons.map(k => k.id !== cart.id ? k : { ...k, saisies: [...(k.saisies || []), ...added] })
+          })
+        }));
+
+        pending.forEach(line => {
+          setLigne(line.key, { saved: true, uid: savedByKey[line.key], ref: (line.ref || '').trim() });
+        });
+
+        const S = window.LStore;
+        if (S) {
+          const monturesToStore = added.map((m, i) => ({
+            uid: m.uid,
+            ref: m.ref,
+            marque: pending[i].marque,
+            forme: pending[i].forme,
+            couleur: pending[i].couleur,
+            matiere: pending[i].matiere,
+            gamme: cart.gamme,
+            type: cart.type,
+            genre: val.genre,
+            prix: cart.prix,
+            valise: val.couleur,
+            carton: cart.code,
+            site: 'Stock général',
+            statut: 'stock',
+            photo: (existingSaisies.length + i) % 4,
+            photoFace: m.photoFace || '',
+            photoDos: m.photoDos || ''
+          }));
+          S.set({ montures: [...monturesToStore, ...(S.get().montures || [])] });
+          pending.forEach((line, i) => {
+            S.mouvement({
+              sens: 'entree',
+              de: 'Pré-enregistrement',
+              vers: 'Stock général',
+              ref: cmd.ref,
+              motif: 'Enregistrement',
+              qty: 1,
+              valise: val.couleur,
+              carton: cart.code,
+              monture: added[i].ref
+            });
+          });
+        }
+
+        this.toast('fingerprint', `${pending.length} ligne${pending.length > 1 ? 's' : ''} enregistrée${pending.length > 1 ? 's' : ''}`, `${pending.length} monture${pending.length > 1 ? 's' : ''} ajoutée${pending.length > 1 ? 's' : ''} au stock`, 'ok');
+      };
+
+      return {
+        lignes, pool, kVarChips, refPool,
+        poolVide: photos.length === 0,
+        poolLabel: photos.length ? `${photos.length} / ${photos.length}` : `0 / ${(cart.qty || 0) * 2}`,
+        refPoolVide: readRefs.length === 0,
+        refPoolLabel: `${readRefs.length}`,
+        refPoolEmptyHint: connected ? 'Activez la lecture sur votre téléphone pour que les réfs tombent ici' : 'Connectez votre téléphone d\'abord.',
+        kQrBlocks: this.qrBlocks(cart.code),
+        phoneHint: connected ? 'Téléphone associé · appuyez pour déconnecter' : 'Connectez votre téléphone pour lire les réfs des branches',
+        phoneIcon: connected ? 'smartphone-check' : 'qr-code',
+        phoneLabel: connected ? 'Déconnecter' : 'Associer le téléphone',
+        phoneBtnStyle: connected
+          ? `display:inline-flex;align-items:center;gap:9px;padding:10px 14px;border-radius:12px;border:1px solid rgba(30,143,99,.3);background:rgba(52,201,141,.14);color:var(--ok-ink);font:600 11.5px/1.3 Manrope,sans-serif;cursor:pointer`
+          : `display:inline-flex;align-items:center;gap:9px;padding:10px 14px;border-radius:12px;border:1px solid rgba(51,135,156,.3);background:rgba(95,194,217,.14);color:var(--info-ink);font:600 11.5px/1.3 Manrope,sans-serif;cursor:pointer`,
+        togglePhone: () => this.setState(st => connected ? { phoneCarton: null, pickRef: null } : { phoneCarton: cart.id, pickRef: null }),
+        readRef: () => this.setState(st => ({ refRead: { ...(st.refRead || {}), [cart.id]: readN + 1 } })),
+        readRefLabel: 'Lire les 5 prochaines références',
+        readRefStyle: `display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--ink-12);background:var(--srf-8);color:var(--ink-68);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer`
+      };
+    })();
 
     const estStockGeneral = m => m && (m.statut === 'stock' || m.statut === 'EN_STOCK_GENERAL');
     const dispoStock = (DB.montures || []).filter(estStockGeneral);
@@ -2353,6 +2743,7 @@ class Component extends DCLogic {
       cartonOuvert: !!cart && !plein,
       cartonPlein: !!plein,
       aucuneSaisie: saisiesCount === 0,
+      ...saisieVals,
 
       formeOpts: kFormes.map(f => ({ label: f, value: f })),
       marqueOpts: cart ? cart.marques.map(m => ({ label: m, value: m })) : [],
@@ -2853,6 +3244,7 @@ class Component extends DCLogic {
 </script>
 </body>
 </html>
+
 
 
 

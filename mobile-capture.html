@@ -227,7 +227,7 @@ small {
     <div class="card">
       <h1>📱 Lecteur mobile</h1>
       <p>Scannez le QR code du poste pour démarrer</p>
-      
+
       <div id="login-status" class="status info" style="display:none;">
         <span id="login-status-text">Attente d'entrée...</span>
       </div>
@@ -243,10 +243,10 @@ small {
       <div id="manual-entry-panel" style="display:none; margin-top: 12px;">
         <label class="section-label"><span class="step-indicator">1</span>Session (depuis QR code)</label>
         <input id="session-code" type="text" placeholder="Code de session" autocomplete="off" style="opacity: 0.9;">
-        
+
         <label class="section-label" style="margin-top: 20px;">Mot de passe (optionnel)</label>
         <input id="password" type="password" placeholder="Mot de passe si requis">
-        
+
         <button class="btn-primary" id="btn-login">Connecter au PC</button>
       </div>
 
@@ -254,153 +254,80 @@ small {
     </div>
   </div>
 
-  <!-- ÉCRAN 2 : CAPTURE MONTURE -->
-  <div id="screen-capture-monture" class="screen">
+  <!-- ÉCRAN 2 : CAPTURE BRANCHE -->
+  <div id="screen-capture-branch" class="screen">
     <div class="card">
-      <h1>Photo de face</h1>
-      <p>Capturez la monture de face</p>
-      
-      <div id="monture-status" class="status info" style="display:none;">
-        <span id="monture-status-text">Prêt</span>
+      <h1>Photo de la branche</h1>
+      <p>Capturez la branche avec la référence lisible</p>
+
+      <div id="branche-status" class="status info" style="display:none;">
+        <span id="branche-status-text">Prêt</span>
       </div>
-      
-      <label class="section-label"><span class="step-indicator">2</span>Monture</label>
-      
+
+      <label class="section-label"><span class="step-indicator">2</span>Branche</label>
+
       <div class="video-container">
-        <video id="video-monture" playsinline muted autoplay></video>
+        <video id="video-branch" playsinline muted autoplay></video>
         <div class="video-overlay"></div>
       </div>
-      
-      <!-- Canvas caché pour la capture -->
-      <canvas id="capture-canvas-monture" class="capture-canvas"></canvas>
-      
-      <button class="btn-primary" id="btn-capture-monture">📸 Capturer</button>
-      <small>Positionnez la monture de face. La meilleure qualité garantit une lecture correcte.</small>
-      
-      <div id="monture-preview" style="margin-top: 16px; display: none;">
-        <img id="monture-preview-img" style="width: 100%; border-radius: 12px; max-height: 300px; object-fit: cover;">
+
+      <canvas id="capture-canvas-branch" class="capture-canvas"></canvas>
+
+      <button class="btn-primary" id="btn-capture-branche">📸 Capturer</button>
+      <small>Cadrez la branche pour que la référence soit bien lisible et nette.</small>
+
+      <div id="branche-preview" style="margin-top: 16px; display: none;">
+        <img id="branche-preview-img" style="width: 100%; border-radius: 12px; max-height: 300px; object-fit: cover;">
       </div>
-      
-      <button class="btn-secondary" id="btn-next-branche">Suivant → Branche</button>
+
       <button class="btn-back" id="btn-back-login">← Retour</button>
     </div>
   </div>
 
-  <!-- ÉCRAN 3 : CAPTURE BRANCHE -->
-  <div id="screen-capture-branche" class="screen">
-    <div class="card">
-      <h1>Photo de la branche</h1>
-      <p>Capturez la branche avec la référence lisible</p>
-      
-      <div id="branche-status" class="status info" style="display:none;">
-        <span id="branche-status-text">Prêt</span>
-      </div>
-      
-      <label class="section-label"><span class="step-indicator">3</span>Branche</label>
-      
-      <div class="video-container">
-        <video id="video-branche" playsinline muted autoplay></video>
-        <div class="video-overlay"></div>
-      </div>
-      
-      <canvas id="capture-canvas-branche" class="capture-canvas"></canvas>
-      
-      <button class="btn-primary" id="btn-capture-branche">📸 Capturer</button>
-      <small>Cadrez la branche pour que la référence soit bien lisible et nette.</small>
-      
-      <div id="branche-preview" style="margin-top: 16px; display: none;">
-        <img id="branche-preview-img" style="width: 100%; border-radius: 12px; max-height: 300px; object-fit: cover;">
-      </div>
-      
-      <button class="btn-secondary" id="btn-next-arriere">Suivant → Arrière</button>
-      <button class="btn-back" id="btn-back-monture">← Retour</button>
-    </div>
-  </div>
-
-  <!-- ÉCRAN 4 : CAPTURE ARRIÈRE -->
-  <div id="screen-capture-arriere" class="screen">
-    <div class="card">
-      <h1>Photo arrière</h1>
-      <p>Capturez le dos de la monture pour compléter le dossier</p>
-      
-      <div id="arriere-status" class="status info" style="display:none;">
-        <span id="arriere-status-text">Prêt</span>
-      </div>
-      
-      <label class="section-label"><span class="step-indicator">4</span>Arrière</label>
-      
-      <div class="video-container">
-        <video id="video-arriere" playsinline muted autoplay></video>
-        <div class="video-overlay"></div>
-      </div>
-      
-      <canvas id="capture-canvas-arriere" class="capture-canvas"></canvas>
-      
-      <button class="btn-primary" id="btn-capture-arriere">📸 Capturer</button>
-      <small>Le dos de la monture est capturé afin d'avoir un dossier complet pour le stock.</small>
-      
-      <div id="arriere-preview" style="margin-top: 16px; display: none;">
-        <img id="arriere-preview-img" style="width: 100%; border-radius: 12px; max-height: 300px; object-fit: cover;">
-      </div>
-      
-      <p style="text-align: center; margin-top: 16px; color: #7a7e8a; font-size: 13px;">
-        <strong>L'envoi des 3 photos se fera automatiquement</strong> après la capture 📤
-      </p>
-      
-      <button class="btn-secondary" id="btn-send-all" style="display:none;">✓ Envoyer au PC</button>
-      <button class="btn-back" id="btn-back-branche">← Retour</button>
-    </div>
-  </div>
-
-  <!-- ÉCRAN 5 : RÉSULTATS -->
+  <!-- ÉCRAN 3 : RÉSULTATS -->
   <div id="screen-results" class="screen">
     <div class="card">
       <h1>Envoi réussi ✓</h1>
-      <p>Les 3 photos ont été envoyées au poste PC</p>
-      
+      <p>La photo de branche a été envoyée au poste PC</p>
+
       <div id="results-status" class="status ok" style="display:none;">
         <span id="results-status-text">Succès !</span>
       </div>
-      
+
       <p style="text-align: center; margin-top: 24px; color: #7a7e8a; line-height: 1.6;">
-        <strong>Les 3 photos sont en cours de traitement au poste PC.</strong><br><br>
+        <strong>La photo est en cours de traitement au poste PC.</strong><br><br>
         La référence sera lue automatiquement depuis la branche et s'affichera dans la page Stock Général.<br><br>
-        <strong style="color: #5fc2d9;">Vous pouvez continuer à capturer d'autres montures.</strong>
+        <strong style="color: #5fc2d9;">Vous pouvez capturer une autre branche.</strong>
       </p>
-      
-      <button class="btn-secondary" id="btn-next-capture">Capturer une autre monture</button>
+
+      <button class="btn-secondary" id="btn-next-capture">Capturer une autre branche</button>
       <button class="btn-back" id="btn-logout">Déconnexion</button>
     </div>
   </div>
 </main>
 
 <script>
-// === STATE ===
 const state = {
   screen: 'login',
   sessionId: null,
   sessionToken: null,
-  montureBlobData: null,
   brancheBlobData: null,
-  arriereBlobData: null,
   apiBase: 'https://api-lunetterie.universearch.com/api/v1/inventory/mobile-capture',
   qrStream: null,
   qrDetector: null,
   qrScanAnimation: null,
   cameraStreams: {
-    monture: null,
-    branche: null,
-    arriere: null
+    branch: null,
+    qr: null
   }
 };
 
-// === INIT ===
 const initFromURL = () => {
   const hash = new URLSearchParams(location.hash.slice(1));
   const query = new URLSearchParams(location.search);
   const sessionId = hash.get('session') || query.get('session');
   const token = hash.get('token') || query.get('token');
-  
+
   if (sessionId && token) {
     state.sessionId = sessionId;
     state.sessionToken = token;
@@ -409,9 +336,8 @@ const initFromURL = () => {
   return false;
 };
 
-// === UI HELPERS ===
 const showScreen = (screenName) => {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
   document.getElementById(`screen-${screenName}`).classList.add('active');
   state.screen = screenName;
 };
@@ -423,25 +349,21 @@ const showStatus = (elementId, message, type = 'info') => {
   document.getElementById(`${elementId}-text`).textContent = message;
 };
 
-const hideStatus = (elementId) => {
-  document.getElementById(elementId).style.display = 'none';
-};
-
-// === CAMERA FLOW ===
 const startCamera = async (videoId) => {
   try {
-    // Arrêter toute caméra existante
-    if (state.cameraStreams[videoId]) {
-      state.cameraStreams[videoId].getTracks().forEach(track => track.stop());
-      state.cameraStreams[videoId] = null;
+    const camKey = videoId === 'video-branch' ? 'branch' : 'qr';
+    if (state.cameraStreams[camKey]) {
+      state.cameraStreams[camKey].getTracks().forEach(track => track.stop());
+      state.cameraStreams[camKey] = null;
     }
-    
+
     const video = document.getElementById(videoId);
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
       audio: false
     });
-    state.cameraStreams[videoId] = stream;
+
+    state.cameraStreams[camKey] = stream;
     video.srcObject = stream;
     await video.play();
     return true;
@@ -452,45 +374,41 @@ const startCamera = async (videoId) => {
 };
 
 const stopCamera = (videoId) => {
+  const camKey = videoId === 'video-branch' ? 'branch' : 'qr';
   const video = document.getElementById(videoId);
-  if (video.srcObject) {
+
+  if (video && video.srcObject) {
     video.srcObject.getTracks().forEach(track => track.stop());
     video.srcObject = null;
   }
-  if (state.cameraStreams[videoId]) {
-    state.cameraStreams[videoId] = null;
+
+  if (state.cameraStreams[camKey]) {
+    state.cameraStreams[camKey] = null;
   }
 };
 
-// === FONCTION DE CAPTURE UNIVERSELLE ===
 const captureFromVideo = (videoId, canvasId, previewImgId, stateKey, statusId) => {
   try {
     const video = document.getElementById(videoId);
     const canvas = document.getElementById(canvasId);
-    
+
     if (!video.srcObject || !video.videoWidth || !video.videoHeight) {
       showStatus(statusId, 'La caméra n\'est pas prête', 'err');
       return false;
     }
-    
-    // Dimensions du canvas
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    
-    // Capturer l'image du flux vidéo
+
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    // Convertir en data URL (qualité JPEG 92%)
+
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-    
-    // Stocker dans le state
     state[stateKey] = dataUrl;
-    
-    // Afficher l'aperçu
+
     document.getElementById(previewImgId).src = dataUrl;
     document.getElementById(previewImgId.replace('-img', '')).style.display = 'block';
-    
+
     showStatus(statusId, '✓ Photo capturée', 'ok');
     return true;
   } catch (error) {
@@ -500,32 +418,31 @@ const captureFromVideo = (videoId, canvasId, previewImgId, stateKey, statusId) =
   }
 };
 
-// === LOGIN FLOW ===
 const initConnection = async () => {
   if (!state.sessionId || !state.sessionToken) {
     showStatus('login-status', 'Code de session invalide. Scannez le QR code depuis le PC.', 'err');
     return;
   }
-  
+
   try {
     showStatus('login-status', 'Connexion au poste PC...', 'info');
-    
+
     const response = await fetch(
       `${state.apiBase}/sessions/${encodeURIComponent(state.sessionId)}/connect?token=${encodeURIComponent(state.sessionToken)}`,
       { method: 'POST' }
     );
-    
+
     const data = await response.json();
-    
+
     if (!response.ok || !data.success) {
       showStatus('login-status', data.error || 'Connexion échouée', 'err');
       return;
     }
-    
+
     showStatus('login-status', '✓ Connecté au poste PC', 'ok');
     setTimeout(() => {
-      showScreen('capture-monture');
-      startCamera('video-monture');
+      showScreen('capture-branch');
+      startCamera('video-branch');
     }, 600);
   } catch (error) {
     showStatus('login-status', 'Erreur : ' + error.message, 'err');
@@ -564,18 +481,19 @@ const stopQrScan = () => {
     cancelAnimationFrame(state.qrScanAnimation);
     state.qrScanAnimation = null;
   }
+
   if (state.qrStream) {
     state.qrStream.getTracks().forEach(track => track.stop());
     state.qrStream = null;
   }
+
   const video = document.getElementById('video-qr');
-  if (video) {
-    video.srcObject = null;
-  }
+  if (video) video.srcObject = null;
 };
 
 const startQrScan = async () => {
   const video = document.getElementById('video-qr');
+
   if (!('BarcodeDetector' in window)) {
     showStatus('login-status', 'Le scan QR n\'est pas supporté sur cet appareil. Utilisez la saisie manuelle.', 'info');
     document.getElementById('manual-entry-panel').style.display = 'block';
@@ -588,6 +506,7 @@ const startQrScan = async () => {
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
       audio: false
     });
+
     state.qrStream = stream;
     video.srcObject = stream;
     await video.play();
@@ -616,6 +535,7 @@ const startQrScan = async () => {
       } catch (error) {
         console.warn('Scan QR non valide:', error);
       }
+
       state.qrScanAnimation = requestAnimationFrame(detectLoop);
     };
 
@@ -633,155 +553,81 @@ document.getElementById('btn-manual-entry').addEventListener('click', () => {
   showStatus('login-status', 'Saisie manuelle activée', 'info');
 });
 
-// === CAPTURE MONTURE ===
-document.getElementById('btn-capture-monture').addEventListener('click', () => {
-  captureFromVideo(
-    'video-monture',
-    'capture-canvas-monture',
-    'monture-preview-img',
-    'montureBlobData',
-    'monture-status'
-  );
-});
-
-document.getElementById('btn-next-branche').addEventListener('click', () => {
-  if (!state.montureBlobData) {
-    showStatus('monture-status', 'Capturez d\'abord la photo', 'err');
+const sendBranchPhoto = async () => {
+  if (!state.sessionId || !state.sessionToken || !state.brancheBlobData) {
+    showStatus('branche-status', 'Aucune photo de branche à envoyer.', 'err');
     return;
   }
-  stopCamera('video-monture');
-  showScreen('capture-branche');
-  startCamera('video-branche');
-});
 
-document.getElementById('btn-back-login').addEventListener('click', () => {
-  stopCamera('video-monture');
-  showScreen('login');
-});
+  try {
+    showStatus('branche-status', 'Envoi de la photo de branche au poste PC...', 'info');
 
-// === CAPTURE BRANCHE ===
+    const formData = new FormData();
+    formData.append('image', await dataUrlToBlob(state.brancheBlobData), 'branche.jpg');
+
+    const response = await fetch(
+      `${state.apiBase}/sessions/${encodeURIComponent(state.sessionId)}/photo?kind=branche&token=${encodeURIComponent(state.sessionToken)}`,
+      { method: 'POST', body: formData }
+    );
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.success === false) {
+      throw new Error(payload.error || 'Envoi photo branche échoué');
+    }
+
+    stopCamera('video-branch');
+    showScreen('results');
+    showStatus('results-status', '✓ La photo de branche a bien été envoyée au poste PC', 'ok');
+  } catch (error) {
+    showStatus('branche-status', 'Erreur : ' + error.message, 'err');
+  }
+};
+
 document.getElementById('btn-capture-branche').addEventListener('click', () => {
-  captureFromVideo(
-    'video-branche',
-    'capture-canvas-branche',
+  const success = captureFromVideo(
+    'video-branch',
+    'capture-canvas-branch',
     'branche-preview-img',
     'brancheBlobData',
     'branche-status'
   );
-});
 
-document.getElementById('btn-next-arriere').addEventListener('click', () => {
-  if (!state.brancheBlobData) {
-    showStatus('branche-status', 'Capturez d\'abord la photo de la branche', 'err');
-    return;
-  }
-  stopCamera('video-branche');
-  showScreen('capture-arriere');
-  startCamera('video-arriere');
-});
-
-document.getElementById('btn-back-monture').addEventListener('click', () => {
-  stopCamera('video-branche');
-  document.getElementById('branche-preview').style.display = 'none';
-  showScreen('capture-monture');
-  // Relancer la caméra monture si nécessaire
-  if (!document.getElementById('video-monture').srcObject) {
-    startCamera('video-monture');
-  }
-});
-
-// === CAPTURE ARRIÈRE ===
-document.getElementById('btn-capture-arriere').addEventListener('click', () => {
-  const success = captureFromVideo(
-    'video-arriere',
-    'capture-canvas-arriere',
-    'arriere-preview-img',
-    'arriereBlobData',
-    'arriere-status'
-  );
   if (success) {
-    showStatus('arriere-status', '✓ Photo arrière capturée - Envoi automatique...', 'info');
-    setTimeout(() => sendAllPhotosToPC(), 800);
+    setTimeout(() => sendBranchPhoto(), 500);
   }
 });
 
-const uploadSinglePhoto = async (kind, dataUrl, filename) => {
-  const formData = new FormData();
-  formData.append('image', await dataUrlToBlob(dataUrl), filename);
-  const response = await fetch(
-    `${state.apiBase}/sessions/${encodeURIComponent(state.sessionId)}/photo?kind=${encodeURIComponent(kind)}&token=${encodeURIComponent(state.sessionToken)}`,
-    { method: 'POST', body: formData }
-  );
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.success === false) {
-    throw new Error(payload.error || `Envoi photo ${kind} échoué`);
-  }
-};
-
-const sendAllPhotosToPC = async () => {
-  if (!state.montureBlobData || !state.brancheBlobData || !state.arriereBlobData) {
-    showStatus('arriere-status', 'Les 3 photos sont nécessaires avant l\'envoi.', 'err');
-    return;
-  }
-  try {
-    showStatus('arriere-status', 'Envoi des 3 photos au poste PC...', 'info');
-    await uploadSinglePhoto('monture', state.montureBlobData, 'monture.jpg');
-    await uploadSinglePhoto('branche', state.brancheBlobData, 'branche.jpg');
-    await uploadSinglePhoto('arriere', state.arriereBlobData, 'arriere.jpg');
-
-    stopCamera('video-arriere');
-    showScreen('results');
-    showStatus('results-status', '✓ Les 3 photos ont été envoyées au poste PC - La référence s\'affichera automatiquement', 'ok');
-  } catch (error) {
-    showStatus('arriere-status', 'Erreur : ' + error.message, 'err');
-  }
-};
-
-document.getElementById('btn-send-all').addEventListener('click', sendAllPhotosToPC);
-
-document.getElementById('btn-back-branche').addEventListener('click', () => {
-  stopCamera('video-arriere');
-  document.getElementById('arriere-preview').style.display = 'none';
-  showScreen('capture-branche');
-  // Relancer la caméra branche si nécessaire
-  if (!document.getElementById('video-branche').srcObject) {
-    startCamera('video-branche');
-  }
+document.getElementById('btn-back-login').addEventListener('click', () => {
+  stopCamera('video-branch');
+  showScreen('login');
 });
 
-// === RESULTS FLOW ===
 document.getElementById('btn-next-capture').addEventListener('click', () => {
-  state.montureBlobData = null;
   state.brancheBlobData = null;
-  state.arriereBlobData = null;
-  document.getElementById('monture-preview').style.display = 'none';
   document.getElementById('branche-preview').style.display = 'none';
-  document.getElementById('arriere-preview').style.display = 'none';
-  showScreen('capture-monture');
-  startCamera('video-monture');
+  showScreen('capture-branch');
+  startCamera('video-branch');
 });
 
 document.getElementById('btn-logout').addEventListener('click', () => {
   state.sessionId = null;
   state.sessionToken = null;
-  state.montureBlobData = null;
   state.brancheBlobData = null;
-  state.arriereBlobData = null;
   document.getElementById('session-code').value = '';
   document.getElementById('password').value = '';
-  // Arrêter toutes les caméras
-  Object.keys(state.cameraStreams).forEach(key => {
+
+  Object.keys(state.cameraStreams).forEach((key) => {
     if (state.cameraStreams[key]) {
       state.cameraStreams[key].getTracks().forEach(track => track.stop());
       state.cameraStreams[key] = null;
     }
   });
+
   localStorage.removeItem('token');
   localStorage.removeItem('user');
   window.location.href = 'index.html';
 });
 
-// === HELPERS ===
 const dataUrlToBlob = (dataUrl) => {
   return new Promise((resolve) => {
     const parts = dataUrl.split(',');
@@ -793,7 +639,6 @@ const dataUrlToBlob = (dataUrl) => {
   });
 };
 
-// === AUTO-INIT ===
 window.addEventListener('load', () => {
   const hasParams = initFromURL();
 
@@ -815,4 +660,5 @@ window.addEventListener('load', () => {
 });
 </script>
 </body>
+</html>
 </html>

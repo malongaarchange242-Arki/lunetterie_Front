@@ -61,7 +61,7 @@ select::-ms-expand{display:none}
     <div style="display:flex;align-items:center;gap:14px;padding:14px 15px;border-radius:20px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);margin-bottom:26px">
       <div style="{{ avatarStyle }}"><span data-icon="clipboard-list" style="display:grid;place-items:center;font-size:22px;color:#fff"></span></div>
       <div style="min-width:0">
-        <div style="font:600 12.5px/1.25 Manrope,sans-serif;margin-bottom:5px">Karim B.</div>
+        <div style="font:600 12.5px/1.25 Manrope,sans-serif;margin-bottom:5px">{{ currentUserDisplayName }}</div>
         <div style="font:500 9px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink)">PRÉ-ENREGISTREMENT</div>
       </div>
     </div>
@@ -1236,31 +1236,50 @@ class Component extends DCLogic {
     fColor: 'Rouge', fGamme: 'Moyenne gamme', fGenre: 'Homme', fMontures: '',
     loading: false,
     commandes: [],
-    valises: []
+    valises: [],
+    currentUser: null
   };
 
   store() { return window.LStore ? window.LStore.get() : {}; }
+
+  // ===== CHARGEMENT DE L'UTILISATEUR COURANT =====
+  async loadCurrentUser() {
+    try {
+      const response = await fetch(`${this.apiBaseUrl()}/api/v1/auth/me`, {
+        method: 'GET',
+        headers: this.apiHeaders()
+      });
+      const data = await response.json();
+      const user = data.user || data.data || null;
+      if (user && user.first_name) {
+        this.setState({ currentUser: user });
+      }
+    } catch (error) {
+      console.error('Erreur chargement utilisateur:', error);
+    }
+  }
 
   // ===== CHARGEMENT DES COMMANDES DEPUIS L'API =====
   async loadCommands() {
     try {
       this.setState({ loading: true });
-      
-      console.log('🔍 Chargement des commandes depuis:', `${this.apiBaseUrl()}/api/v1/inventory/reception-commands`);
-      
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands`, {
-        method: 'GET',
-        headers: this.apiHeaders()
-      });
-      
-      console.log('📡 Statut de la réponse:', response.status);
-      
-      const payload = await response.json().catch(() => ({}));
-      
-      console.log('📦 Payload reçu:', payload);
-      console.log('📦 Type de payload:', typeof payload);
-      
-      // Gérer différents formats de réponse, dont { data: { commands: [...] } }
+
+      const [baseResponse, shipmentResponse] = await Promise.all([
+        fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands`, {
+          method: 'GET',
+          headers: this.apiHeaders()
+        }),
+        fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/shipment`, {
+          method: 'GET',
+          headers: this.apiHeaders()
+        })
+      ]);
+
+      const [basePayload, shipmentPayload] = await Promise.all([
+        baseResponse.json().catch(() => ({})),
+        shipmentResponse.json().catch(() => ({}))
+      ]);
+
       const getCommandsArray = source => {
         if (!source) return null;
         if (Array.isArray(source)) return source;
@@ -1271,42 +1290,39 @@ class Component extends DCLogic {
         }
         return null;
       };
-      let commandsData = getCommandsArray(payload) || getCommandsArray(payload && payload.data) || [];
 
-      if (commandsData.length) {
-        console.log(`✅ Format reconnu: ${commandsData.length} commande(s)`);
+      let baseData = getCommandsArray(basePayload) || getCommandsArray(basePayload && basePayload.data) || [];
+      let shipmentData = getCommandsArray(shipmentPayload) || getCommandsArray(shipmentPayload && shipmentPayload.data) || [];
+
+      if (!baseData.length && basePayload && typeof basePayload === 'object' && basePayload.id) {
+        baseData = [basePayload];
       }
-      // Si la réponse est un objet unique
-      else if (payload && typeof payload === 'object' && payload.id) {
-        console.log('✅ Format: objet unique');
-        commandsData = [payload];
+      if (!shipmentData.length && shipmentPayload && typeof shipmentPayload === 'object' && shipmentPayload.id) {
+        shipmentData = [shipmentPayload];
       }
-      // Fallback sur les données locales
-      else {
-        console.warn('⚠️ Format de réponse inconnu, fallback sur les données locales');
+
+      const dedupeByKey = (items) => {
+        const map = new Map();
+        for (const item of items || []) {
+          const key = item.id || item.code || item.reference || item.ref || JSON.stringify(item);
+          if (!map.has(key)) map.set(key, item);
+        }
+        return Array.from(map.values());
+      };
+
+      const mergedData = dedupeByKey([...baseData, ...shipmentData]);
+
+      if (!mergedData.length) {
         const SS = window.LStore;
         if (SS) {
           const localData = SS.get().bons || [];
-          this.setState({ 
-            commandes: localData,
-            loading: false 
-          });
+          this.setState({ commandes: localData, loading: false });
           return localData;
         }
-        throw new Error('Format de réponse inattendu: ' + JSON.stringify(payload).slice(0, 200));
-      }
-      if (!commandsData.length) {
-        console.log('ℹ️ Aucune commande trouvée');
-        this.setState({ 
-          commandes: [],
-          loading: false 
-        });
+        this.setState({ commandes: [], loading: false });
         return [];
       }
-      
-      console.log(`✅ ${commandsData.length} commandes trouvées`);
-      
-      // Transformation des données de l'API vers le format attendu
+
       const normalizeCommandStatus = value => {
         const raw = String(value || '').trim().toLowerCase();
         if (['active', 'pending', 'open', 'created', 'new', 'attente', 'en_attente'].includes(raw)) return 'attente';
@@ -1314,8 +1330,11 @@ class Component extends DCLogic {
         if (['arrived', 'received', 'completed', 'complete', 'done', 'arrive', 'arrivé', 'arrivee', 'arrivée'].includes(raw)) return 'arrive';
         return raw || 'attente';
       };
-      const commands = commandsData.map(cmd => {
+
+      const commands = mergedData.map(cmd => {
         const dateValue = cmd.created_at || cmd.date || cmd.createdAt;
+        const shipmentStatus = cmd.shipment_status || cmd.shipmentStatus || '';
+        const normalizedStatus = normalizeCommandStatus(shipmentStatus || cmd.status || cmd.statut);
         return {
           id: cmd.id || cmd.code || cmd._id || 'id-' + Math.random().toString(36).slice(2, 8),
           ref: cmd.reference || cmd.code || cmd.ref || 'BC-XXXX',
@@ -1326,19 +1345,15 @@ class Component extends DCLogic {
           transport: cmd.shipping_method || cmd.transport || cmd.shipping || '--',
           barcodeNum: cmd.barcode || cmd.barcodeNum || cmd.code || '---',
           scanned: Boolean(cmd.scanned || cmd.activated_at || cmd.activatedAt),
-          statut: normalizeCommandStatus(cmd.status || cmd.statut),
+          statut: normalizedStatus,
           ship: cmd.ship || null,
-          receptionCode: cmd.reception_code || cmd.code || cmd.id
+          receptionCode: cmd.reception_code || cmd.code || cmd.id,
+          shipmentStatus: shipmentStatus || undefined
         };
       });
-      console.log('📋 Commandes transformées:', commands);
-      
-      this.setState({ 
-        commandes: commands,
-        loading: false 
-      });
-      
-      // Synchroniser avec le store local
+
+      this.setState({ commandes: commands, loading: false });
+
       const SS = window.LStore;
       if (SS) {
         const existing = SS.get().bons || [];
@@ -1348,24 +1363,18 @@ class Component extends DCLogic {
         });
         SS.set({ bons: merged });
       }
-      
+
       return commands;
     } catch (error) {
       console.error('❌ Erreur chargement commandes:', error);
       this.setState({ loading: false });
-      
-      // Fallback sur les données locales
       const SS = window.LStore;
       if (SS) {
         const localData = SS.get().bons || [];
-        this.setState({ 
-          commandes: localData,
-          loading: false 
-        });
+        this.setState({ commandes: localData, loading: false });
         this.toast('triangle-alert', 'Mode hors-ligne', 'Données chargées depuis le cache local', 'warn');
         return localData;
       }
-      
       this.toast('triangle-alert', 'Erreur de chargement', error.message || 'Impossible de charger les commandes', 'warn');
       return [];
     }
@@ -1446,6 +1455,7 @@ class Component extends DCLogic {
     const S = window.LStore;
     if (S) this._sub = S.subscribe(() => this.setState({ _tick: Date.now() }));
     this.loadCommands();
+    this.loadCurrentUser();
   }
   
   componentDidUpdate() { this.icons(); this.paintBg(); }
@@ -1572,6 +1582,68 @@ class Component extends DCLogic {
     const match = value.match(/https?:\/\/[^\s\])"',]+/i);
     return match ? match[0] : value;
   }
+
+  generateBarcodeAsCanvas(seed, width = 500, height = 88) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, width, height);
+    let s = 0;
+    for (let i = 0; i < String(seed).length; i++) s += String(seed).charCodeAt(i) * (i + 3);
+    let x = 0;
+    ctx.fillStyle = '#17171C';
+    for (let i = 0; i < 44; i++) {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      const barWidth = 1 + (s >> 8) % 3;
+      const gap = 1 + (s >> 16) % 2;
+      const scaleX = width / 150;
+      const scaledBarWidth = Math.max(1, barWidth * scaleX);
+      const scaledX = x * scaleX;
+      ctx.fillRect(scaledX, height * 0.1, scaledBarWidth, height * 0.65);
+      x += barWidth + gap;
+    }
+    ctx.fillStyle = '#17171C';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(seed), width / 2, height * 0.92);
+    return canvas;
+  }
+
+  downloadValiseLabel(valiseCode, couleur) {
+    try {
+      const canvas = this.generateBarcodeAsCanvas(valiseCode, 600, 120);
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.style.display = 'none';
+      link.rel = 'noopener';
+      link.href = dataUrl;
+      const safeRef = String(valiseCode || 'valise').replace(/[^a-zA-Z0-9-_]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'valise';
+      link.download = `etiquette-${safeRef}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      this.toast('download', 'Étiquette téléchargée', `${safeRef}.png`, 'ok');
+      return true;
+    } catch (error) {
+      console.error('Erreur téléchargement:', error);
+      this.toast('triangle-alert', 'Téléchargement échoué', 'Impossible de générer le PNG', 'warn');
+      return false;
+    }
+  }
+
+  printValiseLabel(valiseCode, couleur, gamme, genre, montures) {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        this.toast('triangle-alert', 'Impression bloquée', 'Le navigateur a bloqué la fenêtre', 'info');
+        return false;
+      }
+      const barcodeCanvas = this.generateBarcodeAsCanvas(valiseCode, 800, 150);
+      const barcodePNG = barcodeCanvas.toDataURL('image/png');
+      const hexColor = this.hexOf({ couleur }) || '#7A7A7A';
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Étiquette Valise - ${valiseCode}</title><style>* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: 'JetBrains Mono', monospace; background: #f5f5f5; } .page { width: 210mm; height: 297mm; margin: 0; padding: 0; background: white; } .label { width: 100%; height: 50%; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; border-bottom: 1px dashed #ccc; } .label:last-child { border-bottom: none; } .barcode { text-align: center; margin: 20px 0; } .barcode img { max-width: 90%; height: auto; } .info { text-align: center; margin: 10px 0; font-size: 11px; } .code { font-size: 18px; font-weight: bold; letter-spacing: 2px; } .meta { font-size: 9px; color: #666; margin-top: 5px; } .swatch { width: 40px; height: 40px; border-radius: 4px; border: 1px solid #999; margin: 10px auto; background: ${hexColor}; } @media print { body, .page { margin: 0; padding: 0; width: 100%; height: 100%; } .label { page-break-inside: avoid; } }</style></head><body><div class="page"><div class="label"><div class="info">ÉTIQUETTE VALISE</div><div class="barcode"><img src="${barcodePNG}" alt="Code"></div><div class="info"><div class="code">${valiseCode}</div><div class="swatch"></div><div class="meta">${couleur} · ${gamme}</div><div class="meta">${genre} · ${montures.toLocaleString('fr-FR')} montures</div></div></div><div class="label"><div class="info">ÉTIQUETTE VALISE</div><div class="barcode"><img src="${barcodePNG}" alt="Code"></div><div class="info"><div class="code">${valiseCode}</div><div class="swatch"></div><div class="meta">${couleur} · ${gamme}</div><div class="meta">${genre} · ${montures.toLocaleString('fr-FR')} montures</div></div></div></div></body></html>`;\n      printWindow.document.write(html);\n      printWindow.document.close();\n      setTimeout(() => printWindow.print(), 500);\n      this.toast('printer', 'Impression en cours', `${valiseCode}`, 'ok');\n      return true;\n    } catch (error) {\n      console.error('Erreur impression:', error);\n      this.toast('triangle-alert', 'Impression échouée', 'Erreur', 'warn');\n      return false;\n    }\n  }
 
   resolveReceptionCommandCode(active) {
     const raw = active && (active.receptionCode || active.sessionCode || active.code || active.ref || active.id);
@@ -1764,6 +1836,10 @@ class Component extends DCLogic {
     
     // Utiliser les commandes de l'API ou du store local en fallback
     const commandesDB = s.commandes && s.commandes.length > 0 ? s.commandes : (DB.bons || []);
+    
+    const currentUserDisplayName = s.currentUser 
+      ? `${(s.currentUser.first_name || '').trim()} ${(s.currentUser.last_name || '').trim()}`.trim() 
+      : 'Utilisateur';
     
     const ease = 'cubic-bezier(.22,1,.36,1)';
     const anim = this.props.motion === false ? 'paused' : 'running';
@@ -1994,6 +2070,8 @@ class Component extends DCLogic {
       orbBStyle: `position:absolute;bottom:-240px;right:-120px;width:660px;height:660px;border-radius:999px;background:radial-gradient(circle at 60% 40%,rgba(95,194,217,${(.16 * glow).toFixed(3)}),transparent 66%);filter:blur(70px);animation:orbB 26s ease-in-out infinite;animation-play-state:${anim}`,
       avatarStyle: `position:relative;width:48px;height:48px;border-radius:999px;flex:none;display:grid;place-items:center;background:radial-gradient(circle at 32% 28%,#3A3A3A,#141414 62%,#0A0A0A);border:1px solid var(--ink-1);box-shadow:0 16px 32px -14px rgba(0,0,0,.95),0 .toFixed(2)}),inset 0 1px 0 var(--srf-24)`,
       domeStyle: `position:absolute;top:50%;right:-32%;width:66%;aspect-ratio:1;transform:translateY(-50%);border-radius:999px;background:radial-gradient(circle at 26% 30%,rgba(247,214,231,${(.30 * glow).toFixed(3)}),rgba(247,214,231,.14) 52%,rgba(191,33,120,.10) 88%);filter:blur(2px);animation:orbB 30s ease-in-out infinite;animation-play-state:${anim}`,
+      
+      currentUserDisplayName,
 
       nav, pendingCount: commandesDB.filter(c => !c.scanned).length,
 
@@ -2033,26 +2111,29 @@ class Component extends DCLogic {
       },
 
       expediees: enTransit.map(c => {
-        const total = c.ship.valises.length;
-        const done = c.ship.scanned.length;
+        const ship = c.ship || { valises: [], scanned: [], total: 0, date: null, arriveDate: null };
+        const valises = Array.isArray(ship.valises) ? ship.valises : [];
+        const scanned = Array.isArray(ship.scanned) ? ship.scanned : [];
+        const total = valises.length;
+        const done = scanned.length;
         const allIn = done === total;
         return {
           ref: c.ref, provenance: c.provenance, destination: c.destination,
-          unites: c.ship.total.toLocaleString('fr-FR'),
-          dateExp: c.ship.date,
+          unites: Number(ship.total ?? c.unites ?? 0).toLocaleString('fr-FR'),
+          dateExp: ship.date || c.date,
           progressLabel: `${done} / ${total} valises scannées à l'arrivée`,
           progressStyle: `height:100%;width:${total ? (done / total * 100).toFixed(1) : 0}%;border-radius:999px;background:linear-gradient(90deg,#33879C,#5FC2D9);transition:width .5s ${ease}`,
           statutStyle: chip('rgba(95,194,217,.15)', 'rgba(95,194,217,.4)', 'var(--info-ink)'),
           barcodeStyle: this.barcode(c.barcodeNum, 30),
           barcodeNum: c.barcodeNum,
           cardStyle: `border-radius:24px;overflow:hidden;background:${glass};border:1px solid ${allIn ? 'rgba(63,214,154,.32)' : 'rgba(95,194,217,.24)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9);transition:border-color .4s ${ease}`,
-          valises: c.ship.valises.map(v => {
+          valises: valises.map(v => {
             const col = { hex: this.hexOf(v) };
-            const ok = c.ship.scanned.includes(v.id);
+            const ok = scanned.includes(v.id);
             return {
               couleur: v.couleur, gamme: v.gamme, genre: v.genre,
               montures: v.montures.toLocaleString('fr-FR'),
-              cartonCount: v.cartons.length,
+              cartonCount: Array.isArray(v.cartons) ? v.cartons.length : 0,
               swatchStyle: `width:16px;height:16px;border-radius:5px;flex:none;background:${col.hex};border:1px solid var(--srf-35)`,
               rowStyle: `display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:16px;border:1px solid ${ok ? 'rgba(63,214,154,.34)' : 'var(--ink-09)'};background:${ok ? 'rgba(63,214,154,.09)' : 'var(--srf-045)'};transition:all .32s ${ease}`,
               btnIcon: ok ? 'badge-check' : 'scan-barcode',
@@ -2063,9 +2144,12 @@ class Component extends DCLogic {
                 if (ok) return;
                 S.set({ bons: commandesDB.map(x => {
                     if (x.id !== c.id) return x;
-                    const scanned = [...x.ship.scanned, v.id];
-                    const arrived = scanned.length === x.ship.valises.length;
-                    return { ...x, statut: arrived ? 'arrive' : 'transit', ship: { ...x.ship, scanned, arriveDate: arrived ? S.dateFr() : null } };
+                    const currentShip = x.ship || { valises: [], scanned: [], total: 0, date: null, arriveDate: null };
+                    const currentScanned = Array.isArray(currentShip.scanned) ? currentShip.scanned : [];
+                    const currentValises = Array.isArray(currentShip.valises) ? currentShip.valises : [];
+                    const scannedNext = [...currentScanned, v.id];
+                    const arrived = scannedNext.length === currentValises.length;
+                    return { ...x, statut: arrived ? 'arrive' : 'transit', ship: { ...currentShip, scanned: scannedNext, arriveDate: arrived ? S.dateFr() : null } };
                   }) });
                 const nowDone = done + 1;
                 if (nowDone === total) this.toast('package-check', 'Commande arrivée au stock général', `${c.ref} · ${total} valises`, 'ok');
@@ -2141,24 +2225,26 @@ class Component extends DCLogic {
       ...(() => {
         const h = s.histOpen ? commandesDB.find(c => c.id === s.histOpen) : null;
         if (!h) return { histDetailOpen: false };
+        const ship = h.ship || { valises: [], scanned: [], total: 0, date: null, arriveDate: null };
+        const histValises = Array.isArray(ship.valises) ? ship.valises : [];
         return {
           histDetailOpen: true,
           closeHist: () => this.setState({ histOpen: null }),
           hRef: h.ref, hProvenance: h.provenance, hDestination: h.destination,
           hTransport: h.transport, hCommande: h.date,
-          hUnites: h.ship.total.toLocaleString('fr-FR'),
-          hDateExp: h.ship.date, hDateArr: h.ship.arriveDate,
+          hUnites: Number(ship.total ?? h.unites ?? 0).toLocaleString('fr-FR'),
+          hDateExp: ship.date || h.date, hDateArr: ship.arriveDate,
           hBarcodeStyle: this.barcode(h.barcodeNum, 38),
           hBarcodeNum: h.barcodeNum,
-          hValiseCount: h.ship.valises.length,
-          hCartonCount: h.ship.valises.reduce((a, v) => a + v.cartons.length, 0),
-          hValises: h.ship.valises.map(v => {
+          hValiseCount: histValises.length,
+          hCartonCount: histValises.reduce((a, v) => a + (Array.isArray(v.cartons) ? v.cartons.length : 0), 0),
+          hValises: histValises.map(v => {
             const col = { hex: this.hexOf(v) };
             return {
               couleur: v.couleur, gamme: v.gamme, genre: v.genre,
               montures: v.montures.toLocaleString('fr-FR'),
               swatchStyle: `width:16px;height:16px;border-radius:5px;flex:none;background:${col.hex};border:1px solid var(--srf-35)`,
-              cartons: v.cartons.map((k, ki) => ({
+              cartons: (Array.isArray(v.cartons) ? v.cartons : []).map((k, ki) => ({
                 n: String(ki + 1).padStart(2, '0'),
                 qty: k.qty, code: k.code, gamme: k.gamme, type: k.type || 'Vue',
                 prix: this.fcfa(k.prix),
@@ -2625,28 +2711,77 @@ class Component extends DCLogic {
       },
 
       recap,
-      expedier: () => {
+      expedier: async () => {
         if (!active) return;
-        const snap = s.valises.map(v => ({ ...v, cartons: [...v.cartons] }));
-        S.set({ bons: commandesDB.map(c => c.id === active.id
-          ? { ...c, statut: 'transit', ship: { valises: snap, total: assigned, date: S.dateFr(), scanned: [], arriveDate: null } }
-          : c) });
-        this.setState({ valises: [], activeId: null, curValise: null, screen: 'expediees' });
-        if (S) {
-          const arrivee = {
-            id: 'a' + Date.now(), ref: active.ref, provenance: active.provenance, dateArr: S.dateFr(),
-            valises: snap.map(v => ({
-              id: v.id, couleur: v.couleur, gamme: v.gamme, genre: v.genre, montures: v.montures, scanned: false,
-              cartons: v.cartons.map(k => ({
-                id: k.id, qty: k.qty, code: k.code, gamme: k.gamme || v.gamme, type: k.type || 'Vue',
-                prix: k.prix || 0, formes: k.formes || {}, marques: k.marques || [],
-                couleurs: k.couleurs || [], matieres: k.matieres || [], photos: k.photos || [], saisies: []
-              }))
-            }))
-          };
-          S.set({ arrivees: [arrivee, ...(S.get().arrivees || [])] });
+        const commandCode = String(active.receptionCode || active.code || '').trim();
+        if (!commandCode) {
+          this.toast('triangle-alert', 'Commande invalide', 'Code de commande introuvable', 'warn');
+          return;
         }
-        this.toast('truck', 'Commande en transit', `${active.ref} · ${snap.length} valises à scanner à l'arrivée`, 'ok');
+        try {
+          const response = await fetch(
+            `${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(commandCode)}/dispatch`,
+            {
+              method: 'POST',
+              headers: this.apiHeaders()
+            }
+          );
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload.success === false) {
+            throw new Error(payload.error || 'Expédition impossible');
+          }
+
+          const updatedCommands = (this.state.commandes || []).map(c => c.id === active.id
+            ? {
+                ...c,
+                statut: 'transit',
+                ship: {
+                  valises: s.valises.map(v => ({ ...v, cartons: [...v.cartons] })),
+                  total: assigned,
+                  date: S ? S.dateFr() : new Date().toLocaleDateString('fr-FR'),
+                  scanned: [],
+                  arriveDate: null
+                }
+              }
+            : c);
+
+          const snap = s.valises.map(v => ({ ...v, cartons: [...v.cartons] }));
+          if (S) {
+            S.set({
+              bons: (S.get().bons || []).map(c => c.id === active.id
+                ? { ...c, statut: 'transit', ship: { valises: snap, total: assigned, date: S.dateFr(), scanned: [], arriveDate: null } }
+                : c),
+              arrivees: [
+                {
+                  id: 'a' + Date.now(), ref: active.ref, provenance: active.provenance, dateArr: S.dateFr(),
+                  valises: snap.map(v => ({
+                    id: v.id, couleur: v.couleur, gamme: v.gamme, genre: v.genre, montures: v.montures, scanned: false,
+                    cartons: v.cartons.map(k => ({
+                      id: k.id, qty: k.qty, code: k.code, gamme: k.gamme || v.gamme, type: k.type || 'Vue',
+                      prix: k.prix || 0, formes: k.formes || {}, marques: k.marques || [],
+                      couleurs: k.couleurs || [], matieres: k.matieres || [], photos: k.photos || [], saisies: []
+                    }))
+                  }))
+                },
+                ...(S.get().arrivees || [])
+              ]
+            });
+          }
+
+          this.setState({
+            commandes: updatedCommands,
+            valises: [],
+            activeId: null,
+            curValise: null,
+            screen: 'expediees'
+          });
+          await this.loadCommands();
+
+          this.toast('truck', 'Commande en transit', `${active.ref} · ${snap.length} valises à scanner à l'arrivée`, 'ok');
+        } catch (error) {
+          console.error('Erreur envoi expédition:', error);
+          this.toast('triangle-alert', 'Expédition non validée', error.message || 'Le backend a refusé la commande', 'warn');
+        }
       },
 
       formOpen: s.formOpen,
@@ -2745,6 +2880,15 @@ class Component extends DCLogic {
           formOpen: false, curValise: localCase.id, fMontures: ''
         }));
         this.toast('check', `Valise ${localCase.couleur} créée`, `${localCase.montures.toLocaleString('fr-FR')} montures à emballer`, 'ok');
+        
+        const caseCode = localCase.code || `VAL-${String((this.state.valises || []).length + 1).padStart(3, '0')}`;
+        setTimeout(() => {
+          const doAction = confirm(`Valise ${caseCode} créée !\\n\\nTélécharger et imprimer l'étiquette ?`);
+          if (doAction) {
+            this.downloadValiseLabel(caseCode, localCase.couleur);
+            setTimeout(() => this.printValiseLabel(caseCode, localCase.couleur, localCase.gamme, localCase.genre, localCase.montures), 600);
+          }
+        }, 200);
       },
 
       scanning: s.scanning,

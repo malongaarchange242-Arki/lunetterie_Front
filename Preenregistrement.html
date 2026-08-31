@@ -2168,6 +2168,11 @@ class Component extends DCLogic {
       recap,
       expedier: () => {
         if (!active) return;
+        const commandCode = String(active.receptionCode || active.code || '').trim();
+        if (!commandCode) {
+          this.toast('triangle-alert', 'Commande invalide', 'Code de commande introuvable', 'warn');
+          return;
+        }
         const snap = s.valises.map(v => ({ ...v, cartons: [...v.cartons] }));
         S.set({ bons: commandesDB.map(c => c.id === active.id
           ? { ...c, statut: 'transit', ship: { valises: snap, total: assigned, date: S.dateFr(), scanned: [], arriveDate: null } }
