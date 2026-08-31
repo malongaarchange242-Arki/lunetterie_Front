@@ -23,8 +23,7 @@ a:hover{color:var(--acc-strong)}
 input,select{font-family:Manrope,sans-serif}
 input:focus,select:focus{outline:none}
 input::placeholder{color:var(--ink-3)}
-select{color-scheme:light}
-select option{background:#fff;color:#17171C}
+select option{background:#141414;color:var(--ink)}
 @keyframes orbA{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(50px,-70px,0) scale(1.14)}}
 @keyframes orbB{0%,100%{transform:translate3d(0,0,0) scale(1.06)}50%{transform:translate3d(-60px,60px,0) scale(.9)}}
 @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
@@ -60,7 +59,7 @@ select option{background:#fff;color:#17171C}
     <div style="display:flex;align-items:center;gap:14px;padding:14px 15px;border-radius:20px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);margin-bottom:26px">
       <div style="{{ avatarStyle }}"><span data-icon="clipboard-list" style="display:grid;place-items:center;font-size:22px;color:#fff"></span></div>
       <div style="min-width:0">
-        <div style="font:600 12.5px/1.25 Manrope,sans-serif;margin-bottom:5px">{{ userName }}</div>
+        <div style="font:600 12.5px/1.25 Manrope,sans-serif;margin-bottom:5px">Karim B.</div>
         <div style="font:500 9px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink)">PRÉ-ENREGISTREMENT</div>
       </div>
     </div>
@@ -328,7 +327,6 @@ select option{background:#fff;color:#17171C}
               <sc-if value="{{ v.showEdit }}" hint-placeholder-val="{{ true }}">
                 <div style="{{ v.editRowStyle }}">
                   <button onClick="{{ v.onEdit }}" style="{{ v.editBtnStyle }}"><span data-icon="pencil" style="display:grid;place-items:center;font-size:14px"></span>Modifier</button>
-                  <button onClick="{{ v.onPrint }}" style="{{ v.printBtnStyle }}"><span data-icon="printer" style="display:grid;place-items:center;font-size:14px"></span>Imprimer</button>
                   <button onClick="{{ v.onDelete }}" style="{{ v.delBtnStyle }}"><span data-icon="trash-2" style="display:grid;place-items:center;font-size:14px"></span></button>
                 </div>
               </sc-if>
@@ -413,9 +411,8 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
                 <div style="{{ k.barcodeStyle }}"></div>
                 <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ink-6);margin-top:7px;text-align:center">{{ k.code }}</div>
               </div>
-              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
-                <button onClick="{{ k.onFiche }}" style="flex:1 1 calc(50% - 4px);min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px;border-radius:999px;border:1px solid rgba(95,194,217,.38);background:rgba(95,194,217,.1);color:var(--info-ink);font:600 11.5px/1 Manrope,sans-serif;cursor:pointer;white-space:nowrap;transition:all .24s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.2)"><span data-icon="eye" style="display:grid;place-items:center;font-size:14px"></span>Fiche</button>
-                <button onClick="{{ k.onPrint }}" style="{{ k.printBtnStyle }}"><span data-icon="printer" style="display:grid;place-items:center;font-size:14px"></span>Imprimer</button>
+              <div style="display:flex;gap:8px;margin-top:12px">
+                <button onClick="{{ k.onFiche }}" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px;border-radius:999px;border:1px solid rgba(95,194,217,.38);background:rgba(95,194,217,.1);color:var(--info-ink);font:600 11.5px/1 Manrope,sans-serif;cursor:pointer;white-space:nowrap;transition:all .24s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.2)"><span data-icon="eye" style="display:grid;place-items:center;font-size:14px"></span>Fiche</button>
                 <button onClick="{{ k.onEdit }}" style="{{ k.editBtnStyle }}"><span data-icon="pencil" style="display:grid;place-items:center;font-size:14px"></span></button>
                 <button onClick="{{ k.onDelete }}" style="{{ k.delBtnStyle }}"><span data-icon="trash-2" style="display:grid;place-items:center;font-size:14px"></span></button>
               </div>
@@ -432,7 +429,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
     <sc-if value="{{ isExpediees }}" hint-placeholder-val="{{ false }}">
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
         <div style="margin-bottom:32px">
-          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">EN TRANSIT VERS LE STOCK GENERAL</div>
+          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">EN TRANSIT</div>
           <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Commande à expédié</h1>
           <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-7);margin:0;max-width:64ch;text-wrap:pretty">Les bons expédiés restent ici jusqu'à ce que le stock général ait scanné chaque valise à la réception. La commande passe alors dans l'historique.</p>
         </div>
@@ -453,7 +450,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
                   <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-64);margin-bottom:6px">BON DE COMMANDE</div>
                   <div style="font:700 15px/1 'JetBrains Mono',monospace">{{ c.ref }}</div>
                 </div>
-                <span style="{{ c.statutStyle }}">En transit vers le stock general</span>
+                <span style="{{ c.statutStyle }}">En transit</span>
                 <div style="margin-left:auto;display:flex;gap:24px;flex-wrap:wrap">
                   <div><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:6px">EXPÉDIÉ LE</div><div style="font:500 12.5px/1 'JetBrains Mono',monospace">{{ c.dateExp }}</div></div>
                   <div><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:6px">TOTAL</div><div style="font:500 12.5px/1 'JetBrains Mono',monospace;color:var(--acc-strong)">{{ c.unites }} u.</div></div>
@@ -476,6 +473,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
                         <div style="font:600 13px/1.25 Manrope,sans-serif">Valise {{ v.couleur }}</div>
                         <div style="font:400 11px/1.3 'JetBrains Mono',monospace;color:var(--ink-66);margin-top:5px">{{ v.gamme }} · {{ v.genre }} · {{ v.montures }} u. · {{ v.cartonCount }} cartons</div>
                       </div>
+                      <button onClick="{{ v.onScan }}" style="{{ v.btnStyle }}"><span data-icon="{{ v.btnIcon }}" style="display:grid;place-items:center;font-size:18px"></span></button>
                     </div>
                   </sc-for>
                 </div>
@@ -625,9 +623,6 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
                   </sc-for>
                 </div>
               </div>
-              <sc-if value="{{ pairQrReady }}" hint-placeholder-val="{{ false }}">
-                <img bindSrc="{{ pairQrUrl }}" alt="QR d’appairage" style="display:block;width:100%;max-width:260px;margin:16px auto 0;border-radius:12px;background:#fff">
-              </sc-if>
               <div style="font:400 12px/1.55 Manrope,sans-serif;color:var(--ink-7);margin-bottom:8px;text-wrap:pretty">Scannez ce code avec l'appareil photo du téléphone, ou saisissez le code d'appairage dans l'application mobile.</div>
               <div style="font:500 15px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink);margin-bottom:20px">{{ pairCode }}</div>
               <button onClick="{{ startPair }}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1 Manrope,sans-serif;cursor:pointer;box-shadow:0 16px 34px -14px rgba(242,19,142,.85),inset 0 1px 0 var(--srf-5);transition:all .28s cubic-bezier(.22,1,.36,1)" style-hover="transform:translateY(-1px)"><span data-icon="link" style="display:grid;place-items:center;font-size:16px"></span>Connecter le téléphone</button>
@@ -734,8 +729,8 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
 </div>
 
 <sc-if value="{{ formOpen }}" hint-placeholder-val="{{ false }}">
-  <div onClick="{{ closeForm }}" style="position:fixed;inset:0;z-index:60;background:rgba(120,112,128,.32);backdrop-filter:blur(20px);display:grid;place-items:center;padding:24px;animation:rise .28s cubic-bezier(.22,1,.36,1);overflow-y:auto">
-    <div onClick="{{ stop }}" style="width:min(500px,100%);max-height:calc(100vh - 48px);overflow-y:auto;border-radius:28px;padding:30px;background:linear-gradient(150deg,var(--srf-96),var(--srf-8));border:1px solid var(--srf-6);backdrop-filter:blur(48px) saturate(180%);box-shadow:0 34px 80px -30px var(--ink-28),inset 0 1px 0 var(--srf-9);animation:rise .4s cubic-bezier(.22,1,.36,1)">
+  <div onClick="{{ closeForm }}" style="position:fixed;inset:0;z-index:60;background:rgba(120,112,128,.32);backdrop-filter:blur(20px);display:grid;place-items:start center;padding:24px;overflow-y:auto;animation:rise .28s cubic-bezier(.22,1,.36,1)">
+    <div onClick="{{ stop }}" style="width:min(500px,100%);border-radius:28px;padding:30px;background:linear-gradient(150deg,var(--srf-96),var(--srf-8));border:1px solid var(--srf-6);backdrop-filter:blur(48px) saturate(180%);box-shadow:0 34px 80px -30px var(--ink-28),inset 0 1px 0 var(--srf-9);animation:rise .4s cubic-bezier(.22,1,.36,1)">
       <div style="display:flex;align-items:center;gap:13px;margin-bottom:24px">
         <span style="width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#F2138E,#BF2178);display:grid;place-items:center;color:#fff;flex:none;box-shadow:inset 0 1px 0 var(--srf-42)"><span data-icon="briefcase" style="display:grid;place-items:center;font-size:18px"></span></span>
         <div>
@@ -782,13 +777,13 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
 
       <div style="margin-bottom:8px">
         <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68);margin-bottom:11px">NOMBRE DE MONTURES</div>
-        <input value="{{ fMontures }}" onChange="{{ setMontures }}" type="text" inputmode="numeric" placeholder="1000" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-74);border:1.5px solid var(--ink-12);color:var(--ink);font:500 17px/1 'JetBrains Mono',monospace">
+        <input value="{{ fMontures }}" onChange="{{ setMontures }}" type="number" placeholder="1000" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-74);border:1.5px solid var(--ink-12);color:var(--ink);font:500 17px/1 'JetBrains Mono',monospace">
       </div>
       <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:{{ hintColor }};margin-bottom:24px;min-height:18px">{{ formHint }}</div>
 
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button onClick="{{ closeForm }}" style="padding:13px 20px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 13.5px/1 Manrope,sans-serif;cursor:pointer">Annuler</button>
-        <button onClick="{{ createValise }}" style="{{ createBtnStyle }}" aria-disabled="{{ valiseSaving }}"><span data-icon="{{ valiseButtonIcon }}" style="display:grid;place-items:center;font-size:16px;{{ valiseButtonIconStyle }}"></span>{{ valiseButtonLabel }}</button>
+        <button onClick="{{ createValise }}" style="{{ createBtnStyle }}"><span data-icon="check" style="display:grid;place-items:center;font-size:16px"></span>{{ formCtaLabel }}</button>
       </div>
     </div>
   </div>
@@ -905,8 +900,8 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
 </sc-if>
 
 <sc-if value="{{ kOpen }}" hint-placeholder-val="{{ false }}">
-  <div onClick="{{ closeK }}" style="position:fixed;inset:0;z-index:62;background:rgba(120,112,128,.32);backdrop-filter:blur(20px);display:grid;place-items:center;padding:24px;animation:rise .28s cubic-bezier(.22,1,.36,1);overflow-y:auto">
-    <div onClick="{{ stop }}" style="width:min(680px,100%);max-height:calc(100vh - 48px);overflow-y:auto;border-radius:28px;padding:30px;background:linear-gradient(150deg,var(--srf-96),var(--srf-8));border:1px solid var(--srf-6);backdrop-filter:blur(48px) saturate(180%);box-shadow:0 34px 80px -30px var(--ink-28),inset 0 1px 0 var(--srf-9);animation:rise .4s cubic-bezier(.22,1,.36,1)">
+  <div onClick="{{ closeK }}" style="position:fixed;inset:0;z-index:62;background:rgba(120,112,128,.32);backdrop-filter:blur(20px);display:grid;place-items:start center;padding:24px;overflow-y:auto;animation:rise .28s cubic-bezier(.22,1,.36,1);overflow-y:auto">
+    <div onClick="{{ stop }}" style="width:min(680px,100%);border-radius:28px;padding:30px;background:linear-gradient(150deg,var(--srf-96),var(--srf-8));border:1px solid var(--srf-6);backdrop-filter:blur(48px) saturate(180%);box-shadow:0 34px 80px -30px var(--ink-28),inset 0 1px 0 var(--srf-9);animation:rise .4s cubic-bezier(.22,1,.36,1)">
       <div style="display:flex;align-items:center;gap:13px;margin-bottom:24px">
         <span style="width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#F2138E,#BF2178);display:grid;place-items:center;color:#fff;flex:none;box-shadow:inset 0 1px 0 var(--srf-42)"><span data-icon="package-plus" style="display:grid;place-items:center;font-size:18px"></span></span>
         <div style="flex:1">
@@ -921,7 +916,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
           <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68)">MONTURES DANS CE CARTON</span>
           <span style="margin-left:auto;font:500 10.5px/1 'JetBrains Mono',monospace;color:var(--ink-66)">max {{ kSpecialMax }}</span>
         </div>
-        <input value="{{ kSpecialQty }}" onChange="{{ setKSpecialQty }}" type="text" inputmode="numeric" placeholder="Nombre libre" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-74);border:1.5px solid var(--ink-12);color:var(--ink);font:600 15px/1 'JetBrains Mono',monospace;margin-bottom:10px">
+        <input value="{{ kSpecialQty }}" onChange="{{ setKSpecialQty }}" type="number" placeholder="Nombre libre" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-74);border:1.5px solid var(--ink-12);color:var(--ink);font:600 15px/1 'JetBrains Mono',monospace;margin-bottom:10px">
         <div style="display:flex;flex-wrap:wrap;gap:7px">
           <sc-for list="{{ qtyPresets }}" as="q" hint-placeholder-count="4">
             <button onClick="{{ q.onClick }}" style="{{ q.style }}">{{ q.label }}</button>
@@ -953,7 +948,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
             <div style="padding:13px 14px;border-radius:14px;background:rgba(63,214,154,.1);border:1.5px solid rgba(63,214,154,.3);color:var(--ok-ink);font:600 14px/1 'JetBrains Mono',monospace">{{ kPrixFixedLabel }}</div>
           </sc-if>
           <sc-if value="{{ kVariable }}" hint-placeholder-val="{{ false }}">
-            <input value="{{ kPrix }}" onChange="{{ setKPrix }}" type="text" inputmode="decimal" placeholder="tarif variable — à saisir" style="width:100%;padding:13px 14px;border-radius:14px;background:rgba(245,165,36,.09);border:1.5px solid rgba(245,165,36,.36);color:var(--ink);font:600 14px/1 'JetBrains Mono',monospace">
+            <input value="{{ kPrix }}" onChange="{{ setKPrix }}" type="number" placeholder="tarif variable — à saisir" style="width:100%;padding:13px 14px;border-radius:14px;background:rgba(245,165,36,.09);border:1.5px solid rgba(245,165,36,.36);color:var(--ink);font:600 14px/1 'JetBrains Mono',monospace">
           </sc-if>
           <sc-if value="{{ kOfferte }}" hint-placeholder-val="{{ false }}">
             <div style="padding:13px 14px;border-radius:14px;background:rgba(95,194,217,.1);border:1.5px solid rgba(95,194,217,.32);color:var(--info-ink);font:600 12.5px/1.2 Manrope,sans-serif">{{ kPrixOfferteLabel }}</div>
@@ -977,7 +972,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
             <div style="display:flex;align-items:center;gap:10px;padding:9px 11px 9px 14px;border-radius:14px;background:rgba(95,194,217,.1);border:1px solid rgba(95,194,217,.3)">
               <span style="flex:1;font:600 12.5px/1.2 Manrope,sans-serif">{{ f.label }}</span>
               <span style="font:500 10px/1.4 'JetBrains Mono',monospace;color:var(--ink-64)">max {{ f.max }}</span>
-              <input value="{{ f.qty }}" onChange="{{ f.onQty }}" type="text" inputmode="numeric" style="width:64px;padding:7px 8px;border-radius:10px;background:var(--srf-8);border:1px solid rgba(95,194,217,.42);color:var(--info-ink);font:600 12px/1 'JetBrains Mono',monospace;text-align:center">
+              <input value="{{ f.qty }}" onChange="{{ f.onQty }}" type="number" style="width:64px;padding:7px 8px;border-radius:10px;background:var(--srf-8);border:1px solid rgba(95,194,217,.42);color:var(--info-ink);font:600 12px/1 'JetBrains Mono',monospace;text-align:center">
               <button onClick="{{ f.onRemove }}" style="width:28px;height:28px;border-radius:9px;border:1px solid var(--ink-1);background:transparent;color:var(--ink-7);cursor:pointer;display:grid;place-items:center;flex:none"><span data-icon="x" style="display:grid;place-items:center;font-size:14px"></span></button>
             </div>
           </sc-for>
@@ -1036,32 +1031,6 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
 
       <div style="margin-bottom:24px">
         <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:11px">
-          <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68)">PHOTOS DES MONTURES</span>
-          <span style="margin-left:auto;font:500 11px/1.4 Manrope,sans-serif;color:var(--ink-66)">{{ kPhotoLabel }}</span>
-        </div>
-        <input type="file" multiple accept="image/*" onChange="{{ onPhotoInput }}" style="display:none" id="photo-input-k">
-        <button onClick="{{ triggerPhotoInput }}" style="width:100%;padding:18px;border-radius:18px;background:rgba(95,194,217,.08);border:1.5px dashed rgba(95,194,217,.32);text-align:center;cursor:pointer;transition:all .24s cubic-bezier(.22,1,.36,1);font:400 12px/1.5 Manrope,sans-serif;color:var(--ink-68)" style-hover="background:rgba(95,194,217,.16);border-color:rgba(95,194,217,.48)" onDragOver="{{ onPhotoDragOver }}" onDrop="{{ onPhotoDrop }}">
-          <div style="display:grid;place-items:center;gap:10px">
-            <span data-icon="upload-cloud" style="display:grid;place-items:center;font-size:28px;color:var(--info-ink)"></span>
-            <div>
-              <div style="font:600 12.5px/1.3 Manrope,sans-serif;color:var(--ink);margin-bottom:3px">Cliquez ou glissez des images</div>
-              <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-68)">Face et dos de chaque monture · JPEG/PNG</div>
-            </div>
-          </div>
-        </button>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
-          <sc-for list="{{ kPhotos }}" as="p" hint-placeholder-count="0">
-            <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:14px;background:var(--srf-74);border:1px solid var(--ink-12)">
-              <img bindSrc="{{ p.src }}" alt="photo" style="width:44px;height:33px;border-radius:8px;object-fit:cover;flex:none">
-              <div style="flex:1;font:500 12px/1.3 'JetBrains Mono',monospace;color:var(--ink-72);text-align:left">{{ p.id }}</div>
-              <button onClick="{{ p.onRemove }}" style="width:28px;height:28px;border-radius:8px;border:1px solid var(--ink-12);background:transparent;color:var(--ink-64);cursor:pointer;display:grid;place-items:center;flex:none"><span data-icon="trash-2" style="display:grid;place-items:center;font-size:14px"></span></button>
-            </div>
-          </sc-for>
-        </div>
-      </div>
-
-      <div style="margin-bottom:24px">
-        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:11px">
           <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68)">MARQUES</span>
           <span style="margin-left:auto;font:500 11px/1 Manrope,sans-serif;color:var(--ink-66)">{{ kMarqueCount }}</span>
         </div>
@@ -1085,9 +1054,31 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
         </div>
       </div>
 
+      <div style="margin-bottom:24px">
+        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:11px">
+          <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68)">PHOTOS DES MONTURES</span>
+          <span style="margin-left:auto;font:600 11px/1 'JetBrains Mono',monospace;color:{{ kPhotoColor }}">{{ kPhotoLabel }}</span>
+        </div>
+        <div style="font:400 11.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:12px;text-wrap:pretty">Deux photos par monture : une de face, une de dos. Le magasinier du stock général les associera ligne par ligne à l'enregistrement.</div>
+        <div onDragOver="{{ onPhotoDragOver }}" onDrop="{{ onPhotoDrop }}" style="position:relative;padding:22px 18px;border-radius:16px;border:1.5px dashed rgba(95,194,217,.5);background:rgba(95,194,217,.07);text-align:center;margin-bottom:12px">
+          <input type="file" multiple="{{ true }}" accept="image/*" onChange="{{ onPhotoInput }}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer">
+          <span data-icon="image-plus" style="display:grid;place-items:center;font-size:22px;color:var(--info-ink);margin:0 auto 9px"></span>
+          <div style="font:600 12.5px/1.3 Manrope,sans-serif;margin-bottom:5px">Déposez les photos ou cliquez pour parcourir</div>
+          <div style="font:400 11px/1.4 Manrope,sans-serif;color:var(--ink-6)">JPEG ou PNG · redimensionnées automatiquement</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:8px">
+          <sc-for list="{{ kPhotoRows }}" as="p" hint-placeholder-count="0">
+            <div style="position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--srf-7);border:1px solid var(--ink-12)">
+              <span style="{{ p.imgStyle }}"></span>
+              <button onClick="{{ p.onRemove }}" title="Retirer" style="position:absolute;top:3px;right:3px;width:19px;height:19px;border-radius:999px;border:0;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;display:grid;place-items:center"><span data-icon="x" style="display:grid;place-items:center;font-size:11px"></span></button>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button onClick="{{ closeK }}" style="padding:13px 20px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-74);color:var(--ink);font:600 13.5px/1 Manrope,sans-serif;cursor:pointer">Annuler</button>
-        <button onClick="{{ createCarton }}" style="{{ kCreateStyle }}" aria-disabled="{{ cartonSaving }}"><span data-icon="{{ cartonButtonIcon }}" style="display:grid;place-items:center;font-size:16px;{{ cartonButtonIconStyle }}"></span>{{ cartonButtonLabel }}</button>
+        <button onClick="{{ createCarton }}" style="{{ kCreateStyle }}"><span data-icon="check" style="display:grid;place-items:center;font-size:16px"></span>{{ kCtaLabel }}</button>
       </div>
     </div>
   </div>
@@ -1226,14 +1217,11 @@ class Component extends DCLogic {
     marques: null,
     kOpen: false, kFormes: {}, kMarques: [], kGamme: '', kType: 'Vue', kPrix: '', kNewMarque: '',
     kSpecial: false, kSpecialQty: '', kEditId: null, vEditId: null,
-    histOpen: null, manualCode: '', phonePaired: false, pairing: false, pairCode: '', pairQrUrl: '', userName: 'Utilisateur', helpOpen: false,
+    histOpen: null, manualCode: '', phonePaired: false, pairing: false, helpOpen: false,
     cmdSort: 'desc', cmdProv: '', refreshing: false, histPeriod: 'tout', histTri: 'desc',
     fHex: '#E23A2E', kCouleurs: [], kMatieres: [], kNewCouleur: '', kNewMatiere: '', kPhotos: [],
-    cartonSaving: false,
     ficheOpen: null,
     fColor: 'Rouge', fGamme: 'Moyenne gamme', fGenre: 'Homme', fMontures: '',
-    valiseSaving: false,
-    shipmentDataCache: {},
     commandes: [
       { id: 'c1', ref: 'BC-2026-0418', provenance: 'Dubaï', destination: 'Stock général', unites: 4000, date: '28/08/2026', transport: 'AIR-DXB', barcodeNum: '3 802 4418 0021', scanned: false, statut: 'attente', ship: null },
       { id: 'c2', ref: 'BC-2026-0419', provenance: 'Dubaï', destination: 'Stock général', unites: 4000, date: '29/08/2026', transport: 'AIR-DXB', barcodeNum: '3 802 4419 0038', scanned: false, statut: 'attente', ship: null },
@@ -1250,11 +1238,6 @@ class Component extends DCLogic {
     this.paintBg();
     const S = window.LStore;
     if (S) this._sub = S.subscribe(() => this.setState({ _tick: Date.now() }));
-    this.loadCurrentUser();
-    // Charger les données du cache local immédiatement
-    this.loadCachedData();
-    // Puis actualiser avec les données du backend
-    this.loadBackendData();
   }
   componentDidUpdate() { this.icons(); this.paintBg(); }
   paintBg() {
@@ -1263,313 +1246,7 @@ class Component extends DCLogic {
   }
   componentWillUnmount() {
     clearTimeout(this.st); clearTimeout(this.tt); clearTimeout(this.pt); clearTimeout(this.rt);
-    if (this.mobileSocket) this.mobileSocket.close();
     if (this._sub) this._sub(); clearInterval(this._poll);
-  }
-
-  loadCurrentUser() {
-    const applyUser = user => {
-      if (!user || typeof user !== 'object') return;
-      const firstName = String(user.first_name || user.firstName || '').trim();
-      const lastName = String(user.last_name || user.lastName || '').trim();
-      const fullName = [firstName, lastName].filter(Boolean).join(' ') ||
-        String(user.full_name || user.fullName || user.name || user.nom || '').trim();
-      this.setState({ userName: fullName || String(user.email || 'Utilisateur').trim() || 'Utilisateur' });
-    };
-    try {
-      const userJson = localStorage.getItem('user');
-      if (userJson) applyUser(JSON.parse(userJson));
-    } catch (error) {
-      console.error('Erreur lecture utilisateur:', error);
-    }
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    fetch(`${this.apiBaseUrl()}/api/v1/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(response => response.ok ? response.json() : null)
-      .then(payload => {
-        const user = payload && payload.data && payload.data.user;
-        if (!user) return;
-        localStorage.setItem('user', JSON.stringify(user));
-        applyUser(user);
-      })
-      .catch(error => console.error('Erreur chargement utilisateur:', error));
-  }
-
-  async startMobilePairing() {
-    if (this.mobileSocket) this.mobileSocket.close();
-    this.setState({ pairing: true, phonePaired: false, pairQrUrl: '', pairCode: '' });
-    try {
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/mobile-capture/sessions`, {
-        method: 'POST', headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' }
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.success) throw new Error(payload.error || 'Création de session impossible');
-      const session = payload.data;
-      this.setState({ pairing: false, pairCode: session.pair_code, pairQrUrl: session.qr_url });
-      this.connectMobileEvents(session.events_url);
-      this.toast('smartphone', 'QR prêt', 'Scannez-le avec le téléphone.', 'info');
-    } catch (error) {
-      this.setState({ pairing: false });
-      this.toast('triangle-alert', 'Appairage impossible', error.message || 'Backend indisponible', 'warn');
-    }
-  }
-
-  connectMobileEvents(eventsUrl) {
-    const url = new URL(eventsUrl);
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.mobileSocket = new WebSocket(url.toString());
-    this.mobileSocket.onmessage = event => this.handleMobileEvent(JSON.parse(event.data));
-    this.mobileSocket.onclose = () => { this.mobileSocket = null; };
-  }
-
-  async handleMobileEvent(event) {
-    const data = event.data || {};
-    if (event.type === 'device.connected') {
-      this.setState({ phonePaired: true });
-      this.toast('smartphone', 'Téléphone connecté', 'Lecteur actif.', 'ok');
-      return;
-    }
-    if (event.type === 'barcode.scanned') {
-      const barcode = String(data.barcode || '').replace(/\s+/g, '').toUpperCase();
-      const commands = (window.LStore ? window.LStore.get().bons : []) || [];
-      const hit = commands.find(c => String(c.barcodeNum || '').replace(/\s+/g, '').toUpperCase() === barcode);
-      if (!hit) {
-        this.toast('triangle-alert', 'Code inconnu', `${barcode} ne correspond à aucun bon.`, 'warn');
-        return;
-      }
-      if (hit.scanned) {
-        this.toast('badge-check', 'Carton déjà vérifié', hit.ref, 'info');
-        return;
-      }
-      this.setState({ screen: 'commandes' });
-      this.doScan(hit.id);
-    }
-  }
-
-  apiBaseUrl() {
-    return 'https://api-lunetterie.universearch.com';
-  }
-
-  apiHeaders() {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  }
-
-  loadCachedData() {
-    // Charger les données depuis le cache local (window.LStore)
-    const S = window.LStore;
-    if (!S) return;
-
-    try {
-      const cached = S.get();
-      const bons = cached.bons || [];
-      if (bons.length > 0) {
-        // Les données en cache vont mettre à jour le state via le subscription
-        // ou via le rendu qui lit directement depuis S.get()
-        // Rien d'autre à faire ici, le rendu lira automatiquement
-      }
-    } catch (error) {
-      console.error('Erreur chargement cache:', error);
-    }
-  }
-
-  async loadBackendData() {
-    const S = window.LStore;
-    if (!S) return;
-    this.setState({ refreshing: true });
-    try {
-      const headers = this.apiHeaders();
-      const [ordersResponse, commandsResponse, shipmentResponse, arrivedResponse] = await Promise.all([
-        fetch(`${this.apiBaseUrl()}/api/v1/inventory/expeditions`, { headers }),
-        fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands`, { headers }),
-        fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/shipment`, { headers }),
-        fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/shipment/arrived`, { headers })
-      ]);
-      if (!ordersResponse.ok || !commandsResponse.ok) throw new Error('Chargement des commandes impossible');
-      const ordersPayload = await ordersResponse.json();
-      const commandsPayload = await commandsResponse.json();
-      const shipmentPayload = shipmentResponse.ok ? await shipmentResponse.json() : { data: { commands: [] } };
-      const arrivedPayload = arrivedResponse.ok ? await arrivedResponse.json() : { data: { commands: [] } };
-      const commands = commandsPayload.data && commandsPayload.data.commands ? commandsPayload.data.commands : [];
-      const shipmentCommands = shipmentPayload.data && shipmentPayload.data.commands ? shipmentPayload.data.commands : [];
-      const arrivedCommands = arrivedPayload.data && arrivedPayload.data.commands ? arrivedPayload.data.commands : [];
-      const bons = (ordersPayload.data && ordersPayload.data.orders ? ordersPayload.data.orders : []).map(order => {
-        const session = commands.find(command => command.supplier_order_id === order.id);
-        if (!session) return null;
-        const date = order.order_date ? new Date(order.order_date).toLocaleDateString('fr-FR') : '—';
-        const shipment = shipmentCommands.find(command => command.id === session.id || command.code === session.code);
-        const shipmentStatus = (shipment && shipment.shipment_status) || session.shipment_status || 'not_shipped';
-        const arrived = arrivedCommands.find(c => c.id === session.id);
-        return {
-          id: String(order.id),
-          ref: order.reference || `BC-${order.id}`,
-          provenance: order.provenance || order.supplier || '—',
-          destination: order.destination || 'Stock général',
-          unites: Number(order.quantity) || 0,
-          date,
-          transport: order.transport || '—',
-          barcodeNum: order.barcode_num || order.reference || String(order.id),
-          scanned: !!(session && session.activated_at),
-          receptionCode: session ? session.code : '',
-          receptionStatus: session ? session.status : '',
-          preRegistrationStatus: session ? session.pre_registration_status : 'not_started',
-          shipmentStatus: shipmentStatus,
-          statut: shipmentStatus === 'arrived' ? 'arrive' : (shipmentStatus === 'in_transit' ? 'transit' : (order.status || 'attente')),
-          ship: { 
-            valises: [], 
-            total: Number(order.quantity) || 0, 
-            date, 
-            scanned: [], 
-            arriveDate: arrived && arrived.arrived_at ? new Date(arrived.arrived_at).toLocaleDateString('fr-FR') : null 
-          }
-        };
-      }).filter(Boolean);
-      S.set({ bons });
-      
-      // Load shipment data for in-transit and arrived commands.
-      const shipmentCache = {};
-      for (const bon of bons) {
-        if ((bon.statut === 'transit' || bon.statut === 'arrive') && bon.receptionCode) {
-          const cases = await this.loadShipmentData(bon.receptionCode);
-          if (cases) {
-            shipmentCache[bon.receptionCode] = cases;
-            bon.ship.valises = cases;
-          }
-        }
-      }
-
-      S.set({ bons });
-      // Force re-render to show the loaded data
-      this.setState({ refreshing: false, shipmentDataCache: shipmentCache, _tick: Date.now() });
-      this.toast('refresh-cw', 'Liste actualisée', `${bons.length} commande(s) chargée(s)`, 'info');
-    } catch (error) {
-      console.error('Erreur chargement pré-enregistrement:', error);
-      this.setState({ refreshing: false });
-      this.toast('triangle-alert', 'Connexion impossible', 'Les commandes locales restent affichées', 'warn');
-    }
-  }
-
-  async loadCases(commandCode) {
-    if (!commandCode) return;
-    try {
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(commandCode)}/cases`, {
-        headers: this.apiHeaders()
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.success) throw new Error(payload.error || 'Chargement des valises impossible');
-      const valises = (payload.data && payload.data.cases ? payload.data.cases : []).map(item => ({
-        id: String(item.id), couleur: item.couleur, hex: item.hex || this.hexOf(item.couleur),
-        gamme: item.gamme, genre: item.genre, montures: Number(item.montures) || 0,
-        validated: !!item.validated,
-        shipmentScanned: !!item.shipment_scanned,
-        code: item.code,
-        cartons: (item.cartons || []).map(carton => ({
-          id: String(carton.id), qty: Number(carton.qty) || 0, code: carton.code,
-          formes: carton.formes || {}, marques: carton.marques || [], couleurs: carton.couleurs || [],
-          matieres: carton.matieres || [], gamme: carton.gamme, type: carton.type, prix: Number(carton.prix) || 0
-        }))
-      }));
-      this.setState({ valises });
-    } catch (error) {
-      console.error('Erreur chargement des valises:', error);
-      this.toast('triangle-alert', 'Valises indisponibles', 'Impossible de charger les données enregistrées.', 'warn');
-    }
-  }
-
-  async loadShipmentData(commandCode) {
-    if (!commandCode) return null;
-    try {
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(commandCode)}/cases`, {
-        headers: this.apiHeaders()
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.success) return null;
-      return (payload.data && payload.data.cases ? payload.data.cases : []).map(item => ({
-        id: String(item.id), couleur: item.couleur, hex: item.hex || this.hexOf(item.couleur),
-        gamme: item.gamme, genre: item.genre, montures: Number(item.montures) || 0,
-        shipment_scanned: !!item.shipment_scanned, code: item.code,
-        cartons: (item.cartons || []).map(carton => ({
-          id: String(carton.id), qty: Number(carton.quantity ?? carton.qty) || 0, code: carton.code,
-          formes: carton.formes || {}, marques: carton.marques || [], couleurs: carton.couleurs || [],
-          matieres: carton.matieres || [], gamme: carton.gamme, type: carton.type || carton.type_lunette,
-          prix: Number(carton.prix) || 0
-        }))
-      }));
-    } catch (error) {
-      console.error('Erreur chargement expédition:', error);
-      return null;
-    }
-  }
-
-  async scanCase(caseId) {
-    try {
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(caseId)}/scan`, {
-        method: 'POST',
-        headers: this.apiHeaders(),
-        body: JSON.stringify({})
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Scan impossible');
-      return true;
-    } catch (error) {
-      console.error('Erreur scanner valise:', error);
-      this.toast('triangle-alert', 'Scan échoué', error.message, 'warn');
-      return false;
-    }
-  }
-
-  async dispatchCommand(commandCode) {
-    try {
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(commandCode)}/dispatch`, {
-        method: 'POST',
-        headers: this.apiHeaders(),
-        body: JSON.stringify({})
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Expédition impossible');
-      return true;
-    } catch (error) {
-      console.error('Erreur dispatcher commande:', error);
-      this.toast('triangle-alert', 'Expédition échouée', error.message, 'warn');
-      return false;
-    }
-  }
-
-  async deleteCase(caseId) {
-    try {
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(caseId)}`, {
-        method: 'DELETE',
-        headers: this.apiHeaders()
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Suppression de la valise impossible');
-      return true;
-    } catch (error) {
-      console.error('Erreur suppression valise:', error);
-      this.toast('triangle-alert', 'Suppression échouée', error.message, 'warn');
-      return false;
-    }
-  }
-
-  async deleteBox(caseId, boxId) {
-    try {
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(caseId)}/boxes/${encodeURIComponent(boxId)}`, {
-        method: 'DELETE',
-        headers: this.apiHeaders()
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Suppression du carton impossible');
-      return true;
-    } catch (error) {
-      console.error('Erreur suppression carton:', error);
-      this.toast('triangle-alert', 'Suppression échouée', error.message, 'warn');
-      return false;
-    }
-  }
-
-  activeCommand() {
-    const S = window.LStore;
-    return S ? (S.get().bons || []).find(item => item.id === this.state.activeId) : null;
   }
   icons() {
     const run = () => {
@@ -1601,51 +1278,6 @@ class Component extends DCLogic {
     return `height:${h}px;width:100%;background-image:linear-gradient(90deg,${bars.join(',')});background-size:${x}px 100%;background-repeat:repeat-x`;
   }
 
-  async downloadCaseBarcode(valise) {
-    const code = valise.code || `VAL-${String(valise.montures).padStart(3, '0')}`;
-    try {
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/labels/${encodeURIComponent(code)}.png`, {
-        headers: this.apiHeaders()
-      });
-      if (!response.ok) throw new Error('Generation du code-barres impossible');
-      const image = await response.blob();
-      const url = URL.createObjectURL(image);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `code-barres-${code}.png`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      this.toast('download', 'Code-barres telecharge', `${code}.png est pret a imprimer.`, 'ok');
-    } catch (error) {
-      console.error('Erreur telechargement code-barres:', error);
-      this.toast('triangle-alert', 'Telechargement impossible', 'Le code-barres n a pas pu etre genere.', 'warn');
-    }
-  }
-
-  printBarcodeLabel(item, title, meta) {
-    const code = item.code;
-    const barcode = this.barcode(code, 54);
-    const printWindow = window.open('', '_blank', 'width=520,height=760');
-    if (!printWindow) {
-      this.toast('triangle-alert', 'Impression bloquée', 'Autorisez la fenêtre d’impression pour imprimer l’étiquette.', 'warn');
-      return;
-    }
-    const doc = printWindow.document;
-    doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Étiquette ${title.toLowerCase()}</title><style>
-      body { margin: 0; font-family: Arial, sans-serif; background: #fff; color: #111; display: grid; place-items: center; }
-      .label { width: 360px; padding: 24px 18px; border: 2px solid #111; border-radius: 18px; background: #fff; }
-      .title { font-size: 22px; font-weight: 700; text-align: center; margin-bottom: 12px; }
-      .meta { font-size: 12px; text-align: center; color: #444; margin-bottom: 12px; }
-      .barcode { ${barcode}; border-radius: 8px; }
-      .code { font-size: 20px; font-weight: 700; text-align: center; letter-spacing: 2px; margin-top: 10px; }
-      @media print { body { background: #fff; } .label { border: 0; box-shadow: none; } }
-    </style></head><body><div class="label"><div class="title">${title}</div><div class="meta">${meta}</div><div class="barcode"></div><div class="code">${code}</div></div></body></html>`);
-    doc.close();
-    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 250);
-  }
-
   SWATCHES = [
     { hex: '#E23A2E', nom: 'Rouge' }, { hex: '#C2185B', nom: 'Framboise' }, { hex: '#D96BA0', nom: 'Rose' },
     { hex: '#8B4FBF', nom: 'Violette' }, { hex: '#5B4FBF', nom: 'Indigo' }, { hex: '#2B5FA8', nom: 'Bleu' },
@@ -1670,10 +1302,6 @@ class Component extends DCLogic {
 
   parseFr(d) {
     if (!d) return null;
-    // Gère format ISO (2026-08-29T...) et format FR (29/08/2026)
-    if (d.includes('-')) {
-      return new Date(d);
-    }
     const [j, m, a] = d.split('/').map(Number);
     return new Date(a, m - 1, j);
   }
@@ -1699,46 +1327,42 @@ class Component extends DCLogic {
   }
   marqueList() { return this.state.marques || this.MARQUES_BASE; }
   gammeOf(label) { return this.GAMMES.find(g => g.label === label) || this.GAMMES[0]; }
-  
-  readPhotos(fileList) {
-    const files = Array.from(fileList || []).filter(f => /^image\//.test(f.type));
-    const ok = [];
-    let done = 0;
-    if (files.length === 0) return;
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = e => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = 400;
-          canvas.height = 300;
-          const ctx = canvas.getContext('2d');
-          const ratio = Math.max(canvas.width / img.width, canvas.height / img.height);
-          const x = (canvas.width - img.width * ratio) / 2;
-          const y = (canvas.height - img.height * ratio) / 2;
-          ctx.drawImage(img, x, y, img.width * ratio, img.height * ratio);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.68);
-          const uuid = 'photo-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-          ok.push({ id: uuid, src: dataUrl });
-          done++;
-          if (done === files.length) {
-            this.setState(st => ({ kPhotos: [...(st.kPhotos || []), ...ok] }));
-            this.toast('image', `${ok.length} photo(s) ajoutée(s)`, 'Compressées et prêtes', 'ok');
-          }
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
   fcfa(n) { return (n || 0).toLocaleString('fr-FR') + ' F CFA'; }
 
   toast(icon, title, sub, tone) {
     this.setState({ toast: { icon, title, sub, tone } });
     clearTimeout(this.tt);
     this.tt = setTimeout(() => this.setState({ toast: null }), 3600);
+  }
+
+  readPhotos(fileList) {
+    const files = Array.from(fileList || []).filter(f => /^image\//.test(f.type));
+    if (!files.length) return;
+    Promise.all(files.map(f => new Promise(res => {
+      const r = new FileReader();
+      r.onerror = () => res(null);
+      r.onload = () => {
+        const img = new Image();
+        img.onerror = () => res(null);
+        img.onload = () => {
+          const max = 340, sc = Math.min(1, max / Math.max(img.width, img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * sc));
+          c.height = Math.max(1, Math.round(img.height * sc));
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          let src = '';
+          try { src = c.toDataURL('image/jpeg', 0.68); } catch (e) { src = r.result; }
+          res({ id: 'p' + Date.now() + Math.random().toString(36).slice(2, 6), name: f.name, src });
+        };
+        img.src = r.result;
+      };
+      r.readAsDataURL(f);
+    }))).then(list => {
+      const ok = list.filter(Boolean);
+      if (!ok.length) return;
+      this.setState(st => ({ kPhotos: [...(st.kPhotos || []), ...ok] }));
+      this.toast('image-plus', `${ok.length} photo(s) ajoutée(s)`, 'Vue de face et vue arrière par monture', 'ok');
+    });
   }
 
   renderVals() {
@@ -1823,16 +1447,15 @@ class Component extends DCLogic {
                    : 'background:rgba(95,194,217,.14);border:1px solid rgba(95,194,217,.45);color:var(--info-ink)'),
       onScan: () => { if (!c.scanned) this.doScan(c.id); },
       ctaLabel: c.scanned
-        ? (c.preRegistrationStatus === 'in_progress' ? 'Reprendre le pré-enregistrement' : 'Démarrer le pré-enregistrement')
+        ? (s.activeId === c.id && s.valises.length ? 'Reprendre le pré-enregistrement' : 'Démarrer le pré-enregistrement')
         : 'En attente de validation',
-      ctaIcon: c.scanned ? (c.preRegistrationStatus === 'in_progress' ? 'rotate-ccw' : 'play') : 'lock',
+      ctaIcon: c.scanned ? (s.activeId === c.id && s.valises.length ? 'rotate-ccw' : 'play') : 'lock',
       ctaStyle: c.scanned
         ? magentaBtn(true)
         : `display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:13px 20px;border-radius:999px;border:1px solid rgba(242,19,142,.34);background:rgba(242,19,142,.11);color:var(--acc-ink);font:600 13px/1 Manrope,sans-serif;cursor:not-allowed`,
       onStart: () => {
         if (!c.scanned) { this.toast('lock', 'Scan requis', 'Scannez le carton fournisseur', 'warn'); return; }
-        this.setState({ screen: 'valises', activeId: c.id, valises: [] });
-        this.loadCases(c.receptionCode);
+        this.setState(st => ({ screen: 'valises', activeId: c.id, valises: st.activeId === c.id ? st.valises : [] }));
       }
     }));
 
@@ -1845,46 +1468,23 @@ class Component extends DCLogic {
         couleur: v.couleur, gamme: v.gamme, genre: v.genre,
         montures: v.montures.toLocaleString('fr-FR'),
         cartonLabel: complete ? `${done} au total` : `${done} créé${done > 1 ? 's' : ''}`,
-        swatchStyle: `width:18px;height:18px;border-radius:7px;flex:none;background:${col.hex};border:1px solid rgba(0,0,0,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 4px 12px -4px ${col.hex}`,
-        cardStyle: `padding:18px 18px 16px;border-radius:22px;background:linear-gradient(180deg, rgba(255,255,255,.85), rgba(244,246,250,.9));border:1px solid ${complete ? 'rgba(63,214,154,.26)' : 'rgba(18,22,30,.08)'};backdrop-filter:blur(18px);box-shadow:0 12px 28px rgba(18,22,30,.06);display:flex;flex-direction:column;gap:12px`,
+        swatchStyle: `width:20px;height:20px;border-radius:7px;flex:none;background:${col.hex};border:1px solid var(--srf-3);box-shadow:inset 0 1px 0 var(--srf-35),0 4px 12px -4px ${col.hex}`,
+        cardStyle: `padding:20px 22px;border-radius:22px;background:${glass};border:1px solid ${complete ? 'rgba(63,214,154,.3)' : 'var(--ink-09)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9);display:flex;flex-direction:column`,
         stateLabel: complete ? 'Validée' : (done ? 'En cours' : 'À emballer'),
-        stateTagStyle: `padding:5px 10px;border-radius:999px;white-space:nowrap;font:700 10px/1.3 Manrope,sans-serif;flex:none;letter-spacing:.08em;text-transform:uppercase;` +
+        stateTagStyle: `padding:4px 10px;border-radius:999px;white-space:nowrap;font:600 10px/1.3 Manrope,sans-serif;flex:none;` +
           (complete ? 'background:rgba(63,214,154,.15);color:var(--ok-ink);border:1px solid rgba(63,214,154,.34)'
             : done ? 'background:rgba(95,194,217,.15);color:var(--info-ink);border:1px solid rgba(95,194,217,.34)'
-                   : 'background:rgba(245,165,36,.12);color:#925F00;border:1px solid rgba(166,106,5,.24)'),
+                   : 'background:var(--srf-7);color:var(--ink-7);border:1px solid var(--ink-1)'),
         ctaLabel: complete ? 'Revoir les cartons' : (done ? 'Continuer les cartons' : "Démarrer l'enregistrement"),
         ctaIcon: complete ? 'eye' : 'boxes',
-        ctaStyle: (complete ? softBtn : magentaBtn(true)) + ';margin-top:auto;width:100%',
+        ctaStyle: (complete ? softBtn : magentaBtn(true)) + ';margin-top:auto',
         onOpen: () => this.setState({ screen: 'cartons', curValise: v.id }),
         onEdit: () => {
           if (complete) { this.toast('lock', 'Valise validée', 'Dévalidez-la pour modifier', 'warn'); return; }
           this.setState({ formOpen: true, vEditId: v.id, fColor: v.couleur, fHex: this.hexOf(v), fGamme: v.gamme, fGenre: v.genre, fMontures: String(v.montures) });
         },
-        onPrint: () => {
-          this.downloadCaseBarcode(v);
-          const code = v.code || `VAL-${String(v.montures).padStart(3, '0')}`;
-          const barcode = this.barcode(code, 54);
-          const printWindow = window.open('', '_blank', 'width=520,height=760');
-          if (!printWindow) {
-            this.toast('triangle-alert', 'Impression bloquée', 'Autorisez la fenêtre d’impression pour imprimer l’étiquette.', 'warn');
-            return;
-          }
-          const doc = printWindow.document;
-          doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Étiquette valise</title><style>
-            body { margin: 0; font-family: Arial, sans-serif; background: #fff; color: #111; display: grid; place-items: center; }
-            .label { width: 360px; padding: 24px 18px; border: 2px solid #111; border-radius: 18px; background: #fff; }
-            .title { font-size: 22px; font-weight: 700; text-align: center; margin-bottom: 12px; }
-            .meta { font-size: 12px; text-align: center; color: #444; margin-bottom: 12px; }
-            .barcode { ${barcode}; border-radius: 8px; }
-            .code { font-size: 20px; font-weight: 700; text-align: center; letter-spacing: 2px; margin-top: 10px; }
-            @media print { body { background: #fff; } .label { border: 0; box-shadow: none; } }
-          </style></head><body><div class="label"><div class="title">Valise ${v.couleur}</div><div class="meta">${v.gamme} · ${v.genre} · ${v.montures} montures</div><div class="barcode"></div><div class="code">${code}</div></div></body></html>`);
-          doc.close();
-          setTimeout(() => { printWindow.focus(); printWindow.print(); }, 250);
-        },
-        onDelete: async () => {
+        onDelete: () => {
           if (complete) { this.toast('lock', 'Valise validée', 'Dévalidez-la pour supprimer', 'warn'); return; }
-          if (!(await this.deleteCase(v.id))) return;
           this.setState(st => ({ valises: st.valises.filter(x => x.id !== v.id) }));
           this.toast('trash-2', `Valise ${v.couleur} supprimée`, `${v.montures} montures libérées`, 'info');
         },
@@ -1894,7 +1494,6 @@ class Component extends DCLogic {
         },
         editRowStyle: `display:flex;gap:8px;margin-bottom:12px`,
         editBtnStyle: `flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-7);color:var(--ink-75);font:600 11.5px/1 Manrope,sans-serif;cursor:pointer;transition:all .24s ${ease}`,
-        printBtnStyle: `flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px;border-radius:999px;border:1px solid rgba(95,194,217,.3);background:rgba(95,194,217,.12);color:var(--info-ink);font:600 11.5px/1 Manrope,sans-serif;cursor:pointer;transition:all .24s ${ease}`,
         delBtnStyle: `width:36px;height:36px;border-radius:999px;display:grid;place-items:center;flex:none;border:1px solid rgba(242,19,142,.3);background:rgba(242,19,142,.09);color:var(--acc-ink);cursor:pointer;transition:all .24s ${ease}`,
         showEdit: !complete,
         showUnlock: complete
@@ -1921,26 +1520,20 @@ class Component extends DCLogic {
       marquesList: (k.marques || []).map(m => ({ label: m, style: chip('var(--srf-7)', 'var(--ink-12)', 'var(--ink-72)') })),
       detailsList: [...(k.couleurs || []), ...(k.matieres || [])].map(x => ({ label: x, style: chip('rgba(242,19,142,.1)', 'rgba(191,33,120,.26)', 'var(--acc-ink)') })),
       onFiche: () => this.setState({ ficheOpen: { ...k, seq: ki + 1 } }),
-      onPrint: () => {
-        this.downloadCaseBarcode(k);
-        this.printBarcodeLabel(k, 'Carton', `${k.gamme || cur.gamme} · ${k.type || 'Vue'} · ${k.qty} montures`);
-      },
       locked: !!cur.validated,
       onEdit: () => {
         if (cur.validated) { this.toast('lock', 'Valise validée', 'Dévalidez-la pour modifier', 'warn'); return; }
-        this.setState({ kOpen: true, kEditId: k.id, kFormes: { ...(k.formes || {}) }, kMarques: [...(k.marques || [])], kCouleurs: [...(k.couleurs || [])], kMatieres: [...(k.matieres || [])], kGamme: k.gamme, kType: k.type || 'Vue', kPrix: k.prix ? String(k.prix) : '', kSpecialQty: String(k.qty), kNewMarque: '', kNewCouleur: '', kNewMatiere: '', kPhotos: [...(k.photos || [])] });
+        this.setState({ kOpen: true, kEditId: k.id, kPhotos: [...(k.photos || [])], kFormes: { ...(k.formes || {}) }, kMarques: [...(k.marques || [])], kCouleurs: [...(k.couleurs || [])], kMatieres: [...(k.matieres || [])], kGamme: k.gamme, kType: k.type || 'Vue', kPrix: k.prix ? String(k.prix) : '', kSpecialQty: String(k.qty), kNewMarque: '', kNewCouleur: '', kNewMatiere: '' });
       },
-      onDelete: async () => {
+      onDelete: () => {
         if (cur.validated) { this.toast('lock', 'Valise validée', 'Dévalidez-la pour modifier', 'warn'); return; }
-        if (!(await this.deleteBox(cur.id, k.id))) return;
         this.setState(st => ({
           valises: st.valises.map(v => v.id === cur.id ? { ...v, cartons: v.cartons.filter(x => x.id !== k.id) } : v),
           kEditId: st.kEditId === k.id ? null : st.kEditId
         }));
         this.toast('trash-2', `Carton ${ki + 1} supprimé`, `${k.qty} montures libérées`, 'info');
       },
-      editBtnStyle: `width:34px;height:34px;border-radius:11px;display:grid;place-items:center;flex:none;margin-left:auto;cursor:${cur.validated ? 'not-allowed' : 'pointer'};transition:all .24s ${ease};border:1px solid var(--ink-1);background:var(--srf-7);color:${cur.validated ? 'var(--ink-28)' : 'var(--ink-72)'}`,
-      printBtnStyle: `flex:1 1 calc(50% - 4px);min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px;border-radius:999px;border:1px solid rgba(95,194,217,.3);background:rgba(95,194,217,.12);color:var(--info-ink);font:600 11.5px/1 Manrope,sans-serif;cursor:pointer;white-space:nowrap;transition:all .24s ${ease}`,
+      editBtnStyle: `width:34px;height:34px;border-radius:11px;display:grid;place-items:center;flex:none;cursor:${cur.validated ? 'not-allowed' : 'pointer'};transition:all .24s ${ease};border:1px solid var(--ink-1);background:var(--srf-7);color:${cur.validated ? 'var(--ink-28)' : 'var(--ink-72)'}`,
       delBtnStyle: `width:34px;height:34px;border-radius:11px;display:grid;place-items:center;flex:none;cursor:${cur.validated ? 'not-allowed' : 'pointer'};transition:all .24s ${ease};border:1px solid rgba(242,19,142,.3);background:rgba(242,19,142,.09);color:${cur.validated ? 'rgba(245,95,171,.32)' : 'var(--acc-ink)'}`,
       cardStyle: `padding:18px 20px;border-radius:20px;background:${glass};border:1px solid var(--ink-09);backdrop-filter:blur(22px);box-shadow:inset 0 1px 0 var(--srf-9);display:flex;flex-direction:column`
     })) : [];
@@ -2017,11 +1610,10 @@ class Component extends DCLogic {
     return {
       orbAStyle: `position:absolute;top:-180px;left:-140px;width:620px;height:620px;border-radius:999px;background:radial-gradient(circle at 35% 35%,rgba(242,19,142,${(.14 * glow).toFixed(3)}),transparent 68%);filter:blur(60px);animation:orbA 22s ease-in-out infinite;animation-play-state:${anim}`,
       orbBStyle: `position:absolute;bottom:-240px;right:-120px;width:660px;height:660px;border-radius:999px;background:radial-gradient(circle at 60% 40%,rgba(95,194,217,${(.16 * glow).toFixed(3)}),transparent 66%);filter:blur(70px);animation:orbB 26s ease-in-out infinite;animation-play-state:${anim}`,
-      avatarStyle: `position:relative;width:48px;height:48px;border-radius:999px;flex:none;display:grid;place-items:center;background:radial-gradient(circle at 32% 28%,#3A3A3A,#141414 62%,#0A0A0A);border:1px solid var(--ink-1);box-shadow:0 16px 32px -14px rgba(0,0,0,.95),inset 0 1px 0 var(--srf-24)`,
+      avatarStyle: `position:relative;width:48px;height:48px;border-radius:999px;flex:none;display:grid;place-items:center;background:radial-gradient(circle at 32% 28%,#3A3A3A,#141414 62%,#0A0A0A);border:1px solid var(--ink-1);box-shadow:0 16px 32px -14px rgba(0,0,0,.95),0 .toFixed(2)}),inset 0 1px 0 var(--srf-24)`,
       domeStyle: `position:absolute;top:50%;right:-32%;width:66%;aspect-ratio:1;transform:translateY(-50%);border-radius:999px;background:radial-gradient(circle at 26% 30%,rgba(247,214,231,${(.30 * glow).toFixed(3)}),rgba(247,214,231,.14) 52%,rgba(191,33,120,.10) 88%);filter:blur(2px);animation:orbB 30s ease-in-out infinite;animation-play-state:${anim}`,
 
       nav, pendingCount: commandesDB.filter(c => !c.scanned).length,
-      userName: s.userName || 'Utilisateur',
 
       isCommandes: s.screen === 'commandes',
       isValises: s.screen === 'valises',
@@ -2048,43 +1640,52 @@ class Component extends DCLogic {
       refreshIconStyle: `display:grid;place-items:center;font-size:15px;${s.refreshing ? 'animation:spin .8s linear infinite;' : ''}`,
       refresh: () => {
         if (s.refreshing) return;
-        this.loadBackendData();
+        this.setState({ refreshing: true });
+        clearTimeout(this.rt);
+        this.rt = setTimeout(() => {
+          this.setState({ refreshing: false });
+          this.toast('refresh-cw', 'Liste actualisée', `${aPreEnr.length} bon(s) en attente`, 'info');
+        }, 900);
       },
 
       expediees: enTransit.map(c => {
-        const caseList = s.shipmentDataCache[c.receptionCode] || [];
-        const total = caseList.length;
-        const done = caseList.filter(v => v.shipment_scanned).length;
-        const allIn = done === total && total > 0;
+        const total = c.ship.valises.length;
+        const done = c.ship.scanned.length;
+        const allIn = done === total;
         return {
           ref: c.ref, provenance: c.provenance, destination: c.destination,
-          unites: c.unites.toLocaleString('fr-FR'),
-          dateExp: c.date,
+          unites: c.ship.total.toLocaleString('fr-FR'),
+          dateExp: c.ship.date,
           progressLabel: `${done} / ${total} valises scannées à l'arrivée`,
           progressStyle: `height:100%;width:${total ? (done / total * 100).toFixed(1) : 0}%;border-radius:999px;background:linear-gradient(90deg,#33879C,#5FC2D9);transition:width .5s ${ease}`,
           statutStyle: chip('rgba(95,194,217,.15)', 'rgba(95,194,217,.4)', 'var(--info-ink)'),
           barcodeStyle: this.barcode(c.barcodeNum, 30),
           barcodeNum: c.barcodeNum,
           cardStyle: `border-radius:24px;overflow:hidden;background:${glass};border:1px solid ${allIn ? 'rgba(63,214,154,.32)' : 'rgba(95,194,217,.24)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9);transition:border-color .4s ${ease}`,
-          valises: caseList.map(v => {
-            const col = { hex: v.hex || this.hexOf(v) };
-            const ok = v.shipment_scanned;
+          valises: c.ship.valises.map(v => {
+            const col = { hex: this.hexOf(v) };
+            const ok = c.ship.scanned.includes(v.id);
             return {
               couleur: v.couleur, gamme: v.gamme, genre: v.genre,
               montures: v.montures.toLocaleString('fr-FR'),
-              cartonCount: (v.cartons || []).length,
+              cartonCount: v.cartons.length,
               swatchStyle: `width:16px;height:16px;border-radius:5px;flex:none;background:${col.hex};border:1px solid var(--srf-35)`,
               rowStyle: `display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:16px;border:1px solid ${ok ? 'rgba(63,214,154,.34)' : 'var(--ink-09)'};background:${ok ? 'rgba(63,214,154,.09)' : 'var(--srf-045)'};transition:all .32s ${ease}`,
               btnIcon: ok ? 'badge-check' : 'scan-barcode',
               btnStyle: `width:40px;height:40px;border-radius:13px;display:grid;place-items:center;flex:none;cursor:${ok ? 'default' : 'pointer'};transition:all .26s ${ease};` +
                 (ok ? 'background:rgba(63,214,154,.16);border:1px solid rgba(63,214,154,.42);color:var(--ok-ink)'
                     : 'background:rgba(95,194,217,.14);border:1px solid rgba(95,194,217,.45);color:var(--info-ink)'),
-              onScan: async () => {
+              onScan: () => {
                 if (ok) return;
-                const success = await this.scanCase(v.id);
-                if (success) {
-                  this.loadBackendData();
-                }
+                S.set({ bons: commandesDB.map(x => {
+                    if (x.id !== c.id) return x;
+                    const scanned = [...x.ship.scanned, v.id];
+                    const arrived = scanned.length === x.ship.valises.length;
+                    return { ...x, statut: arrived ? 'arrive' : 'transit', ship: { ...x.ship, scanned, arriveDate: arrived ? S.dateFr() : null } };
+                  }) });
+                const nowDone = done + 1;
+                if (nowDone === total) this.toast('package-check', 'Commande arrivée au stock général', `${c.ref} · ${total} valises`, 'ok');
+                else this.toast('badge-check', `Valise ${v.couleur} scannée`, `${nowDone} / ${total}`, 'ok');
               }
             };
           })
@@ -2095,37 +1696,30 @@ class Component extends DCLogic {
       ...(() => {
         const PER = { tout: Infinity, '7j': 7, '30j': 30, annee: 365 };
         const lim = PER[s.histPeriod] ?? Infinity;
-        const getArriveDate = c => c.ship && c.ship.arriveDate ? c.ship.arriveDate : (c.arrived_at ? new Date(c.arrived_at).toLocaleDateString('fr-FR') : null);
         const view = arrivees
-          .filter(c => this.daysAgo(getArriveDate(c)) <= lim)
+          .filter(c => this.daysAgo(c.ship.arriveDate) <= lim)
           .slice()
           .sort((a, b) => {
-            const dateA = getArriveDate(a);
-            const dateB = getArriveDate(b);
-            const d = this.parseFr(dateA) - this.parseFr(dateB);
+            const d = this.parseFr(a.ship.arriveDate) - this.parseFr(b.ship.arriveDate);
             return s.histTri === 'desc' ? -d : d;
           });
 
-        const card = c => {
-          const valises = s.shipmentDataCache[c.receptionCode] || c.ship?.valises || [];
-          return {
+        const card = c => ({
           ref: c.ref, provenance: c.provenance, destination: c.destination,
-          unites: c.ship && c.ship.total ? c.ship.total.toLocaleString('fr-FR') : c.unites.toLocaleString('fr-FR'),
-          dateExp: c.ship && c.ship.date ? c.ship.date : c.date, 
-          dateArr: getArriveDate(c),
-          valiseCount: valises.length,
-          cartonCount: valises.reduce((a, v) => a + (v.cartons || []).length, 0),
+          unites: c.ship.total.toLocaleString('fr-FR'),
+          dateExp: c.ship.date, dateArr: c.ship.arriveDate,
+          valiseCount: c.ship.valises.length,
+          cartonCount: c.ship.valises.reduce((a, v) => a + v.cartons.length, 0),
           statutStyle: chip('rgba(63,214,154,.15)', 'rgba(63,214,154,.38)', 'var(--ok-ink)'),
           onOpen: () => this.setState({ histOpen: c.id }),
           cardStyle: `padding:22px 24px;border-radius:22px;background:${glass};border:1px solid rgba(63,214,154,.24);backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9);cursor:pointer;text-align:left;width:100%;transition:all .3s ${ease}`
-          };
-        };
+        });
 
-        const recents = view.filter(c => this.daysAgo(getArriveDate(c)) < 30);
-        const olds = view.filter(c => this.daysAgo(getArriveDate(c)) >= 30);
+        const recents = view.filter(c => this.daysAgo(c.ship.arriveDate) < 30);
+        const olds = view.filter(c => this.daysAgo(c.ship.arriveDate) >= 30);
         const byMonth = new Map();
         olds.forEach(c => {
-          const key = this.moisLabel(getArriveDate(c));
+          const key = this.moisLabel(c.ship.arriveDate);
           if (!byMonth.has(key)) byMonth.set(key, []);
           byMonth.get(key).push(c);
         });
@@ -2163,7 +1757,6 @@ class Component extends DCLogic {
       ...(() => {
         const h = s.histOpen ? commandesDB.find(c => c.id === s.histOpen) : null;
         if (!h) return { histDetailOpen: false };
-        const hCases = s.shipmentDataCache[h.receptionCode] || h.ship?.valises || [];
         return {
           histDetailOpen: true,
           closeHist: () => this.setState({ histOpen: null }),
@@ -2173,9 +1766,9 @@ class Component extends DCLogic {
           hDateExp: h.ship.date, hDateArr: h.ship.arriveDate,
           hBarcodeStyle: this.barcode(h.barcodeNum, 38),
           hBarcodeNum: h.barcodeNum,
-          hValiseCount: hCases.length,
-          hCartonCount: hCases.reduce((a, v) => a + (v.cartons || []).length, 0),
-          hValises: hCases.map(v => {
+          hValiseCount: h.ship.valises.length,
+          hCartonCount: h.ship.valises.reduce((a, v) => a + v.cartons.length, 0),
+          hValises: h.ship.valises.map(v => {
             const col = { hex: this.hexOf(v) };
             return {
               couleur: v.couleur, gamme: v.gamme, genre: v.genre,
@@ -2217,11 +1810,7 @@ class Component extends DCLogic {
         if (!k) return;
         this.setState({ hist: h, back: true, screen: k });
       },
-      logout: () => { 
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = 'index.html'; 
-      },
+      logout: () => { window.location.href = 'Connexion.dc.html'; },
 
       ...(() => {
         const H = {
@@ -2313,17 +1902,21 @@ class Component extends DCLogic {
       phonePaired: s.phonePaired,
       phoneNotPaired: !s.phonePaired && !s.pairing,
       pairing: s.pairing,
-      pairCode: s.pairCode || 'Cliquez sur Connecter le téléphone',
-      pairQrUrl: s.pairQrUrl,
-      pairQrReady: !!s.pairQrUrl,
+      pairCode: 'LNT-4482-STK',
       pairBlocks: Array.from({ length: 144 }, (_, i) => {
         let x = (i * 2654435761) % 4294967296;
         x = (x ^ (x >> 15)) % 100;
         return { style: `width:100%;aspect-ratio:1;background:${x > 46 ? '#0D0D0D' : 'transparent'};border-radius:1px` };
       }),
-      startPair: () => this.startMobilePairing(),
+      startPair: () => {
+        this.setState({ pairing: true });
+        clearTimeout(this.pt);
+        this.pt = setTimeout(() => {
+          this.setState({ pairing: false, phonePaired: true });
+          this.toast('smartphone', 'Téléphone connecté', 'iPhone de Karim · lecteur actif', 'ok');
+        }, 1900);
+      },
       unpair: () => {
-        if (this.mobileSocket) this.mobileSocket.close();
         this.setState({ phonePaired: false });
         this.toast('smartphone', 'Téléphone déconnecté', 'Le lecteur est hors service', 'info');
       },
@@ -2399,7 +1992,7 @@ class Component extends DCLogic {
       addCartonStyle: `display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:200px;padding:22px;border-radius:20px;border:1.5px dashed ${restInValise > 0 ? 'rgba(95,194,217,.42)' : 'var(--ink-1)'};background:${restInValise > 0 ? 'rgba(95,194,217,.14)' : 'var(--srf-03)'};color:${restInValise > 0 ? 'var(--info-ink)' : 'var(--ink-34)'};cursor:${restInValise > 0 ? 'pointer' : 'not-allowed'};text-align:center;transition:all .3s ${ease}`,
       addCarton: () => {
         if (!cur || restInValise <= 0) return;
-        this.setState({ kOpen: true, kFormes: {}, kMarques: [], kCouleurs: [], kMatieres: [], kGamme: cur.gamme, kType: 'Vue', kPrix: '', kNewMarque: '', kNewCouleur: '', kNewMatiere: '', kSpecialQty: '', kPhotos: [] });
+        this.setState({ kOpen: true, kPhotos: [], kFormes: {}, kMarques: [], kCouleurs: [], kMatieres: [], kGamme: cur.gamme, kType: 'Vue', kPrix: '', kNewMarque: '', kNewCouleur: '', kNewMatiere: '', kSpecialQty: '' });
       },
       kSpecialQty: s.kSpecialQty,
       kSpecialMax: restInValise,
@@ -2455,19 +2048,15 @@ class Component extends DCLogic {
       },
       kCouleurCount: s.kCouleurs.length ? `${s.kCouleurs.length} couleur(s)` : 'Aucune couleur',
       kMatiereCount: s.kMatieres.length ? `${s.kMatieres.length} matière(s)` : 'Aucune matière',
-      kPhotos: (s.kPhotos || []).map(p => ({
-        ...p,
-        onRemove: () => this.setState(st => ({ kPhotos: st.kPhotos.filter(x => x.id !== p.id) }))
+      kPhotoRows: (s.kPhotos || []).map(p => ({
+        imgStyle: `position:absolute;inset:0;display:block;background:var(--srf-7) center/cover no-repeat url("${p.src}")`,
+        onRemove: () => this.setState(st => ({ kPhotos: (st.kPhotos || []).filter(x => x.id !== p.id) }))
       })),
-      kPhotoLabel: s.kPhotos && s.kPhotos.length > 0 ? `${s.kPhotos.length} photo(s)` : 'Aucune photo',
-      triggerPhotoInput: () => {
-        const input = document.getElementById('photo-input-k');
-        if (input) input.click();
-      },
-      onPhotoInput: e => this.readPhotos(e.target.files),
+      kPhotoLabel: `${(s.kPhotos || []).length} / ${(nextQty || 0) * 2} photos`,
+      kPhotoColor: (nextQty && (s.kPhotos || []).length >= nextQty * 2) ? 'var(--ok-ink)' : 'var(--ink-5)',
+      onPhotoInput: e => { this.readPhotos(e.target.files); e.target.value = ''; },
       onPhotoDragOver: e => e.preventDefault(),
-      onPhotoDrop: e => { e.preventDefault(); this.readPhotos(e.dataTransfer.files); },
-      removePhoto: (photoId) => this.setState(st => ({ kPhotos: st.kPhotos.filter(p => p.id !== photoId) })),
+      onPhotoDrop: e => { e.preventDefault(); this.readPhotos(e.dataTransfer && e.dataTransfer.files); },
       addForme: e => {
         const f = e.target.value;
         if (!f) return;
@@ -2520,17 +2109,10 @@ class Component extends DCLogic {
       kCountLabel: `${kTotal} / ${nextQty || 0} montures réparties`,
       kCountColor: kTotal === nextQty ? 'var(--ok-ink)' : (kTotal > (nextQty || 0) ? 'var(--acc-ink)' : 'var(--ink-5)'),
       kMarqueCount: s.kMarques.length ? `${s.kMarques.length} marque(s) sélectionnée(s)` : 'Aucune marque sélectionnée',
-      cartonSaving: s.cartonSaving,
-      cartonButtonLabel: s.cartonSaving ? 'Enregistrement...' : (editK ? 'Enregistrer les modifications' : 'Créer le carton'),
-      cartonButtonIcon: s.cartonSaving ? 'loader-circle' : 'check',
-      cartonButtonIconStyle: s.cartonSaving ? 'animation:spin .8s linear infinite;' : '',
-      kCreateStyle: s.cartonSaving
-        ? 'display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-14);background:var(--ink-14);color:var(--ink-48);font:600 13px/1 Manrope,sans-serif;cursor:wait;opacity:.72'
-        : kValid
+      kCreateStyle: kValid
         ? magentaBtn(false)
         : `display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-66);color:var(--ink-36);font:600 13px/1 Manrope,sans-serif;cursor:not-allowed`,
-      createCarton: async () => {
-        if (s.cartonSaving) return;
+      createCarton: () => {
         if (!cur) return;
         if (!nextQty) { this.toast('triangle-alert', 'Quantité manquante', `Saisissez la quantité (max ${restInValise})`, 'warn'); return; }
         if (!kSelected.length) { this.toast('triangle-alert', 'Aucune forme', 'Sélectionnez au moins une forme', 'warn'); return; }
@@ -2541,39 +2123,8 @@ class Component extends DCLogic {
         if (kVariable && kPrixVal <= 0) { this.toast('triangle-alert', 'Prix requis', `${kGammeObj.label} : tarif variable`, 'warn'); return; }
         const seq = editK ? cur.cartons.indexOf(editK) + 1 : cur.cartons.length + 1;
         const id = editK ? editK.id : 'k' + Date.now();
-        const code = editK ? editK.code : undefined;
-        const carton = {
-          id,
-          qty: nextQty,
-          ...(code ? { code } : {}),
-          formes: { ...s.kFormes },
-          marques: [...s.kMarques],
-          couleurs: [...s.kCouleurs],
-          matieres: [...s.kMatieres],
-          gamme: s.kGamme || cur.gamme,
-          type: s.kType,
-          prix: kPrixVal,
-          photos: [...(s.kPhotos || [])]
-        };
-        if (!editK) {
-          try {
-            this.setState({ cartonSaving: true });
-            const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes`, {
-              method: 'POST', headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(carton)
-            });
-            const payload = await response.json();
-            if (!response.ok || !payload.success) throw new Error(payload.error || 'Création du carton impossible');
-            const command = this.activeCommand();
-            this.setState({ cartonSaving: false, kOpen: false, kEditId: null, kPhotos: [] });
-            if (command) await this.loadCases(command.receptionCode);
-            this.toast('check', `Carton ${seq} créé`, `${nextQty} montures · code serveur généré`, 'ok');
-          } catch (error) {
-            console.error('Erreur création carton:', error);
-            this.setState({ cartonSaving: false });
-            this.toast('triangle-alert', 'Carton non enregistré', 'Le serveur n’a pas accepté ce carton.', 'warn');
-          }
-          return;
-        }
+        const code = editK ? editK.code : `${cur.couleur.slice(0, 2).toUpperCase()}-${String(cur.montures)}-${String(seq).padStart(3, '0')}`;
+        const carton = { id, qty: nextQty, code, formes: { ...s.kFormes }, marques: [...s.kMarques], couleurs: [...s.kCouleurs], matieres: [...s.kMatieres], photos: [...(s.kPhotos || [])], gamme: s.kGamme || cur.gamme, type: s.kType, prix: kPrixVal };
         this.setState(st => ({
           valises: st.valises.map(v => v.id !== cur.id ? v : {
             ...v,
@@ -2615,19 +2166,28 @@ class Component extends DCLogic {
       },
 
       recap,
-      expedier: async () => {
-        if (!active || !active.receptionCode) return;
-        try {
-          const success = await this.dispatchCommand(active.receptionCode);
-          if (success) {
-            this.setState({ valises: [], activeId: null, curValise: null, screen: 'expediees' });
-            await this.loadBackendData();
-            this.toast('truck', 'Commande en transit', `${active.ref} · ${s.valises.length} valises à scanner à l'arrivée`, 'ok');
-          }
-        } catch (error) {
-          console.error('Erreur dispatcher:', error);
-          this.toast('triangle-alert', 'Expédition échouée', error.message, 'warn');
+      expedier: () => {
+        if (!active) return;
+        const snap = s.valises.map(v => ({ ...v, cartons: [...v.cartons] }));
+        S.set({ bons: commandesDB.map(c => c.id === active.id
+          ? { ...c, statut: 'transit', ship: { valises: snap, total: assigned, date: S.dateFr(), scanned: [], arriveDate: null } }
+          : c) });
+        this.setState({ valises: [], activeId: null, curValise: null, screen: 'expediees' });
+        if (S) {
+          const arrivee = {
+            id: 'a' + Date.now(), ref: active.ref, provenance: active.provenance, dateArr: S.dateFr(),
+            valises: snap.map(v => ({
+              id: v.id, couleur: v.couleur, gamme: v.gamme, genre: v.genre, montures: v.montures, scanned: false,
+              cartons: v.cartons.map(k => ({
+                id: k.id, qty: k.qty, code: k.code, gamme: k.gamme || v.gamme, type: k.type || 'Vue',
+                prix: k.prix || 0, formes: k.formes || {}, marques: k.marques || [],
+                couleurs: k.couleurs || [], matieres: k.matieres || [], photos: k.photos || [], saisies: []
+              }))
+            }))
+          };
+          S.set({ arrivees: [arrivee, ...(S.get().arrivees || [])] });
         }
+        this.toast('truck', 'Commande en transit', `${active.ref} · ${snap.length} valises à scanner à l'arrivée`, 'ok');
       },
 
       formOpen: s.formOpen,
@@ -2666,15 +2226,8 @@ class Component extends DCLogic {
         if (nb) return 'var(--info-ink)';
         return 'var(--ink-48)';
       })(),
-      valiseSaving: s.valiseSaving,
-      valiseButtonLabel: s.valiseSaving ? 'Enregistrement...' : (s.vEditId ? 'Enregistrer les modifications' : 'Créer la valise'),
-      valiseButtonIcon: s.valiseSaving ? 'loader-circle' : 'check',
-      valiseButtonIconStyle: s.valiseSaving ? 'animation:spin .8s linear infinite;' : '',
-      createBtnStyle: s.valiseSaving
-        ? 'display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-14);background:var(--ink-14);color:var(--ink-48);font:600 13px/1 Manrope,sans-serif;cursor:wait;opacity:.72'
-        : magentaBtn(false),
-      createValise: async () => {
-        if (s.valiseSaving) return;
+      createBtnStyle: magentaBtn(false),
+      createValise: () => {
         const nb = parseInt(s.fMontures, 10);
         const editing = s.vEditId ? s.valises.find(v => v.id === s.vEditId) : null;
         const budget = editing ? remaining + editing.montures : remaining;
@@ -2693,27 +2246,12 @@ class Component extends DCLogic {
           return;
         }
         const id = 'v' + Date.now();
-        const command = this.activeCommand();
-        if (!command || !command.receptionCode) {
-          this.toast('triangle-alert', 'Session introuvable', 'Cette commande n’est pas reliée au serveur.', 'warn');
-          return;
-        }
-        try {
-          this.setState({ valiseSaving: true });
-          const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(command.receptionCode)}/cases`, {
-            method: 'POST', headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ couleur: s.fColor.trim(), hex: s.fHex, gamme: s.fGamme, genre: s.fGenre, montures: nb })
-          });
-          const payload = await response.json();
-          if (!response.ok || !payload.success) throw new Error(payload.error || 'Création de la valise impossible');
-          this.setState({ valiseSaving: false, formOpen: false, vEditId: null, fMontures: '' });
-          await this.loadCases(command.receptionCode);
-          this.toast('check', `Valise ${s.fColor} créée`, `${nb.toLocaleString('fr-FR')} montures · code serveur généré`, 'ok');
-        } catch (error) {
-          console.error('Erreur création valise:', error);
-          this.setState({ valiseSaving: false });
-          this.toast('triangle-alert', 'Valise non enregistrée', 'Le serveur n’a pas accepté cette valise.', 'warn');
-        }
+        const code = `${s.fColor.slice(0, 2).toUpperCase()}-VAL-${String(nb)}`;
+        this.setState(st => ({
+          valises: [...st.valises, { id, couleur: st.fColor.trim(), hex: st.fHex, gamme: st.fGamme, genre: st.fGenre, montures: nb, cartons: [], validated: false, code }],
+          formOpen: false, fMontures: ''
+        }));
+        this.toast('check', `Valise ${s.fColor} créée`, `${nb.toLocaleString('fr-FR')} montures à emballer`, 'ok');
       },
 
       scanning: s.scanning,
@@ -2729,29 +2267,14 @@ class Component extends DCLogic {
 
   doScan(id) {
     this.setState({ scanning: true });
-    const S = window.LStore;
-    const c = (S ? S.get().bons : []).find(item => item.id === id);
-    if (!c || !c.receptionCode) {
+    clearTimeout(this.st);
+    this.st = setTimeout(() => {
       this.setState({ scanning: false });
-      this.toast('triangle-alert', 'Session introuvable', 'Cette commande ne possède pas encore de session de pré-enregistrement.', 'warn');
-      return;
-    }
-
-    fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(c.receptionCode)}/activate`, {
-      method: 'POST',
-      headers: this.apiHeaders()
-    })
-      .then(async response => {
-        const payload = await response.json();
-        if (!response.ok || !payload.success) throw new Error(payload.error || 'Activation impossible');
-        if (S) S.set({ bons: (S.get().bons || []).map(item => item.id === id ? { ...item, scanned: true, receptionStatus: 'active' } : item) });
-        this.toast('badge-check', 'Carton vérifié', `${c.ref} · ${c.barcodeNum}`, 'ok');
-      })
-      .catch(error => {
-        console.error('Erreur activation pré-enregistrement:', error);
-        this.toast('triangle-alert', 'Scan refusé', 'Le serveur n’a pas pu activer cette commande.', 'warn');
-      })
-      .finally(() => this.setState({ scanning: false }));
+      const SS = window.LStore;
+      if (SS) SS.set({ bons: (SS.get().bons || []).map(c => c.id === id ? { ...c, scanned: true } : c) });
+      const c = (SS ? SS.get().bons : []).find(x => x.id === id);
+      this.toast('badge-check', 'Carton vérifié', c ? `${c.ref} · ${c.barcodeNum}` : '', 'ok');
+    }, 1700);
   }
 }
 </script>
