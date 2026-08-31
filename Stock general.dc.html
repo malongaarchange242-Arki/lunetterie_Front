@@ -2198,7 +2198,7 @@ class Component extends DCLogic {
         onSave: () => {}
       }));
 
-      const saveAllLines = () => {
+      const saveAllLines = async () => {
         const pending = lignesState.filter(line => !line.saved && lineReady(line));
         if (!pending.length) return;
 
@@ -2239,6 +2239,33 @@ class Component extends DCLogic {
         pending.forEach(line => {
           setLigne(line.key, { saved: true, uid: savedByKey[line.key], ref: (line.ref || '').trim() });
         });
+
+        // Save to backend database
+        for (let i = 0; i < added.length; i++) {
+          const m = added[i];
+          const line = pending[i];
+          try {
+            const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/glasses`, {
+              method: 'POST',
+              headers: this.apiHeaders(),
+              body: JSON.stringify({
+                barcode: m.uid,
+                reference: m.ref || '',
+                price: cart.prix || 0,
+                photo_monture_url: m.photoFace || '',
+                photo_branche_url: m.photoFace || '',
+                photo_arriere_url: m.photoDos || '',
+                reception_command_id: cmd && cmd.id ? cmd.id : null,
+                notes: `Forme: ${m.forme || '—'}, Marque: ${m.marque || '—'}, Couleur: ${m.couleur || '—'}, Matière: ${m.matiere || '—'}`
+              })
+            });
+            if (!response.ok) {
+              console.warn(`Erreur création monture ${m.uid}:`, response.status);
+            }
+          } catch (error) {
+            console.warn(`Erreur API création monture ${m.uid}:`, error);
+          }
+        }
 
         const S = window.LStore;
         if (S) {
