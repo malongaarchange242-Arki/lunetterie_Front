@@ -614,11 +614,11 @@ input::placeholder{color:var(--ink-34)}
         <sc-if value="{{ stockTableVisible }}" hint-placeholder-val="{{ true }}">
         <div style="border-radius:24px;overflow:hidden;border:1px solid var(--ink-09);background:linear-gradient(160deg,var(--srf-9),var(--srf-64));backdrop-filter:blur(24px);box-shadow:0 24px 56px -30px var(--ink-2)">
          <div style="overflow-x:auto"><div style="min-width:960px">
-          <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(150px,1.1fr) minmax(140px,1.1fr);gap:14px;padding:14px 22px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
-            <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>GENRE</div><div>COULEUR</div><div>MATIÈRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div>EMPLACEMENT</div><div>VALISE / CARTON</div><div style="text-align:right">IDENTIFIANT</div>
+          <div style="display:grid;grid-template-columns:58px minmax(110px,1fr) minmax(96px,.9fr) minmax(86px,.8fr) minmax(92px,.85fr) minmax(100px,.9fr) minmax(100px,.9fr) minmax(100px,.9fr) minmax(90px,.8fr) minmax(190px,1.3fr) minmax(150px,1.1fr);gap:14px;padding:14px 22px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
+            <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>GENRE</div><div>COULEUR</div><div>MATIÈRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div>VALISE / CARTON</div><div style="text-align:right">IDENTIFIANT</div>
           </div>
           <sc-for list="{{ stockRows }}" as="r" hint-placeholder-count="0">
-            <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(150px,1.1fr) minmax(140px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
+            <div style="display:grid;grid-template-columns:58px minmax(110px,1fr) minmax(96px,.9fr) minmax(86px,.8fr) minmax(92px,.85fr) minmax(100px,.9fr) minmax(100px,.9fr) minmax(100px,.9fr) minmax(90px,.8fr) minmax(190px,1.3fr) minmax(150px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
               <div style="{{ r.photoStyle }}">
                 <sc-if value="{{ r.photoUrl }}" hint-placeholder-val="false"><img bindSrc="{{ r.photoUrl }}" alt="Photo monture" style="display:block;width:100%;height:100%;object-fit:cover"></sc-if>
                 <sc-if value="{{ r.photoMissing }}" hint-placeholder-val="true"><span data-icon="glasses" style="display:grid;place-items:center;font-size:17px;color:var(--srf-9)"></span></sc-if>
@@ -631,7 +631,6 @@ input::placeholder{color:var(--ink-34)}
               <div style="min-width:0;font:500 12px/1.3 Manrope,sans-serif;color:var(--ink-68)">{{ r.matiere }}</div>
               <div style="min-width:0;font:500 12px/1.3 Manrope,sans-serif;color:var(--ink-68)">{{ r.gamme }}</div>
               <div style="min-width:0;text-align:right;font:500 12px/1.3 'JetBrains Mono',monospace;color:var(--ok-ink);white-space:nowrap">{{ r.prix }}</div>
-              <div style="min-width:0;font:500 11px/1.3 Manrope,sans-serif;color:var(--ink-68);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.emplacement }}</div>
               <div style="min-width:0;font:500 11px/1.35 Manrope,sans-serif;color:var(--ink-68);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.valiseCarton }}</div>
               <div style="min-width:0;text-align:right;font:500 10.5px/1.4 'JetBrains Mono',monospace;color:var(--info-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.uid }}</div>
             </div>
@@ -1496,8 +1495,8 @@ class Component extends DCLogic {
           prix: Number(item.price ?? item.prix) || 0,
           site: item.station_name || 'Stock général',
           emplacement: item.location_code || item.location || '—',
-          valise: item.valise_code || item.valise_couleur || item.valise || '—',
-          carton: item.box_code || item.carton_code || item.carton || '—',
+          valise: item.case_code || item.valise_code || item.valise_couleur || item.valise || '—',
+          carton: item.box_code || item.location_code || item.carton_code || item.carton || '—',
           ref_bon: item.reception_command_code || item.ref_bon || '—',
           cmdId: item.reception_command_id || item.command_id || item.cmdId || null,
           valId: item.case_id || item.valId || null,
@@ -3041,7 +3040,6 @@ class Component extends DCLogic {
             ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
             genre: m.genre || '—', couleur: m.couleur || '—', matiere: m.matiere || '—',
             prix: this.fcfa(m.prix), uid: m.uid,
-            emplacement: m.location || m.emplacement || m.carton || '—',
             valiseCarton: (m.valise && m.carton)
               ? `${m.valise} / ${m.carton}`
               : (m.valise || m.carton)
