@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -1228,7 +1228,7 @@ class Component extends DCLogic {
     toast: null,
     marques: null,
     kOpen: false, kFormes: {}, kMarques: [], kGamme: '', kType: 'Vue', kPrix: '', kNewMarque: '',
-    kSpecial: false, kSpecialQty: '', kEditId: null, vEditId: null,
+    kSpecial: false, kSpecialQty: '', kEditId: null, vEditId: null, kSaving: false,
     histOpen: null, manualCode: '', phonePaired: false, pairing: false, helpOpen: false,
     cmdSort: 'desc', cmdProv: '', refreshing: false, histPeriod: 'tout', histTri: 'desc',
     fHex: '#E23A2E', kCouleurs: [], kMatieres: [], kNewCouleur: '', kNewMatiere: '', kPhotos: [],
@@ -1241,20 +1241,49 @@ class Component extends DCLogic {
 
   store() { return window.LStore ? window.LStore.get() : {}; }
 
-  // Charger les commandes depuis l'API
+  // ===== CHARGEMENT DES COMMANDES DEPUIS L'API =====
   async loadCommands() {
     try {
       this.setState({ loading: true });
+      
+      console.log('🔍 Chargement des commandes depuis:', `${this.apiBaseUrl()}/api/v1/inventory/reception-commands`);
       
       const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands`, {
         method: 'GET',
         headers: this.apiHeaders()
       });
       
+      console.log('📡 Statut de la réponse:', response.status);
+      
       const payload = await response.json().catch(() => ({}));
       
-      if (!response.ok || !payload.success) {
-        // Fallback sur les données locales si l'API échoue
+      console.log('📦 Payload reçu:', payload);
+      console.log('📦 Type de payload:', typeof payload);
+      
+      // Gérer différents formats de réponse, dont { data: { commands: [...] } }
+      const getCommandsArray = source => {
+        if (!source) return null;
+        if (Array.isArray(source)) return source;
+        if (typeof source !== 'object') return null;
+        const keys = ['commands', 'commandes', 'items', 'results', 'reception_commands', 'receptionCommands'];
+        for (const key of keys) {
+          if (Array.isArray(source[key])) return source[key];
+        }
+        return null;
+      };
+      let commandsData = getCommandsArray(payload) || getCommandsArray(payload && payload.data) || [];
+
+      if (commandsData.length) {
+        console.log(`✅ Format reconnu: ${commandsData.length} commande(s)`);
+      }
+      // Si la réponse est un objet unique
+      else if (payload && typeof payload === 'object' && payload.id) {
+        console.log('✅ Format: objet unique');
+        commandsData = [payload];
+      }
+      // Fallback sur les données locales
+      else {
+        console.warn('⚠️ Format de réponse inconnu, fallback sur les données locales');
         const SS = window.LStore;
         if (SS) {
           const localData = SS.get().bons || [];
@@ -1264,24 +1293,45 @@ class Component extends DCLogic {
           });
           return localData;
         }
-        throw new Error(payload.error || 'Impossible de charger les commandes');
+        throw new Error('Format de réponse inattendu: ' + JSON.stringify(payload).slice(0, 200));
+      }
+      if (!commandsData.length) {
+        console.log('ℹ️ Aucune commande trouvée');
+        this.setState({ 
+          commandes: [],
+          loading: false 
+        });
+        return [];
       }
       
+      console.log(`✅ ${commandsData.length} commandes trouvées`);
+      
       // Transformation des données de l'API vers le format attendu
-      const commands = (payload.data || []).map(cmd => ({
-        id: cmd.id || cmd.code,
-        ref: cmd.reference || cmd.code || 'BC-XXXX',
-        provenance: cmd.supplier || cmd.provenance || 'Fournisseur',
-        destination: cmd.destination || 'Stock général',
-        unites: cmd.total_units || cmd.quantity || 0,
-        date: cmd.created_at ? this.formatDate(cmd.created_at) : '--/--/----',
-        transport: cmd.shipping_method || cmd.transport || '--',
-        barcodeNum: cmd.barcode || '---',
-        scanned: cmd.scanned || false,
-        statut: cmd.status || 'attente',
-        ship: cmd.ship || null,
-        receptionCode: cmd.reception_code || cmd.code
-      }));
+      const normalizeCommandStatus = value => {
+        const raw = String(value || '').trim().toLowerCase();
+        if (['active', 'pending', 'open', 'created', 'new', 'attente', 'en_attente'].includes(raw)) return 'attente';
+        if (['shipped', 'shipment', 'in_transit', 'transit', 'expedie', 'expédié', 'expediee', 'expédiée'].includes(raw)) return 'transit';
+        if (['arrived', 'received', 'completed', 'complete', 'done', 'arrive', 'arrivé', 'arrivee', 'arrivée'].includes(raw)) return 'arrive';
+        return raw || 'attente';
+      };
+      const commands = commandsData.map(cmd => {
+        const dateValue = cmd.created_at || cmd.date || cmd.createdAt;
+        return {
+          id: cmd.id || cmd.code || cmd._id || 'id-' + Math.random().toString(36).slice(2, 8),
+          ref: cmd.reference || cmd.code || cmd.ref || 'BC-XXXX',
+          provenance: cmd.supplier || cmd.provenance || cmd.from || 'Fournisseur',
+          destination: cmd.destination || cmd.to || 'Stock général',
+          unites: Number(cmd.total_units ?? cmd.target_count ?? cmd.quantity ?? cmd.unites ?? 0),
+          date: dateValue ? this.formatDate(dateValue) : '--/--/----',
+          transport: cmd.shipping_method || cmd.transport || cmd.shipping || '--',
+          barcodeNum: cmd.barcode || cmd.barcodeNum || cmd.code || '---',
+          scanned: Boolean(cmd.scanned || cmd.activated_at || cmd.activatedAt),
+          statut: normalizeCommandStatus(cmd.status || cmd.statut),
+          ship: cmd.ship || null,
+          receptionCode: cmd.reception_code || cmd.code || cmd.id
+        };
+      });
+      console.log('📋 Commandes transformées:', commands);
       
       this.setState({ 
         commandes: commands,
@@ -1301,14 +1351,81 @@ class Component extends DCLogic {
       
       return commands;
     } catch (error) {
-      console.error('Erreur chargement commandes:', error);
+      console.error('❌ Erreur chargement commandes:', error);
       this.setState({ loading: false });
+      
+      // Fallback sur les données locales
+      const SS = window.LStore;
+      if (SS) {
+        const localData = SS.get().bons || [];
+        this.setState({ 
+          commandes: localData,
+          loading: false 
+        });
+        this.toast('triangle-alert', 'Mode hors-ligne', 'Données chargées depuis le cache local', 'warn');
+        return localData;
+      }
+      
       this.toast('triangle-alert', 'Erreur de chargement', error.message || 'Impossible de charger les commandes', 'warn');
       return [];
     }
   }
 
-  // Formater une date
+  mapPreRegistrationCase(item) {
+    const cartons = Array.isArray(item && item.cartons) ? item.cartons : [];
+    return {
+      id: String(item.id || item.code || 'v' + Date.now()),
+      couleur: item.couleur || 'Valise',
+      hex: item.hex || '#7A7A7A',
+      gamme: item.gamme || 'Moyenne gamme',
+      genre: item.genre || 'Homme',
+      montures: Number(item.montures || 0),
+      cartons: cartons.map(box => ({
+        id: String(box.id || box.code || 'k' + Date.now()),
+        code: box.code || '',
+        qty: Number(box.qty ?? box.quantity ?? 0),
+        formes: box.formes || {},
+        marques: Array.isArray(box.marques) ? box.marques : [],
+        couleurs: Array.isArray(box.couleurs) ? box.couleurs : [],
+        matieres: Array.isArray(box.matieres) ? box.matieres : [],
+        photos: Array.isArray(box.photos) ? box.photos : [],
+        gamme: box.gamme || item.gamme || 'Moyenne gamme',
+        type: box.type || box.type_lunette || 'Vue',
+        prix: Number(box.prix || 0)
+      })),
+      validated: Boolean(item.validated),
+      code: item.code || ''
+    };
+  }
+
+  async loadCases(command) {
+    if (!command || !command.receptionCode) {
+      this.setState({ valises: [] });
+      return [];
+    }
+    try {
+      const response = await fetch(
+        `${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(command.receptionCode)}/cases`,
+        { headers: this.apiHeaders() }
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.success === false) {
+        throw new Error(payload.error || 'Chargement des valises impossible');
+      }
+      const rawCases = Array.isArray(payload)
+        ? payload
+        : (Array.isArray(payload.cases) ? payload.cases : (payload.data && Array.isArray(payload.data.cases) ? payload.data.cases : []));
+      const valises = rawCases.map(item => this.mapPreRegistrationCase(item));
+      this.setState({ valises });
+      return valises;
+    } catch (error) {
+      console.warn('Erreur chargement valises:', error);
+      this.toast('triangle-alert', 'Valises non chargées', error.message || 'Backend indisponible', 'warn');
+      this.setState({ valises: [] });
+      return [];
+    }
+  }
+  // ===== FORMATAGE DE DATE =====
   formatDate(dateStr) {
     if (!dateStr) return '--/--/----';
     try {
@@ -1322,6 +1439,7 @@ class Component extends DCLogic {
     }
   }
 
+  // ===== MÉTHODES DU CYCLE DE VIE =====
   componentDidMount() {
     this.icons();
     this.paintBg();
@@ -1356,7 +1474,7 @@ class Component extends DCLogic {
     if (window.lucide) run(); else setTimeout(run, 400);
   }
 
-  // Méthodes API
+  // ===== MÉTHODES API =====
   apiBaseUrl() {
     return 'https://api-lunetterie.universearch.com';
   }
@@ -1366,7 +1484,7 @@ class Component extends DCLogic {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  // Barcode
+  // ===== BARCODE =====
   barcode(seed, h, light) {
     let s = 0;
     for (let i = 0; i < String(seed).length; i++) s += String(seed).charCodeAt(i) * (i + 3);
@@ -1437,7 +1555,7 @@ class Component extends DCLogic {
   gammeOf(label) { return this.GAMMES.find(g => g.label === label) || this.GAMMES[0]; }
   fcfa(n) { return (n || 0).toLocaleString('fr-FR') + ' F CFA'; }
 
-  // Validation des images
+  // ===== VALIDATION DES IMAGES =====
   isValidImageSource(raw) {
     if (!raw || typeof raw !== 'string') return false;
     const source = raw.trim();
@@ -1489,23 +1607,26 @@ class Component extends DCLogic {
     if (!caseId || !caseCode || !boxCode || !Array.isArray(photos) || !photos.length) return [];
     const uploaded = [];
     for (const photo of photos) {
-      if (!photo || !this.isValidImageSource(photo.src)) {
-        continue;
-      }
-      const kind = (photo.kind || 'face').toLowerCase();
-      const source = photo.src || photo.url || '';
+      const source = photo && (photo.src || photo.url || '');
       if (!this.isValidImageSource(source)) continue;
+      const kind = (photo.kind || 'face').toLowerCase();
+      const photoId = photo && photo.id ? String(photo.id) : `photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const originalName = (photo && photo.name) ? String(photo.name) : `${kind}.jpg`;
+      const fileExt = originalName.includes('.') ? originalName.split('.').pop() : 'jpg';
+      const safeName = `${photoId}.${fileExt}`.replace(/[^a-zA-Z0-9._-]/g, '-');
       const fd = new FormData();
       fd.append('caseCode', caseCode);
       fd.append('boxCode', boxCode);
       fd.append('kind', kind);
+      fd.append('photoId', photoId);
+      fd.append('fileName', originalName);
       const data = source.startsWith('data:image')
         ? this.dataUrlToBlob(source)
         : await fetch(source).then(response => response.ok ? response.blob() : null);
       if (!data || data.size === 0) {
         continue;
       }
-      fd.append('image', data, `${kind}-${Date.now()}.jpg`);
+      fd.append('image', data, safeName);
       const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(caseId)}/boxes/upload-photo`, {
         method: 'POST',
         headers: this.apiHeaders(),
@@ -1517,10 +1638,10 @@ class Component extends DCLogic {
       }
       const uploadedUrl = (payload.data && payload.data.url) ? payload.data.url : '';
       uploaded.push({
-        id: photo.id || undefined,
+        id: photo.id || photoId,
         kind,
         url: uploadedUrl || '',
-        src: photo.src || '',
+        src: uploadedUrl || photo.src || '',
         name: photo.name || undefined
       });
     }
@@ -1594,25 +1715,34 @@ class Component extends DCLogic {
         SS.set({ bons: (SS.get().bons || []).map(c => c.id === id ? { ...c, scanned: true } : c) });
       }
       
+      let syncError = null;
       try {
         const command = (this.state.commandes || []).find(c => c.id === id);
         if (command && command.receptionCode) {
-          await fetch(
-            `${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(command.receptionCode)}/scan`,
+          const scanResponse = await fetch(
+            `${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(command.receptionCode)}/activate`,
             {
               method: 'POST',
-              headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
-              body: JSON.stringify({ scanned: true })
+              headers: this.apiHeaders()
             }
           );
+          const scanPayload = await scanResponse.json().catch(() => ({}));
+          if (!scanResponse.ok || scanPayload.success === false) {
+            throw new Error(scanPayload.error || 'Activation du bon impossible');
+          }
         }
       } catch (error) {
+        syncError = error;
         console.warn('Erreur synchronisation scan:', error);
       }
       
       await this.loadCommands();
       
       const c = (this.state.commandes || []).find(x => x.id === id);
+      if (syncError) {
+        this.toast('triangle-alert', 'Scan non synchronisé', syncError.message || 'Backend indisponible', 'warn');
+        return;
+      }
       this.toast('badge-check', 'Carton vérifié', c ? `${c.ref} · ${c.barcodeNum}` : '', 'ok');
     }, 1700);
   }
@@ -1708,9 +1838,10 @@ class Component extends DCLogic {
       ctaStyle: c.scanned
         ? magentaBtn(true)
         : `display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:13px 20px;border-radius:999px;border:1px solid rgba(242,19,142,.34);background:rgba(242,19,142,.11);color:var(--acc-ink);font:600 13px/1 Manrope,sans-serif;cursor:not-allowed`,
-      onStart: () => {
+      onStart: async () => {
         if (!c.scanned) { this.toast('lock', 'Scan requis', 'Scannez le carton fournisseur', 'warn'); return; }
-        this.setState(st => ({ screen: 'valises', activeId: c.id, valises: st.activeId === c.id ? st.valises : [] }));
+        this.setState({ screen: 'valises', activeId: c.id, valises: [] });
+        await this.loadCases(c);
       }
     }));
 
@@ -2336,7 +2467,7 @@ class Component extends DCLogic {
       kQty: nextQty || 0,
       kEditing: !!editK,
       kTitle: editK ? 'Modifier le carton' : 'Nouveau carton',
-      kCtaLabel: editK ? 'Enregistrer les modifications' : 'Créer le carton',
+      kCtaLabel: s.kSaving ? 'Création...' : (editK ? 'Enregistrer les modifications' : 'Créer le carton'),
       kNum: editK ? String(cur.cartons.indexOf(editK) + 1).padStart(2, '0') : (cur ? String(cur.cartons.length + 1).padStart(2, '0') : '01'),
       kGamme: s.kGamme || (cur ? cur.gamme : ''),
       setKGamme: e => this.setState({ kGamme: e.target.value, kPrix: '' }),
@@ -2361,10 +2492,11 @@ class Component extends DCLogic {
       kCountLabel: `${kTotal} / ${nextQty || 0} montures réparties`,
       kCountColor: kTotal === nextQty ? 'var(--ok-ink)' : (kTotal > (nextQty || 0) ? 'var(--acc-ink)' : 'var(--ink-5)'),
       kMarqueCount: s.kMarques.length ? `${s.kMarques.length} marque(s) sélectionnée(s)` : 'Aucune marque sélectionnée',
-      kCreateStyle: kValid
+      kCreateStyle: (kValid && !s.kSaving)
         ? magentaBtn(false)
-        : `display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-66);color:var(--ink-36);font:600 13px/1 Manrope,sans-serif;cursor:not-allowed`,
+        : `display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-66);color:var(--ink-36);font:600 13px/1 Manrope,sans-serif;cursor:not-allowed;opacity:${s.kSaving ? .72 : 1}`,
       createCarton: async () => {
+        if (s.kSaving) return;
         if (!cur) return;
         if (!nextQty) { this.toast('triangle-alert', 'Quantité manquante', `Saisissez la quantité (max ${restInValise})`, 'warn'); return; }
         if (!kSelected.length) { this.toast('triangle-alert', 'Aucune forme', 'Sélectionnez au moins une forme', 'warn'); return; }
@@ -2375,19 +2507,81 @@ class Component extends DCLogic {
         if (kVariable && kPrixVal <= 0) { this.toast('triangle-alert', 'Prix requis', `${kGammeObj.label} : tarif variable`, 'warn'); return; }
         const seq = editK ? cur.cartons.indexOf(editK) + 1 : cur.cartons.length + 1;
         const id = editK ? editK.id : 'k' + Date.now();
-        const code = editK ? editK.code : `${cur.couleur.slice(0, 2).toUpperCase()}-${String(cur.montures)}-${String(seq).padStart(3, '0')}`;
+        const code = editK ? editK.code : `CTN-${String(seq).padStart(3, '0')}`;
         const carton = { id, qty: nextQty, code, formes: { ...s.kFormes }, marques: [...s.kMarques], couleurs: [...s.kCouleurs], matieres: [...s.kMatieres], photos: [], gamme: s.kGamme || cur.gamme, type: s.kType, prix: kPrixVal };
         
         if (!editK) {
-          const validPhotos = (s.kPhotos || []).filter(p => p && this.isValidImageSource(p.src));
+          const validPhotos = (s.kPhotos || []).filter(p => p && this.isValidImageSource(p.src || p.url));
+          let savedCase = null;
+          let savedBox = null;
+          let uploadedPhotos = [];
+          this.setState({ kSaving: true });
+          try {
+            const response = await fetch(
+              `${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes`,
+              {
+                method: 'POST',
+                headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  code,
+                  qty: nextQty,
+                  formes: { ...s.kFormes },
+                  marques: [...s.kMarques],
+                  couleurs: [...s.kCouleurs],
+                  matieres: [...s.kMatieres],
+                  photos: [],
+                  gamme: s.kGamme || cur.gamme,
+                  type: s.kType,
+                  prix: kPrixVal
+                })
+              }
+            );
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.success === false) {
+              throw new Error(payload.error || 'Création du carton impossible');
+            }
+            savedCase = (payload.data && payload.data.case) || payload.case || null;
+            const savedCartons = savedCase && Array.isArray(savedCase.cartons) ? savedCase.cartons : [];
+            savedBox = savedCartons.find(box => box.code === code) || savedCartons[savedCartons.length - 1] || null;
+            if (!savedBox || !savedBox.id) {
+              throw new Error('Carton créé mais réponse API incomplète');
+            }
+            uploadedPhotos = await this.uploadBoxPhotos(cur.id, cur.code, savedBox.code || code, validPhotos);
+            if (uploadedPhotos.length) {
+              const photoResponse = await fetch(
+                `${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes/${encodeURIComponent(savedBox.id)}/photos`,
+                {
+                  method: 'POST',
+                  headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ photos: uploadedPhotos })
+                }
+              );
+              const photoPayload = await photoResponse.json().catch(() => ({}));
+              if (!photoResponse.ok || photoPayload.success === false) {
+                throw new Error(photoPayload.error || 'Sauvegarde des photos impossible');
+              }
+            }
+          } catch (error) {
+            console.warn('Erreur création carton:', error);
+            this.setState({ kSaving: false });
+            this.toast('triangle-alert', 'Carton non enregistré', error.message || 'Backend indisponible', 'warn');
+            return;
+          }
+
+          const nextCarton = {
+            ...carton,
+            id: String(savedBox.id),
+            code: savedBox.code || code,
+            photos: uploadedPhotos
+          };
           this.setState(st => ({
             valises: st.valises.map(v => v.id !== cur.id ? v : {
               ...v,
-              cartons: [...v.cartons, { ...carton, photos: validPhotos.map(p => ({ id: p.id, kind: p.kind || 'face', src: p.src || '', url: p.url || '', name: p.name || undefined })) }]
+              cartons: [...v.cartons, nextCarton]
             }),
-            kOpen: false, kEditId: null, kPhotos: []
+            kOpen: false, kEditId: null, kPhotos: [], kSaving: false
           }));
-          this.toast('check', `Carton ${seq} créé`, `${nextQty} montures · ${validPhotos.length || 0} photo(s)`, 'ok');
+          this.toast('check', `Carton ${seq} créé`, `${nextQty} montures · ${uploadedPhotos.length || 0} photo(s)`, 'ok');
           return;
         }
         
@@ -2400,7 +2594,6 @@ class Component extends DCLogic {
         }));
         this.toast('check', editK ? `Carton ${seq} modifié` : `Carton ${seq} créé`, `${nextQty} montures · ${kSelected.length} forme(s) · ${s.kCouleurs.length} couleur(s) · ${s.kMatieres.length} matière(s)`, 'ok');
       },
-
       ficheOpen: !!fiche,
       closeFiche: () => this.setState({ ficheOpen: null }),
       ficheCode: fiche ? fiche.code : '',
@@ -2511,15 +2704,47 @@ class Component extends DCLogic {
           this.toast('check', `Valise ${s.fColor} modifiée`, `${nb} montures`, 'ok');
           return;
         }
-        const id = 'v' + Date.now();
-        const code = `${s.fColor.slice(0, 2).toUpperCase()}-VAL-${String(nb)}`;
-        const localCase = { id, couleur: s.fColor.trim(), hex: s.fHex, gamme: s.fGamme, genre: s.fGenre, montures: nb, cartons: [], validated: false, code };
+        if (!active || !active.receptionCode) {
+          this.toast('triangle-alert', 'Commande introuvable', 'Impossible de rattacher la valise au bon', 'warn');
+          return;
+        }
+
+        let createdCase = null;
+        try {
+          const response = await fetch(
+            `${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(active.receptionCode)}/cases`,
+            {
+              method: 'POST',
+              headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                couleur: s.fColor.trim(),
+                hex: s.fHex,
+                gamme: s.fGamme,
+                genre: s.fGenre,
+                montures: nb
+              })
+            }
+          );
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload.success === false) {
+            throw new Error(payload.error || 'Création de la valise impossible');
+          }
+          createdCase = (payload.data && payload.data.case) || payload.case || payload.data || payload;
+        } catch (error) {
+          console.warn('Erreur création valise:', error);
+          this.toast('triangle-alert', 'Valise non enregistrée', error.message || 'Backend indisponible', 'warn');
+          return;
+        }
+
+        const localCase = this.mapPreRegistrationCase(createdCase || {
+          couleur: s.fColor.trim(), hex: s.fHex, gamme: s.fGamme, genre: s.fGenre, montures: nb, cartons: [], validated: false
+        });
         
         this.setState(st => ({
           valises: [...st.valises, localCase],
-          formOpen: false, curValise: id, fMontures: ''
+          formOpen: false, curValise: localCase.id, fMontures: ''
         }));
-        this.toast('check', `Valise ${s.fColor} créée`, `${nb.toLocaleString('fr-FR')} montures à emballer`, 'ok');
+        this.toast('check', `Valise ${localCase.couleur} créée`, `${localCase.montures.toLocaleString('fr-FR')} montures à emballer`, 'ok');
       },
 
       scanning: s.scanning,
