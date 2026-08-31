@@ -1357,6 +1357,20 @@ class Component extends DCLogic {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
+  resolveReceptionCommandCode(active) {
+    const raw = active && (active.receptionCode || active.sessionCode || active.code || active.ref || active.id);
+    const value = String(raw || '').trim();
+    if (!value) return null;
+    const isValid = /^S\d{6}-\d{4}$/.test(value);
+    if (isValid) return value;
+    console.warn('[reception-session] code backend invalide ignoré', {
+      activeId: active && active.id,
+      rawValue: value,
+      reason: 'expected SYYMMDD-#### format'
+    });
+    return null;
+  }
+
   dataUrlToBlob(dataUrl) {
     if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
       console.warn('dataUrlToBlob: URL invalide');
@@ -2439,7 +2453,7 @@ class Component extends DCLogic {
         const id = 'v' + Date.now();
         const code = `${s.fColor.slice(0, 2).toUpperCase()}-VAL-${String(nb)}`;
         const localCase = { id, couleur: s.fColor.trim(), hex: s.fHex, gamme: s.fGamme, genre: s.fGenre, montures: nb, cartons: [], validated: false, code };
-        const commandCode = active && (active.receptionCode || active.code || active.ref || active.id);
+        const commandCode = this.resolveReceptionCommandCode(active);
         if (commandCode) {
           try {
             const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(commandCode)}/cases`, {
@@ -2460,8 +2474,12 @@ class Component extends DCLogic {
             this.toast('check', `Valise ${s.fColor} créée`, `${nb.toLocaleString('fr-FR')} montures · enregistrée côté serveur`, 'ok');
             return;
           } catch (error) {
-            console.warn('Création backend de valise impossible, fallback local:', error);
+            console.warn('[reception-session] Création backend de valise impossible, fallback local:', { active, commandCode, error });
+            this.toast('triangle-alert', 'Session de réception introuvable', 'Le bon sélectionné n’a pas de session backend valide. Le pré-enregistrement reste local pour cette commande.', 'warn');
           }
+        } else {
+          console.warn('[reception-session] aucune session backend valide pour cette commande', { active });
+          this.toast('triangle-alert', 'Session de réception introuvable', 'Aucune session backend valide n’a été trouvée pour cette commande.', 'warn');
         }
         this.setState(st => ({
           valises: [...st.valises, localCase],
