@@ -2244,8 +2244,9 @@ class Component extends DCLogic {
         const id = editK ? editK.id : 'k' + Date.now();
         const code = editK ? editK.code : `${cur.couleur.slice(0, 2).toUpperCase()}-${String(cur.montures)}-${String(seq).padStart(3, '0')}`;
         const carton = { id, qty: nextQty, code, formes: { ...s.kFormes }, marques: [...s.kMarques], couleurs: [...s.kCouleurs], matieres: [...s.kMatieres], photos: [], gamme: s.kGamme || cur.gamme, type: s.kType, prix: kPrixVal };
-        const serverCaseId = Number(cur.backendId ?? cur.id);
-        const hasServerCase = Number.isFinite(serverCaseId) && serverCaseId > 0 && String(cur.id).match(/^[0-9]+$/);
+        const serverCaseKey = cur.backendId ?? cur.id;
+        const serverCaseId = Number(serverCaseKey);
+        const hasServerCase = Number.isFinite(serverCaseId) && serverCaseId > 0 && String(serverCaseKey).match(/^[0-9]+$/);
         
         if (!editK) {
           const validPhotos = (s.kPhotos || []).filter(p => p && this.isValidImageSource(p.src));
