@@ -1069,7 +1069,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:8px">
           <sc-for list="{{ kPhotoRows }}" as="p" hint-placeholder-count="0">
             <div style="position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--srf-7);border:1px solid var(--ink-12)">
-              <span style="{{ p.imgStyle }}"></span>
+              <img bindSrc="{{ p.imgSrc }}" alt="Photo de monture" style="position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover">
               <button onClick="{{ p.onRemove }}" title="Retirer" style="position:absolute;top:3px;right:3px;width:19px;height:19px;border-radius:999px;border:0;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;display:grid;place-items:center"><span data-icon="x" style="display:grid;place-items:center;font-size:11px"></span></button>
             </div>
           </sc-for>
@@ -2168,7 +2168,7 @@ class Component extends DCLogic {
       kPhotoRows: (s.kPhotos || [])
         .filter(p => p && this.isValidImageSource(p.src))
         .map(p => ({
-        imgStyle: `position:absolute;inset:0;display:block;background:var(--srf-7) center/cover no-repeat url("${p.src}")`,
+        imgSrc: p.src,
         onRemove: () => this.setState(st => ({ kPhotos: (st.kPhotos || []).filter(x => x.id !== p.id) }))
       })),
       kPhotoLabel: `${(s.kPhotos || []).length} / ${(nextQty || 0) * 2} photos`,
