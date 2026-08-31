@@ -1329,6 +1329,22 @@ class Component extends DCLogic {
   gammeOf(label) { return this.GAMMES.find(g => g.label === label) || this.GAMMES[0]; }
   fcfa(n) { return (n || 0).toLocaleString('fr-FR') + ' F CFA'; }
 
+  apiBaseUrl() {
+    return 'https://api-lunetterie.universearch.com';
+  }
+
+  photoUrl(raw) {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    const match = value.match(/https?:\/\/[^\s\])"',]+/i);
+    return match ? match[0] : value;
+  }
+
+  apiHeaders() {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
   dataUrlToBlob(dataUrl) {
     const parts = String(dataUrl || '').split(',');
     const meta = parts[0] || 'data:image/jpeg;base64';
@@ -1340,8 +1356,8 @@ class Component extends DCLogic {
     return new Blob([bytes], { type: mime });
   }
 
-  async uploadBoxPhotos(caseCode, boxCode, photos) {
-    if (!caseCode || !boxCode || !Array.isArray(photos) || !photos.length) return [];
+  async uploadBoxPhotos(caseId, caseCode, boxCode, photos) {
+    if (!caseId || !caseCode || !boxCode || !Array.isArray(photos) || !photos.length) return [];
     const uploaded = [];
     for (const photo of photos) {
       const kind = (photo.kind || 'face').toLowerCase();
@@ -1353,17 +1369,21 @@ class Component extends DCLogic {
       fd.append('kind', kind);
       const data = source.startsWith('data:') ? this.dataUrlToBlob(source) : await fetch(source).then(r => r.blob());
       fd.append('image', data, `${kind}-${Date.now()}.jpg`);
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(caseCode)}/boxes/upload-photo`, {
+      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(caseId)}/boxes/upload-photo`, {
         method: 'POST',
         headers: this.apiHeaders(),
         body: fd
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.success) throw new Error(payload.error || `Upload photo ${kind} impossible`);
+      if (!response.ok || !payload.success) {
+        const err = payload && payload.error ? payload.error : `Upload photo ${kind} impossible`;
+        throw new Error(typeof err === 'string' ? err : (err && err.message) ? err.message : `Upload photo ${kind} impossible`);
+      }
+      const uploadedUrl = (payload.data && payload.data.url) ? payload.data.url : '';
       uploaded.push({
         id: photo.id || undefined,
         kind,
-        url: payload.url || (payload.data && payload.data.url) || photo.url || '',
+        url: uploadedUrl || '',
         src: photo.src || '',
         name: photo.name || undefined
       });
@@ -2177,15 +2197,16 @@ class Component extends DCLogic {
               body: JSON.stringify(carton)
             });
             const payload = await response.json();
-            if (!response.ok || !payload.success) throw new Error(payload.error || 'Création du carton impossible');
-            const createdCase = payload.case || payload.data || null;
+            if (!response.ok || !payload.success) throw new Error((payload && payload.error) ? payload.error : 'Création du carton impossible');
+            const createdCase = payload.data && payload.data.case ? payload.data.case : null;
             const createdBox = (createdCase && Array.isArray(createdCase.cartons) && createdCase.cartons.length)
               ? createdCase.cartons[createdCase.cartons.length - 1]
               : null;
             const caseCode = createdCase ? createdCase.code : cur.code;
+            const caseId = createdCase && createdCase.id ? createdCase.id : cur.id;
             
-            const uploadedPhotos = createdBox && (s.kPhotos || []).length && caseCode
-              ? await this.uploadBoxPhotos(caseCode, createdBox.code, (s.kPhotos || []).filter(Boolean))
+            const uploadedPhotos = createdBox && (s.kPhotos || []).length && caseCode && caseId
+              ? await this.uploadBoxPhotos(caseId, caseCode, createdBox.code, (s.kPhotos || []).filter(Boolean))
               : [];
               
             if (createdBox && uploadedPhotos.length) {
@@ -2195,7 +2216,10 @@ class Component extends DCLogic {
                 body: JSON.stringify({ photos: uploadedPhotos })
               });
               const updatePayload = await updateRes.json().catch(() => ({}));
-              if (!updateRes.ok || !updatePayload.success) throw new Error(updatePayload.error || 'Sauvegarde des photos impossible');
+              if (!updateRes.ok || !updatePayload.success) {
+                const err = updatePayload && updatePayload.error ? updatePayload.error : 'Sauvegarde des photos impossible';
+                throw new Error(typeof err === 'string' ? err : (err && err.message) ? err.message : 'Sauvegarde des photos impossible');
+              }
             }
             
             this.setState({ cartonSaving: false, kOpen: false, kEditId: null, kPhotos: [] });
