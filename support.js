@@ -156,9 +156,12 @@
     runtime.setRootName(rootName);
     runtime.adoptParsed(rootName, parsed);
     if (!window.__resources) {
-      fetch(location.href).then((res) => res.ok ? res.text() : "").then((t) => {
+      const freshUrl = new URL(location.href);
+      freshUrl.searchParams.set("dc_refresh", String(Date.now()));
+      fetch(freshUrl.toString(), { cache: "no-store" }).then((res) => res.ok ? res.text() : "").then((t) => {
         const raw = t ? parseDcText(t) : null;
         if (raw?.template) runtime.updateHtml(rootName, raw.template);
+        if (raw?.js) runtime.updateJs(rootName, raw.js);
       }).catch(() => {
       });
     }

@@ -1325,7 +1325,7 @@ class Component extends DCLogic {
 
       const normalizeCommandStatus = value => {
         const raw = String(value || '').trim().toLowerCase();
-        if (['active', 'pending', 'open', 'created', 'new', 'attente', 'en_attente'].includes(raw)) return 'attente';
+        if (['active', 'pending', 'open', 'created', 'new', 'attente', 'en_attente', 'not_shipped'].includes(raw)) return 'attente';
         if (['shipped', 'shipment', 'in_transit', 'transit', 'expedie', 'expédié', 'expediee', 'expédiée'].includes(raw)) return 'transit';
         if (['arrived', 'received', 'completed', 'complete', 'done', 'arrive', 'arrivé', 'arrivee', 'arrivée'].includes(raw)) return 'arrive';
         return raw || 'attente';
@@ -1454,6 +1454,13 @@ class Component extends DCLogic {
     this.paintBg();
     const S = window.LStore;
     if (S) this._sub = S.subscribe(() => this.setState({ _tick: Date.now() }));
+    
+    // Initialize with local store data before loading from server
+    const DB = this.store();
+    if (DB && DB.bons && DB.bons.length > 0) {
+      this.setState({ commandes: DB.bons });
+    }
+    
     this.loadCommands();
     this.loadCurrentUser();
   }
