@@ -1360,10 +1360,11 @@ class Component extends DCLogic {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.success) throw new Error(payload.error || `Upload photo ${kind} impossible`);
+      const uploadedUrl = (payload.data && payload.data.url) ? payload.data.url : '';
       uploaded.push({
         id: photo.id || undefined,
         kind,
-        url: payload.url || (payload.data && payload.data.url) || photo.url || '',
+        url: uploadedUrl || '',
         src: photo.src || '',
         name: photo.name || undefined
       });
@@ -2177,34 +2178,40 @@ class Component extends DCLogic {
               body: JSON.stringify(carton)
             });
             const payload = await response.json();
-            if (!response.ok || !payload.success) throw new Error(payload.error || 'Création du carton impossible');
-            const createdCase = payload.case || payload.data || null;
-            const createdBox = (createdCase && Array.isArray(createdCase.cartons) && createdCase.cartons.length)
-              ? createdCase.cartons[createdCase.cartons.length - 1]
-              : null;
-            const caseCode = createdCase ? createdCase.code : cur.code;
+            if (!response.ok || !payload.success) throw new Error((payload.error && (payload.error.message || payload.error.toString())) || 'Création du carton impossible');
+            const caseData = payload.data && payload.data.case ? payload.data.case : null;
+            if (!caseData || !Array.isArray(caseData.cartons) || !caseData.cartons.length) throw new Error('Réponse du serveur invalide');
+            const createdBox = caseData.cartons[caseData.cartons.length - 1];
+            const caseCode = caseData.code;
+            const boxCode = createdBox.code;
+            const boxID = createdBox.id;
             
-            const uploadedPhotos = createdBox && (s.kPhotos || []).length && caseCode
-              ? await this.uploadBoxPhotos(caseCode, createdBox.code, (s.kPhotos || []).filter(Boolean))
-              : [];
-              
-            if (createdBox && uploadedPhotos.length) {
-              const updateRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes/${encodeURIComponent(createdBox.id)}/photos`, {
-                method: 'POST', 
-                headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ photos: uploadedPhotos })
+            const hasPhotos = (s.kPhotos || []).filter(Boolean).length > 0;
+            if (hasPhotos && caseCode && boxCode) {
+              const uploadedPhotos = await this.uploadBoxPhotos(caseCode, boxCode, (s.kPhotos || []).filter(Boolean)).catch(err => {
+                console.warn('Upload photos échoué:', err);
+                return [];
               });
-              const updatePayload = await updateRes.json().catch(() => ({}));
-              if (!updateRes.ok || !updatePayload.success) throw new Error(updatePayload.error || 'Sauvegarde des photos impossible');
+              
+              if (uploadedPhotos.length) {
+                const updateRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes/${encodeURIComponent(boxID)}/photos`, {
+                  method: 'POST', 
+                  headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' }, 
+                  body: JSON.stringify({ photos: uploadedPhotos })
+                });
+                const updatePayload = await updateRes.json().catch(() => ({}));
+                if (!updateRes.ok) console.warn('Sauvegarde des photos échouée:', updatePayload.error);
+              }
             }
             
             this.setState({ cartonSaving: false, kOpen: false, kEditId: null, kPhotos: [] });
             await this.loadCases(active.receptionCode);
-            this.toast('check', `Carton ${seq} créé`, `${nextQty} montures · photos enregistrées`, 'ok');
+            const photoMsg = hasPhotos ? ` · ${(s.kPhotos || []).filter(Boolean).length} photo(s)` : '';
+            this.toast('check', `Carton ${seq} créé`, `${nextQty} montures${photoMsg}`, 'ok');
           } catch (error) {
             console.error('Erreur création carton:', error);
             this.setState({ cartonSaving: false });
-            this.toast('triangle-alert', 'Carton non enregistré', 'Le serveur n\'a pas accepté ce carton.', 'warn');
+            this.toast('triangle-alert', 'Carton non enregistré', String(error.message || error), 'warn');
           }
           return;
         }
