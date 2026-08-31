@@ -1211,8 +1211,14 @@ class Component extends DCLogic {
 
   photoUrl(raw) {
     const value = String(raw || '').trim();
-    const match = value.match(/https?:\/\/[^\s\])'",]+/i);
-    return match ? match[0] : value;
+    if (!value) return '';
+    if (/^(data:|https?:\/\/)/i.test(value)) {
+      const match = value.match(/(?:data:image\/[^\s;]+;base64,[A-Za-z0-9+/=]+|https?:\/\/[^\s\])'",]+)/i);
+      return match ? match[0] : '';
+    }
+    if (/^-?\d+(?:\.\d+)?$/.test(value)) return '';
+    if (value.startsWith('linear-gradient(') || value.startsWith('radial-gradient(') || value.startsWith('#')) return '';
+    return '';
   }
 
   apiHeaders() {
@@ -2288,7 +2294,7 @@ class Component extends DCLogic {
             carton: cart.code,
             site: 'Stock général',
             statut: 'stock',
-            photo: (existingSaisies.length + i) % 4,
+            photo: m.photoFace || m.photoDos || '',
             photoFace: m.photoFace || '',
             photoDos: m.photoDos || ''
           }));
