@@ -433,8 +433,9 @@
         if (key.includes("-") && !(kind === "x-import" && (key.startsWith("aria-") || key.startsWith("data-"))))
           key = kebabToCamel(key);
       } else {
-        // bindSrc avoids the browser requesting the literal {{ value }} while it parses a DC template.
+        // Bind aliases avoid browser parsing/requesting literal DC template values.
         if (key === "bindSrc") key = "src";
+        else if (key === "bindValue") key = "value";
         else if (key === "class") key = "className";
         else if (key === "for") key = "htmlFor";
         else if (key.startsWith("on"))
