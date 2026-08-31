@@ -1404,6 +1404,8 @@ class Component extends DCLogic {
       const r = new FileReader();
       r.onerror = () => res(null);
       r.onload = () => {
+        const result = r.result;
+        if (typeof result !== 'string' || !result.startsWith('data:image/')) return res(null);
         const img = new Image();
         img.onerror = () => res(null);
         img.onload = () => {
@@ -1413,10 +1415,11 @@ class Component extends DCLogic {
           c.height = Math.max(1, Math.round(img.height * sc));
           c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
           let src = '';
-          try { src = c.toDataURL('image/jpeg', 0.68); } catch (e) { src = r.result; }
+          try { src = c.toDataURL('image/jpeg', 0.68); } catch (e) { src = result; }
+          if (!src || typeof src !== 'string' || !src.startsWith('data:image/')) return res(null);
           res({ id: 'p' + Date.now() + Math.random().toString(36).slice(2, 6), name: f.name, src });
         };
-        img.src = r.result;
+        img.src = result;
       };
       r.readAsDataURL(f);
     }))).then(list => {
@@ -2187,11 +2190,24 @@ class Component extends DCLogic {
         const id = editK ? editK.id : 'k' + Date.now();
         const code = editK ? editK.code : `${cur.couleur.slice(0, 2).toUpperCase()}-${String(cur.montures)}-${String(seq).padStart(3, '0')}`;
         const carton = { id, qty: nextQty, code, formes: { ...s.kFormes }, marques: [...s.kMarques], couleurs: [...s.kCouleurs], matieres: [...s.kMatieres], photos: [], gamme: s.kGamme || cur.gamme, type: s.kType, prix: kPrixVal };
+        const serverCaseId = Number(cur.backendId ?? cur.id);
+        const hasServerCase = Number.isFinite(serverCaseId) && serverCaseId > 0 && String(cur.id).match(/^[0-9]+$/);
         
         if (!editK) {
+          if (!hasServerCase) {
+            this.setState(st => ({
+              valises: st.valises.map(v => v.id !== cur.id ? v : {
+                ...v,
+                cartons: [...v.cartons, { ...carton, photos: (s.kPhotos || []).map(p => ({ id: p.id, kind: p.kind || 'face', src: p.src || '', url: p.url || '', name: p.name || undefined })) }]
+              }),
+              kOpen: false, kEditId: null, kPhotos: []
+            }));
+            this.toast('check', `Carton ${seq} créé`, `${nextQty} montures · ${s.kPhotos.length || 0} photo(s) enregistrées localement`, 'ok');
+            return;
+          }
           try {
             this.setState({ cartonSaving: true });
-            const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes`, {
+            const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(serverCaseId)}/boxes`, {
               method: 'POST', 
               headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' }, 
               body: JSON.stringify(carton)
@@ -2203,14 +2219,14 @@ class Component extends DCLogic {
               ? createdCase.cartons[createdCase.cartons.length - 1]
               : null;
             const caseCode = createdCase ? createdCase.code : cur.code;
-            const caseId = createdCase && createdCase.id ? createdCase.id : cur.id;
+            const caseId = createdCase && createdCase.id ? createdCase.id : serverCaseId;
             
             const uploadedPhotos = createdBox && (s.kPhotos || []).length && caseCode && caseId
               ? await this.uploadBoxPhotos(caseId, caseCode, createdBox.code, (s.kPhotos || []).filter(Boolean))
               : [];
               
             if (createdBox && uploadedPhotos.length) {
-              const updateRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes/${encodeURIComponent(createdBox.id)}/photos`, {
+              const updateRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(serverCaseId)}/boxes/${encodeURIComponent(createdBox.id)}/photos`, {
                 method: 'POST', 
                 headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' }, 
                 body: JSON.stringify({ photos: uploadedPhotos })
