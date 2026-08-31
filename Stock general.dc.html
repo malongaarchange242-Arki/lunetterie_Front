@@ -2254,11 +2254,11 @@ class Component extends DCLogic {
               body: JSON.stringify({
                 barcode: m.uid,
                 reference: m.ref || '',
-                price: cart.prix || 0,
+                price: Number(cart.prix) || 0,
                 photo_monture_url: m.photoFace || '',
                 photo_branche_url: m.photoFace || '',
                 photo_arriere_url: m.photoDos || '',
-                reception_command_id: cmd && cmd.id ? cmd.id : null,
+                reception_command_id: cmd && cmd.id != null ? Number(cmd.id) : null,
                 notes: `Forme: ${m.forme || '—'}, Marque: ${m.marque || '—'}, Couleur: ${m.couleur || '—'}, Matière: ${m.matiere || '—'}`
               })
             });
