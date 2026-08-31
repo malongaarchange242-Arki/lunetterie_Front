@@ -1329,48 +1329,6 @@ class Component extends DCLogic {
   gammeOf(label) { return this.GAMMES.find(g => g.label === label) || this.GAMMES[0]; }
   fcfa(n) { return (n || 0).toLocaleString('fr-FR') + ' F CFA'; }
 
-  dataUrlToBlob(dataUrl) {
-    const parts = String(dataUrl || '').split(',');
-    const meta = parts[0] || 'data:image/jpeg;base64';
-    const mimeMatch = meta.match(/data:([^;]+)/);
-    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-    const binary = atob(parts[1] || '');
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new Blob([bytes], { type: mime });
-  }
-
-  async uploadBoxPhotos(caseCode, boxCode, photos) {
-    if (!caseCode || !boxCode || !Array.isArray(photos) || !photos.length) return [];
-    const uploaded = [];
-    for (const photo of photos) {
-      const kind = (photo.kind || 'face').toLowerCase();
-      const source = photo.src || photo.url || '';
-      if (!source) continue;
-      const fd = new FormData();
-      fd.append('caseCode', caseCode);
-      fd.append('boxCode', boxCode);
-      fd.append('kind', kind);
-      const data = source.startsWith('data:') ? this.dataUrlToBlob(source) : await fetch(source).then(r => r.blob());
-      fd.append('image', data, `${kind}-${Date.now()}.jpg`);
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(caseCode)}/boxes/upload-photo`, {
-        method: 'POST',
-        headers: this.apiHeaders(),
-        body: fd
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.success) throw new Error(payload.error || `Upload photo ${kind} impossible`);
-      uploaded.push({
-        id: photo.id || undefined,
-        kind,
-        url: payload.url || (payload.data && payload.data.url) || photo.url || '',
-        src: photo.src || '',
-        name: photo.name || undefined
-      });
-    }
-    return uploaded;
-  }
-
   toast(icon, title, sub, tone) {
     this.setState({ toast: { icon, title, sub, tone } });
     clearTimeout(this.tt);
@@ -2154,7 +2112,7 @@ class Component extends DCLogic {
       kCreateStyle: kValid
         ? magentaBtn(false)
         : `display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-66);color:var(--ink-36);font:600 13px/1 Manrope,sans-serif;cursor:not-allowed`,
-      createCarton: async () => {
+      createCarton: () => {
         if (!cur) return;
         if (!nextQty) { this.toast('triangle-alert', 'Quantité manquante', `Saisissez la quantité (max ${restInValise})`, 'warn'); return; }
         if (!kSelected.length) { this.toast('triangle-alert', 'Aucune forme', 'Sélectionnez au moins une forme', 'warn'); return; }
@@ -2166,49 +2124,7 @@ class Component extends DCLogic {
         const seq = editK ? cur.cartons.indexOf(editK) + 1 : cur.cartons.length + 1;
         const id = editK ? editK.id : 'k' + Date.now();
         const code = editK ? editK.code : `${cur.couleur.slice(0, 2).toUpperCase()}-${String(cur.montures)}-${String(seq).padStart(3, '0')}`;
-        const carton = { id, qty: nextQty, code, formes: { ...s.kFormes }, marques: [...s.kMarques], couleurs: [...s.kCouleurs], matieres: [...s.kMatieres], photos: [], gamme: s.kGamme || cur.gamme, type: s.kType, prix: kPrixVal };
-        
-        if (!editK) {
-          try {
-            this.setState({ cartonSaving: true });
-            const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes`, {
-              method: 'POST', 
-              headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' }, 
-              body: JSON.stringify(carton)
-            });
-            const payload = await response.json();
-            if (!response.ok || !payload.success) throw new Error(payload.error || 'Création du carton impossible');
-            const createdCase = payload.case || payload.data || null;
-            const createdBox = (createdCase && Array.isArray(createdCase.cartons) && createdCase.cartons.length)
-              ? createdCase.cartons[createdCase.cartons.length - 1]
-              : null;
-            const caseCode = createdCase ? createdCase.code : cur.code;
-            
-            const uploadedPhotos = createdBox && (s.kPhotos || []).length && caseCode
-              ? await this.uploadBoxPhotos(caseCode, createdBox.code, (s.kPhotos || []).filter(Boolean))
-              : [];
-              
-            if (createdBox && uploadedPhotos.length) {
-              const updateRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes/${encodeURIComponent(createdBox.id)}/photos`, {
-                method: 'POST', 
-                headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ photos: uploadedPhotos })
-              });
-              const updatePayload = await updateRes.json().catch(() => ({}));
-              if (!updateRes.ok || !updatePayload.success) throw new Error(updatePayload.error || 'Sauvegarde des photos impossible');
-            }
-            
-            this.setState({ cartonSaving: false, kOpen: false, kEditId: null, kPhotos: [] });
-            await this.loadCases(active.receptionCode);
-            this.toast('check', `Carton ${seq} créé`, `${nextQty} montures · photos enregistrées`, 'ok');
-          } catch (error) {
-            console.error('Erreur création carton:', error);
-            this.setState({ cartonSaving: false });
-            this.toast('triangle-alert', 'Carton non enregistré', 'Le serveur n\'a pas accepté ce carton.', 'warn');
-          }
-          return;
-        }
-        
+        const carton = { id, qty: nextQty, code, formes: { ...s.kFormes }, marques: [...s.kMarques], couleurs: [...s.kCouleurs], matieres: [...s.kMatieres], photos: [...(s.kPhotos || [])], gamme: s.kGamme || cur.gamme, type: s.kType, prix: kPrixVal };
         this.setState(st => ({
           valises: st.valises.map(v => v.id !== cur.id ? v : {
             ...v,
