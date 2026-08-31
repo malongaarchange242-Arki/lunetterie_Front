@@ -23,9 +23,7 @@ a:hover{color:var(--acc-strong)}
 input,select{font-family:Manrope,sans-serif}
 input:focus,select:focus{outline:none}
 input::placeholder{color:var(--ink-3)}
-select{color:var(--ink)!important;background-color:var(--srf-74)!important;appearance:none;-webkit-appearance:none;-moz-appearance:none;color-scheme:light}
-select option,select optgroup{background:var(--card)!important;color:var(--ink)!important}
-select::-ms-expand{display:none}
+select option{background:#141414;color:var(--ink)}
 @keyframes orbA{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(50px,-70px,0) scale(1.14)}}
 @keyframes orbB{0%,100%{transform:translate3d(0,0,0) scale(1.06)}50%{transform:translate3d(-60px,60px,0) scale(.9)}}
 @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
@@ -779,7 +777,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
 
       <div style="margin-bottom:8px">
         <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68);margin-bottom:11px">NOMBRE DE MONTURES</div>
-        <input value="0" bindValue="{{ fMontures }}" onChange="{{ setMontures }}" type="number" min="0" step="1" placeholder="1000" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-74);border:1.5px solid var(--ink-12);color:var(--ink);font:500 17px/1 'JetBrains Mono',monospace">
+        <input value="{{ fMontures }}" onChange="{{ setMontures }}" type="number" placeholder="1000" style="width:100%;padding:14px 16px;border-radius:14px;background:var(--srf-74);border:1.5px solid var(--ink-12);color:var(--ink);font:500 17px/1 'JetBrains Mono',monospace">
       </div>
       <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:{{ hintColor }};margin-bottom:24px;min-height:18px">{{ formHint }}</div>
 
@@ -918,7 +916,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
           <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68)">MONTURES DANS CE CARTON</span>
           <span style="margin-left:auto;font:500 10.5px/1 'JetBrains Mono',monospace;color:var(--ink-66)">max {{ kSpecialMax }}</span>
         </div>
-        <input value="0" bindValue="{{ kSpecialQty }}" onChange="{{ setKSpecialQty }}" type="number" min="0" step="1" placeholder="Nombre libre" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-74);border:1.5px solid var(--ink-12);color:var(--ink);font:600 15px/1 'JetBrains Mono',monospace;margin-bottom:10px">
+        <input value="{{ kSpecialQty }}" onChange="{{ setKSpecialQty }}" type="number" placeholder="Nombre libre" style="width:100%;padding:13px 14px;border-radius:14px;background:var(--srf-74);border:1.5px solid var(--ink-12);color:var(--ink);font:600 15px/1 'JetBrains Mono',monospace;margin-bottom:10px">
         <div style="display:flex;flex-wrap:wrap;gap:7px">
           <sc-for list="{{ qtyPresets }}" as="q" hint-placeholder-count="4">
             <button onClick="{{ q.onClick }}" style="{{ q.style }}">{{ q.label }}</button>
@@ -950,7 +948,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
             <div style="padding:13px 14px;border-radius:14px;background:rgba(63,214,154,.1);border:1.5px solid rgba(63,214,154,.3);color:var(--ok-ink);font:600 14px/1 'JetBrains Mono',monospace">{{ kPrixFixedLabel }}</div>
           </sc-if>
           <sc-if value="{{ kVariable }}" hint-placeholder-val="{{ false }}">
-            <input value="0" bindValue="{{ kPrix }}" onChange="{{ setKPrix }}" type="number" min="0" step="0.01" placeholder="tarif variable — à saisir" style="width:100%;padding:13px 14px;border-radius:14px;background:rgba(245,165,36,.09);border:1.5px solid rgba(245,165,36,.36);color:var(--ink);font:600 14px/1 'JetBrains Mono',monospace">
+            <input value="{{ kPrix }}" onChange="{{ setKPrix }}" type="number" placeholder="tarif variable — à saisir" style="width:100%;padding:13px 14px;border-radius:14px;background:rgba(245,165,36,.09);border:1.5px solid rgba(245,165,36,.36);color:var(--ink);font:600 14px/1 'JetBrains Mono',monospace">
           </sc-if>
           <sc-if value="{{ kOfferte }}" hint-placeholder-val="{{ false }}">
             <div style="padding:13px 14px;border-radius:14px;background:rgba(95,194,217,.1);border:1.5px solid rgba(95,194,217,.32);color:var(--info-ink);font:600 12.5px/1.2 Manrope,sans-serif">{{ kPrixOfferteLabel }}</div>
@@ -974,7 +972,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
             <div style="display:flex;align-items:center;gap:10px;padding:9px 11px 9px 14px;border-radius:14px;background:rgba(95,194,217,.1);border:1px solid rgba(95,194,217,.3)">
               <span style="flex:1;font:600 12.5px/1.2 Manrope,sans-serif">{{ f.label }}</span>
               <span style="font:500 10px/1.4 'JetBrains Mono',monospace;color:var(--ink-64)">max {{ f.max }}</span>
-              <input value="0" bindValue="{{ f.qty }}" onChange="{{ f.onQty }}" type="number" min="0" step="1" style="width:64px;padding:7px 8px;border-radius:10px;background:var(--srf-8);border:1px solid rgba(95,194,217,.42);color:var(--info-ink);font:600 12px/1 'JetBrains Mono',monospace;text-align:center">
+              <input value="{{ f.qty }}" onChange="{{ f.onQty }}" type="number" style="width:64px;padding:7px 8px;border-radius:10px;background:var(--srf-8);border:1px solid rgba(95,194,217,.42);color:var(--info-ink);font:600 12px/1 'JetBrains Mono',monospace;text-align:center">
               <button onClick="{{ f.onRemove }}" style="width:28px;height:28px;border-radius:9px;border:1px solid var(--ink-1);background:transparent;color:var(--ink-7);cursor:pointer;display:grid;place-items:center;flex:none"><span data-icon="x" style="display:grid;place-items:center;font-size:14px"></span></button>
             </div>
           </sc-for>
@@ -1071,7 +1069,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:8px">
           <sc-for list="{{ kPhotoRows }}" as="p" hint-placeholder-count="0">
             <div style="position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--srf-7);border:1px solid var(--ink-12)">
-              <img bindSrc="{{ p.imgSrc }}" alt="Photo de monture" style="position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover">
+              <span style="{{ p.imgStyle }}"></span>
               <button onClick="{{ p.onRemove }}" title="Retirer" style="position:absolute;top:3px;right:3px;width:19px;height:19px;border-radius:999px;border:0;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;display:grid;place-items:center"><span data-icon="x" style="display:grid;place-items:center;font-size:11px"></span></button>
             </div>
           </sc-for>
@@ -1331,115 +1329,6 @@ class Component extends DCLogic {
   gammeOf(label) { return this.GAMMES.find(g => g.label === label) || this.GAMMES[0]; }
   fcfa(n) { return (n || 0).toLocaleString('fr-FR') + ' F CFA'; }
 
-  apiBaseUrl() {
-    return 'https://api-lunetterie.universearch.com';
-  }
-
-  photoUrl(raw) {
-    const value = String(raw || '').trim();
-    if (!value || value === 'null' || value === 'undefined') return '';
-    const match = value.match(/https?:\/\/[^\s\])"',]+/i);
-    return match ? match[0] : value;
-  }
-
-  isValidImageSource(raw) {
-    if (!raw || typeof raw !== 'string') return false;
-    const source = raw.trim();
-    if (source.startsWith('data:image/')) {
-      const marker = source.indexOf(';base64,');
-      return marker > 'data:image/'.length && source.slice(marker + 8).trim().length > 0;
-    }
-    return source.startsWith('https://') || source.startsWith('http://');
-  }
-
-  apiHeaders() {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  }
-
-  resolveReceptionCommandCode(active) {
-    const raw = active && (active.receptionCode || active.sessionCode || active.code || active.ref || active.id);
-    const value = String(raw || '').trim();
-    if (!value) return null;
-    const isValid = /^S\d{6}-\d{4}$/.test(value);
-    if (isValid) return value;
-    console.warn('[reception-session] code backend invalide ignoré', {
-      activeId: active && active.id,
-      rawValue: value,
-      reason: 'expected SYYMMDD-#### format'
-    });
-    return null;
-  }
-
-  dataUrlToBlob(dataUrl) {
-    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
-      console.warn('dataUrlToBlob: URL invalide');
-      return new Blob([], { type: 'image/jpeg' });
-    }
-    try {
-    const parts = String(dataUrl || '').split(',');
-      if (parts.length < 2) {
-        console.warn('dataUrlToBlob: format invalide');
-        return new Blob([], { type: 'image/jpeg' });
-      }
-    const meta = parts[0] || 'data:image/jpeg;base64';
-    const mimeMatch = meta.match(/data:([^;]+)/);
-    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-    const binary = atob(parts[1] || '');
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new Blob([bytes], { type: mime });
-    } catch (error) {
-      console.warn('dataUrlToBlob: erreur de décodage', error);
-      return new Blob([], { type: 'image/jpeg' });
-    }
-  }
-
-  async uploadBoxPhotos(caseId, caseCode, boxCode, photos) {
-    if (!caseId || !caseCode || !boxCode || !Array.isArray(photos) || !photos.length) return [];
-    const uploaded = [];
-    for (const photo of photos) {
-      if (!photo || !this.isValidImageSource(photo.src)) {
-        console.warn('Photo invalide ignorée:', photo);
-        continue;
-      }
-      const kind = (photo.kind || 'face').toLowerCase();
-      const source = photo.src || photo.url || '';
-      if (!this.isValidImageSource(source)) continue;
-      const fd = new FormData();
-      fd.append('caseCode', caseCode);
-      fd.append('boxCode', boxCode);
-      fd.append('kind', kind);
-      const data = source.startsWith('data:image')
-        ? this.dataUrlToBlob(source)
-        : await fetch(source).then(response => response.ok ? response.blob() : null);
-      if (!data || data.size === 0) {
-        console.warn('Données image vides pour:', photo.name);
-        continue;
-      }
-      fd.append('image', data, `${kind}-${Date.now()}.jpg`);
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(caseId)}/boxes/upload-photo`, {
-        method: 'POST',
-        headers: this.apiHeaders(),
-        body: fd
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.success) {
-        const err = payload && payload.error ? payload.error : `Upload photo ${kind} impossible`;
-        throw new Error(typeof err === 'string' ? err : (err && err.message) ? err.message : `Upload photo ${kind} impossible`);
-      }
-      const uploadedUrl = (payload.data && payload.data.url) ? payload.data.url : '';
-      uploaded.push({
-        id: photo.id || undefined,
-        kind,
-        url: uploadedUrl || '',
-        src: photo.src || '',
-        name: photo.name || undefined
-      });
-    }
-    return uploaded;
-  }
-
   toast(icon, title, sub, tone) {
     this.setState({ toast: { icon, title, sub, tone } });
     clearTimeout(this.tt);
@@ -1448,52 +1337,30 @@ class Component extends DCLogic {
 
   readPhotos(fileList) {
     const files = Array.from(fileList || []).filter(f => /^image\//.test(f.type));
-    if (!files.length) {
-      this.toast('triangle-alert', 'Aucune image valide', 'Sélectionnez des fichiers image (JPEG, PNG)', 'warn');
-      return;
-    }
+    if (!files.length) return;
     Promise.all(files.map(f => new Promise(res => {
       const r = new FileReader();
-      r.onerror = () => { console.warn('Erreur lecture fichier:', f.name); res(null); };
+      r.onerror = () => res(null);
       r.onload = () => {
-        try {
-          const result = r.result;
-          const img = new Image();
-          if (!this.isValidImageSource(result)) {
-            img.removeAttribute('src');
-            return res(null);
-          }
-          img.onerror = () => { console.warn('Image invalide:', f.name); res(null); };
-          img.onload = () => {
-            const max = 340, sc = Math.min(1, max / Math.max(img.width, img.height));
-            const c = document.createElement('canvas');
-            c.width = Math.max(1, Math.round(img.width * sc));
-            c.height = Math.max(1, Math.round(img.height * sc));
-            const ctx = c.getContext('2d');
-            if (!ctx) return res(null);
-            ctx.drawImage(img, 0, 0, c.width, c.height);
-            let src = '';
-            try { src = c.toDataURL('image/jpeg', 0.68); } catch (e) { src = result; }
-            if (!this.isValidImageSource(src)) {
-              console.warn('Data URL invalide pour:', f.name);
-              return res(null);
-            }
-            res({ id: 'p' + Date.now() + Math.random().toString(36).slice(2, 6), name: f.name, src });
-          };
-          img.src = result;
-        } catch (e) {
-          console.warn('Erreur traitement image:', f.name, e);
-          res(null);
-        }
+        const img = new Image();
+        img.onerror = () => res(null);
+        img.onload = () => {
+          const max = 340, sc = Math.min(1, max / Math.max(img.width, img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * sc));
+          c.height = Math.max(1, Math.round(img.height * sc));
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          let src = '';
+          try { src = c.toDataURL('image/jpeg', 0.68); } catch (e) { src = r.result; }
+          res({ id: 'p' + Date.now() + Math.random().toString(36).slice(2, 6), name: f.name, src });
+        };
+        img.src = r.result;
       };
       r.readAsDataURL(f);
     }))).then(list => {
       const ok = list.filter(Boolean);
-      if (!ok.length) {
-        this.toast('triangle-alert', 'Aucune image valide', 'Les fichiers sélectionnés ne sont pas des images valides', 'warn');
-        return;
-      }
-      this.setState(st => ({ kPhotos: [...(st.kPhotos || []), ...ok].filter(p => p && this.isValidImageSource(p.src)) }));
+      if (!ok.length) return;
+      this.setState(st => ({ kPhotos: [...(st.kPhotos || []), ...ok] }));
       this.toast('image-plus', `${ok.length} photo(s) ajoutée(s)`, 'Vue de face et vue arrière par monture', 'ok');
     });
   }
@@ -2181,10 +2048,8 @@ class Component extends DCLogic {
       },
       kCouleurCount: s.kCouleurs.length ? `${s.kCouleurs.length} couleur(s)` : 'Aucune couleur',
       kMatiereCount: s.kMatieres.length ? `${s.kMatieres.length} matière(s)` : 'Aucune matière',
-      kPhotoRows: (s.kPhotos || [])
-        .filter(p => p && this.isValidImageSource(p.src))
-        .map(p => ({
-        imgSrc: p.src,
+      kPhotoRows: (s.kPhotos || []).map(p => ({
+        imgStyle: `position:absolute;inset:0;display:block;background:var(--srf-7) center/cover no-repeat url("${p.src}")`,
         onRemove: () => this.setState(st => ({ kPhotos: (st.kPhotos || []).filter(x => x.id !== p.id) }))
       })),
       kPhotoLabel: `${(s.kPhotos || []).length} / ${(nextQty || 0) * 2} photos`,
@@ -2247,7 +2112,7 @@ class Component extends DCLogic {
       kCreateStyle: kValid
         ? magentaBtn(false)
         : `display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-66);color:var(--ink-36);font:600 13px/1 Manrope,sans-serif;cursor:not-allowed`,
-      createCarton: async () => {
+      createCarton: () => {
         if (!cur) return;
         if (!nextQty) { this.toast('triangle-alert', 'Quantité manquante', `Saisissez la quantité (max ${restInValise})`, 'warn'); return; }
         if (!kSelected.length) { this.toast('triangle-alert', 'Aucune forme', 'Sélectionnez au moins une forme', 'warn'); return; }
@@ -2259,77 +2124,7 @@ class Component extends DCLogic {
         const seq = editK ? cur.cartons.indexOf(editK) + 1 : cur.cartons.length + 1;
         const id = editK ? editK.id : 'k' + Date.now();
         const code = editK ? editK.code : `${cur.couleur.slice(0, 2).toUpperCase()}-${String(cur.montures)}-${String(seq).padStart(3, '0')}`;
-        const carton = { id, qty: nextQty, code, formes: { ...s.kFormes }, marques: [...s.kMarques], couleurs: [...s.kCouleurs], matieres: [...s.kMatieres], photos: [], gamme: s.kGamme || cur.gamme, type: s.kType, prix: kPrixVal };
-        const serverCaseKey = cur.backendId ?? cur.id;
-        const serverCaseId = Number(serverCaseKey);
-        const hasServerCase = Number.isFinite(serverCaseId) && serverCaseId > 0 && String(serverCaseKey).match(/^[0-9]+$/);
-        console.log('[carton-debug] createCarton start', {
-          curId: cur && cur.id,
-          curBackendId: cur && cur.backendId,
-          serverCaseKey,
-          serverCaseId,
-          hasServerCase,
-          seq,
-          nextQty,
-          validPhotosCount: (s.kPhotos || []).filter(p => p && this.isValidImageSource(p.src)).length,
-          kPhotos: (s.kPhotos || []).slice(0, 3)
-        });
-        
-        if (!editK) {
-          const validPhotos = (s.kPhotos || []).filter(p => p && this.isValidImageSource(p.src));
-          if (!hasServerCase) {
-            console.log('[carton-debug] local-only mode selected', { reason: 'no backend case id', cur, serverCaseKey, serverCaseId, hasServerCase });
-            this.setState(st => ({
-              valises: st.valises.map(v => v.id !== cur.id ? v : {
-                ...v,
-                cartons: [...v.cartons, { ...carton, photos: validPhotos.map(p => ({ id: p.id, kind: p.kind || 'face', src: p.src || '', url: p.url || '', name: p.name || undefined })) }]
-              }),
-              kOpen: false, kEditId: null, kPhotos: []
-            }));
-            this.toast('check', `Carton ${seq} créé`, `${nextQty} montures · ${validPhotos.length || 0} photo(s) enregistrées localement`, 'ok');
-            return;
-          }
-          try {
-            this.setState({ cartonSaving: true });
-            const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(serverCaseId)}/boxes`, {
-              method: 'POST', 
-              headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' }, 
-              body: JSON.stringify(carton)
-            });
-            const payload = await response.json();
-            if (!response.ok || !payload.success) throw new Error((payload && payload.error) ? payload.error : 'Création du carton impossible');
-            const createdCase = payload.data && payload.data.case ? payload.data.case : null;
-            const createdBox = (createdCase && Array.isArray(createdCase.cartons) && createdCase.cartons.length)
-              ? createdCase.cartons[createdCase.cartons.length - 1]
-              : null;
-            const caseCode = createdCase ? createdCase.code : cur.code;
-            const caseId = createdCase && createdCase.id ? createdCase.id : serverCaseId;
-            const uploadedPhotos = createdBox && validPhotos.length && caseCode && caseId ? await this.uploadBoxPhotos(caseId, caseCode, createdBox.code, validPhotos) : [];
-              
-            if (createdBox && uploadedPhotos.length) {
-              const updateRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(serverCaseId)}/boxes/${encodeURIComponent(createdBox.id)}/photos`, {
-                method: 'POST', 
-                headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ photos: uploadedPhotos })
-              });
-              const updatePayload = await updateRes.json().catch(() => ({}));
-              if (!updateRes.ok || !updatePayload.success) {
-                const err = updatePayload && updatePayload.error ? updatePayload.error : 'Sauvegarde des photos impossible';
-                throw new Error(typeof err === 'string' ? err : (err && err.message) ? err.message : 'Sauvegarde des photos impossible');
-              }
-            }
-            
-            this.setState({ cartonSaving: false, kOpen: false, kEditId: null, kPhotos: [] });
-            await this.loadCases(active.receptionCode);
-            this.toast('check', `Carton ${seq} créé`, `${nextQty} montures · photos enregistrées`, 'ok');
-          } catch (error) {
-            console.error('Erreur création carton:', error);
-            this.setState({ cartonSaving: false });
-            this.toast('triangle-alert', 'Carton non enregistré', 'Le serveur n\'a pas accepté ce carton.', 'warn');
-          }
-          return;
-        }
-        
+        const carton = { id, qty: nextQty, code, formes: { ...s.kFormes }, marques: [...s.kMarques], couleurs: [...s.kCouleurs], matieres: [...s.kMatieres], photos: [...(s.kPhotos || [])], gamme: s.kGamme || cur.gamme, type: s.kType, prix: kPrixVal };
         this.setState(st => ({
           valises: st.valises.map(v => v.id !== cur.id ? v : {
             ...v,
@@ -2432,7 +2227,7 @@ class Component extends DCLogic {
         return 'var(--ink-48)';
       })(),
       createBtnStyle: magentaBtn(false),
-      createValise: async () => {
+      createValise: () => {
         const nb = parseInt(s.fMontures, 10);
         const editing = s.vEditId ? s.valises.find(v => v.id === s.vEditId) : null;
         const budget = editing ? remaining + editing.montures : remaining;
@@ -2452,38 +2247,9 @@ class Component extends DCLogic {
         }
         const id = 'v' + Date.now();
         const code = `${s.fColor.slice(0, 2).toUpperCase()}-VAL-${String(nb)}`;
-        const localCase = { id, couleur: s.fColor.trim(), hex: s.fHex, gamme: s.fGamme, genre: s.fGenre, montures: nb, cartons: [], validated: false, code };
-        const commandCode = this.resolveReceptionCommandCode(active);
-        if (commandCode) {
-          try {
-            const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/${encodeURIComponent(commandCode)}/cases`, {
-              method: 'POST',
-              headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
-              body: JSON.stringify({ couleur: s.fColor.trim(), hex: s.fHex, gamme: s.fGamme, genre: s.fGenre, montures: nb })
-            });
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok || !payload || !payload.success || !payload.data || !payload.data.case) {
-              throw new Error((payload && payload.error) ? payload.error : 'Création de la valise impossible');
-            }
-            const createdCase = payload.data.case;
-            const backendId = createdCase && (createdCase.id ?? createdCase.case_id ?? createdCase.backendId);
-            this.setState(st => ({
-              valises: [...st.valises, { ...localCase, backendId: backendId ? Number(backendId) : undefined }],
-              formOpen: false, curValise: id, fMontures: ''
-            }));
-            this.toast('check', `Valise ${s.fColor} créée`, `${nb.toLocaleString('fr-FR')} montures · enregistrée côté serveur`, 'ok');
-            return;
-          } catch (error) {
-            console.warn('[reception-session] Création backend de valise impossible, fallback local:', { active, commandCode, error });
-            this.toast('triangle-alert', 'Session de réception introuvable', 'Le bon sélectionné n’a pas de session backend valide. Le pré-enregistrement reste local pour cette commande.', 'warn');
-          }
-        } else {
-          console.warn('[reception-session] aucune session backend valide pour cette commande', { active });
-          this.toast('triangle-alert', 'Session de réception introuvable', 'Aucune session backend valide n’a été trouvée pour cette commande.', 'warn');
-        }
         this.setState(st => ({
-          valises: [...st.valises, localCase],
-          formOpen: false, curValise: id, fMontures: ''
+          valises: [...st.valises, { id, couleur: st.fColor.trim(), hex: st.fHex, gamme: st.fGamme, genre: st.fGenre, montures: nb, cartons: [], validated: false, code }],
+          formOpen: false, fMontures: ''
         }));
         this.toast('check', `Valise ${s.fColor} créée`, `${nb.toLocaleString('fr-FR')} montures à emballer`, 'ok');
       },
