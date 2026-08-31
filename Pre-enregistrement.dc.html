@@ -2534,6 +2534,45 @@ class Component extends DCLogic {
         : kValid
         ? magentaBtn(false)
         : `display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-66);color:var(--ink-36);font:600 13px/1 Manrope,sans-serif;cursor:not-allowed`,
+      dataUrlToBlob: (dataUrl) => {
+        const parts = String(dataUrl || '').split(',');
+        const meta = parts[0] || 'data:image/jpeg;base64';
+        const mime = meta.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+        const binary = atob(parts[1] || '');
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return new Blob([bytes], { type: mime });
+      },
+      uploadBoxPhotos: async (caseCode, boxCode, photos) => {
+        if (!caseCode || !boxCode || !Array.isArray(photos) || !photos.length) return [];
+        const uploaded = [];
+        for (const photo of photos) {
+          const kind = (photo.kind || 'face').toLowerCase();
+          const source = photo.src || photo.url || '';
+          if (!source) continue;
+          const fd = new FormData();
+          fd.append('caseCode', caseCode);
+          fd.append('boxCode', boxCode);
+          fd.append('kind', kind);
+          const data = source.startsWith('data:') ? this.dataUrlToBlob(source) : await fetch(source).then(r => r.blob());
+          fd.append('image', data, `${kind}-${Date.now()}.jpg`);
+          const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes/upload-photo`, {
+            method: 'POST',
+            headers: this.apiHeaders(),
+            body: fd
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.success) throw new Error(payload.error || `Upload photo ${kind} impossible`);
+          uploaded.push({
+            id: photo.id || undefined,
+            kind,
+            url: payload.data && payload.data.url ? payload.data.url : photo.url || '',
+            src: photo.src || '',
+            name: photo.name || undefined
+          });
+        }
+        return uploaded;
+      },
       createCarton: async () => {
         if (s.cartonSaving) return;
         if (!cur) return;
@@ -2558,13 +2597,7 @@ class Component extends DCLogic {
           gamme: s.kGamme || cur.gamme,
           type: s.kType,
           prix: kPrixVal,
-          photos: (s.kPhotos || []).filter(Boolean).map(p => ({
-            id: p.id || undefined,
-            kind: p.kind || 'face',
-            url: p.url || '',
-            src: p.src || '',
-            name: p.name || undefined
-          }))
+          photos: []
         };
         if (!editK) {
           try {
@@ -2574,14 +2607,28 @@ class Component extends DCLogic {
             });
             const payload = await response.json();
             if (!response.ok || !payload.success) throw new Error(payload.error || 'Création du carton impossible');
+            const createdCase = payload.case || payload.data || null;
+            const createdBox = (createdCase && Array.isArray(createdCase.cartons) && createdCase.cartons.length)
+              ? createdCase.cartons[createdCase.cartons.length - 1]
+              : null;
+            const uploadedPhotos = createdBox && (s.kPhotos || []).length
+              ? await this.uploadBoxPhotos(cur.code, createdBox.code, (s.kPhotos || []).filter(Boolean))
+              : [];
+            if (createdBox && uploadedPhotos.length) {
+              const updateRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${encodeURIComponent(cur.id)}/boxes/${encodeURIComponent(createdBox.id)}/photos`, {
+                method: 'POST', headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ photos: uploadedPhotos })
+              });
+              const updatePayload = await updateRes.json().catch(() => ({}));
+              if (!updateRes.ok || !updatePayload.success) throw new Error(updatePayload.error || 'Sauvegarde des photos impossible');
+            }
             const command = this.activeCommand();
             this.setState({ cartonSaving: false, kOpen: false, kEditId: null, kPhotos: [] });
             if (command) await this.loadCases(command.receptionCode);
-            this.toast('check', `Carton ${seq} créé`, `${nextQty} montures · code serveur généré`, 'ok');
+            this.toast('check', `Carton ${seq} créé`, `${nextQty} montures · photos enregistrées`, 'ok');
           } catch (error) {
             console.error('Erreur création carton:', error);
             this.setState({ cartonSaving: false });
-            this.toast('triangle-alert', 'Carton non enregistré', 'Le serveur n’a pas accepté ce carton.', 'warn');
+            this.toast('triangle-alert', 'Carton non enregistré', 'Le serveur n’a pas accepté ce carton ou les photos n’ont pas été sauvées.', 'warn');
           }
           return;
         }
