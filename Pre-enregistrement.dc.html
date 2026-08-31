@@ -1702,10 +1702,11 @@ class Component extends DCLogic {
   
   readPhotos(fileList) {
     const files = Array.from(fileList || []).filter(f => /^image\//.test(f.type));
+    if (files.length === 0) return;
+    const offset = (this.state.kPhotos || []).length;
     const ok = [];
     let done = 0;
-    if (files.length === 0) return;
-    files.forEach(file => {
+    files.forEach((file, index) => {
       const reader = new FileReader();
       reader.onload = e => {
         const img = new Image();
@@ -1720,7 +1721,8 @@ class Component extends DCLogic {
           ctx.drawImage(img, x, y, img.width * ratio, img.height * ratio);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.68);
           const uuid = 'photo-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-          ok.push({ id: uuid, src: dataUrl });
+          const kind = ((offset + index) % 2 === 0) ? 'face' : 'rear';
+          ok.push({ id: uuid, kind, src: dataUrl, url: '', name: file.name });
           done++;
           if (done === files.length) {
             this.setState(st => ({ kPhotos: [...(st.kPhotos || []), ...ok] }));
@@ -2556,7 +2558,13 @@ class Component extends DCLogic {
           gamme: s.kGamme || cur.gamme,
           type: s.kType,
           prix: kPrixVal,
-          photos: [...(s.kPhotos || [])]
+          photos: (s.kPhotos || []).filter(Boolean).map(p => ({
+            id: p.id || undefined,
+            kind: p.kind || 'face',
+            url: p.url || '',
+            src: p.src || '',
+            name: p.name || undefined
+          }))
         };
         if (!editK) {
           try {
