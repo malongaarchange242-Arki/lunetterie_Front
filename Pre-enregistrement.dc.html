@@ -23,7 +23,9 @@ a:hover{color:var(--acc-strong)}
 input,select{font-family:Manrope,sans-serif}
 input:focus,select:focus{outline:none}
 input::placeholder{color:var(--ink-3)}
-select option{background:#141414;color:var(--ink)}
+select{color:var(--ink)!important;background-color:var(--srf-74)!important;appearance:none;-webkit-appearance:none;-moz-appearance:none;color-scheme:light}
+select option,select optgroup{background:var(--card)!important;color:var(--ink)!important}
+select::-ms-expand{display:none}
 @keyframes orbA{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(50px,-70px,0) scale(1.14)}}
 @keyframes orbB{0%,100%{transform:translate3d(0,0,0) scale(1.06)}50%{transform:translate3d(-60px,60px,0) scale(.9)}}
 @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
@@ -2247,10 +2249,22 @@ class Component extends DCLogic {
         const serverCaseKey = cur.backendId ?? cur.id;
         const serverCaseId = Number(serverCaseKey);
         const hasServerCase = Number.isFinite(serverCaseId) && serverCaseId > 0 && String(serverCaseKey).match(/^[0-9]+$/);
+        console.log('[carton-debug] createCarton start', {
+          curId: cur && cur.id,
+          curBackendId: cur && cur.backendId,
+          serverCaseKey,
+          serverCaseId,
+          hasServerCase,
+          seq,
+          nextQty,
+          validPhotosCount: (s.kPhotos || []).filter(p => p && this.isValidImageSource(p.src)).length,
+          kPhotos: (s.kPhotos || []).slice(0, 3)
+        });
         
         if (!editK) {
           const validPhotos = (s.kPhotos || []).filter(p => p && this.isValidImageSource(p.src));
           if (!hasServerCase) {
+            console.log('[carton-debug] local-only mode selected', { reason: 'no backend case id', cur, serverCaseKey, serverCaseId, hasServerCase });
             this.setState(st => ({
               valises: st.valises.map(v => v.id !== cur.id ? v : {
                 ...v,
