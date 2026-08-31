@@ -2084,9 +2084,22 @@ class Component extends DCLogic {
       });
 
       const need = photos.length > 0 ? 2 : 0;
+      
+      const multi = {
+        couleur: (cart.couleurs || []).length > 1,
+        forme: formes.length > 1,
+        matiere: (cart.matieres || []).length > 1,
+        marque: (cart.marques || []).length > 1
+      };
+      
       const lineReady = line => {
         const refT = (line.ref || '').trim();
-        return refT.length >= 3 && ((line.photos || []).length >= need);
+        const hasEnoughPhotos = (line.photos || []).length >= need;
+        const hasAllSelects = (!multi.couleur || !!line.couleur)
+          && (!multi.forme || !!line.forme)
+          && (!multi.matiere || !!line.matiere)
+          && (!multi.marque || !!line.marque);
+        return refT.length >= 3 && hasEnoughPhotos && hasAllSelects;
       };
 
       const connected = s.phoneCarton === cart.id;
