@@ -1080,9 +1080,14 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:8px">
           <sc-for list="{{ kPhotoRows }}" as="p" hint-placeholder-count="0">
-            <div style="position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--srf-7);border:1px solid var(--ink-12)">
+            <div style="position:relative;border-radius:12px;overflow:hidden;background:var(--srf-7);border:1px solid var(--ink-12);padding-bottom:4px">
+              <div style="position:relative;aspect-ratio:1;overflow:hidden">
               <img bindSrc="{{ p.imgSrc }}" alt="Photo de monture" style="position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover">
               <button onClick="{{ p.onRemove }}" title="Retirer" style="position:absolute;top:3px;right:3px;width:19px;height:19px;border-radius:999px;border:0;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;display:grid;place-items:center"><span data-icon="x" style="display:grid;place-items:center;font-size:11px"></span></button>
+              </div>
+              <select value="{{ p.kind }}" onChange="{{ p.setKind }}" aria-label="Type de photo" style="width:calc(100% - 8px);margin:4px;background:var(--srf-86);border:1px solid var(--ink-12);border-radius:8px;color:var(--ink);font:500 9px/1.2 Manrope,sans-serif;padding:4px">
+                <sc-for list="{{ p.kindOpts }}" as="o" hint-placeholder-count="3"><option value="{{ o.value }}">{{ o.label }}</option></sc-for>
+              </select>
             </div>
           </sc-for>
         </div>
@@ -2591,6 +2596,13 @@ class Component extends DCLogic {
         .filter(p => p && this.isValidImageSource(p.src))
         .map(p => ({
         imgSrc: p.src,
+        kind: p.kind || 'face',
+        kindOpts: [
+          { label: 'Face', value: 'face' },
+          { label: 'Arrière', value: 'rear' },
+          { label: 'Branche', value: 'branche' }
+        ],
+        setKind: e => this.setState(st => ({ kPhotos: (st.kPhotos || []).map(photo => photo.id === p.id ? { ...photo, kind: e.target.value } : photo) })),
         onRemove: () => this.setState(st => ({ kPhotos: (st.kPhotos || []).filter(x => x.id !== p.id) }))
       })),
           kPhotoLabel: `${(s.kPhotos || []).length} / ${(nextQty || 0) * 3} photos`,
