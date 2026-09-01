@@ -2033,7 +2033,7 @@ class Component extends DCLogic {
     const kQty = cart ? cart.qty : 0;
     const plein = cart && saisiesCount >= kQty;
     const refTrim = (s.fRef || '').trim();
-    const dejaVu = cart ? cart.saisies.some(m => m.ref.toLowerCase() === refTrim.toLowerCase()) : false;
+    const dejaVu = cart ? cart.saisies.some(m => String(m.ref || '').toLowerCase() === refTrim.toLowerCase()) : false;
     const canCreate = cart && !plein && refTrim.length >= 3 && s.fForme && s.fMarque && s.fCouleur && s.fMatiere && !dejaVu;
 
     const photoImages = ['linear-gradient(140deg,#7C8AA6,#3D4A63)', 'linear-gradient(140deg,#A68B7C,#63503D)', 'linear-gradient(140deg,#8B7CA6,#4A3D63)', 'linear-gradient(140deg,#7CA69B,#3D635A)'];
@@ -2767,7 +2767,7 @@ class Component extends DCLogic {
         this.toast('fingerprint', 'Monture enregistrée', uid, 'ok');
       },
       saisies: cart ? cart.saisies.slice().reverse().map(m => {
-        const jumeaux = cart.saisies.filter(x => x.ref.toLowerCase() === m.ref.toLowerCase() && x.couleur === m.couleur && x.matiere === m.matiere).length;
+        const jumeaux = cart.saisies.filter(x => String(x.ref || '').toLowerCase() === String(m.ref || '').toLowerCase() && x.couleur === m.couleur && x.matiere === m.matiere).length;
         return {
         ref: m.ref, forme: m.forme, marque: m.marque, couleur: m.couleur, matiere: m.matiere, uid: m.uid,
         exemplaires: jumeaux > 1 ? `×${jumeaux} en stock` : '1 exemplaire',

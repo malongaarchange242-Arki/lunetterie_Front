@@ -238,8 +238,19 @@
 
       <div style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:26px;align-items:start">
         <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <button onClick="{{ setDetImageFront }}" style="{{ detTabFrontStyle }}">Face</button>
+            <sc-if value="{{ detHasBack }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ setDetImageBack }}" style="{{ detTabBackStyle }}">Arrière</button>
+            </sc-if>
+          </div>
           <div style="position:relative;width:100%;aspect-ratio:4/3;border-radius:20px;overflow:hidden;background:var(--srf-7);border:1px solid var(--ink-09);margin-bottom:16px">
-            <image-slot id="{{ detSlotId }}" src="{{ detPhotoUrl }}" shape="rect" placeholder="{{ detSlotHint }}"></image-slot>
+            <sc-if value="{{ detCurrentImage }}" hint-placeholder-val="{{ false }}">
+              <img bindSrc="{{ detCurrentImage }}" alt="Vue de la monture" style="display:block;width:100%;height:100%;object-fit:cover">
+            </sc-if>
+            <sc-if value="{{ !detCurrentImage }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid;place-items:center;width:100%;height:100%;color:var(--ink-56);font:600 13px/1.3 Manrope,sans-serif">Aucune photo</div>
+            </sc-if>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <sc-for list="{{ detCarac }}" as="c" hint-placeholder-count="6">
@@ -316,7 +327,7 @@ class Component extends DCLogic {
   state = {
     boutique: 'Pointe-Noire',
     q: '', fGamme: '', fGenre: '', fType: '', fMarque: '',
-    ouvert: null, selCouleur: null, qty: 1,
+    ouvert: null, selCouleur: null, qty: 1, detImageView: 'front',
     panier: {}, urgence: 'Normale', motif: '', toast: null
   };
 
@@ -383,8 +394,10 @@ class Component extends DCLogic {
           carton: item.location_code || '',
           site: item.station_name || 'Stock général',
           statut: 'stock',
-          photo: item.photo_monture_url || null,
-          photoBranche: null,
+          photo: this.normalizePhotoUrl(item.photo_monture_url || item.photo || null),
+          photoFront: this.normalizePhotoUrl(item.photo_monture_url || item.photo || null),
+          photoBack: this.normalizePhotoUrl(item.photo_arriere_url || item.photo_branche_url || item.photoArriereUrl || item.photoBackUrl || null),
+          photoBranche: this.normalizePhotoUrl(item.photo_branche_url || item.photoBackUrl || null),
           sorti: false,
           test: false
         }));
@@ -427,6 +440,12 @@ class Component extends DCLogic {
     this.tt = setTimeout(() => this.setState({ toast: null }), 3600);
   }
   slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+  normalizePhotoUrl(v) {
+    const s = String(v ?? '').trim();
+    if (!s || s === 'null' || s === 'undefined') return '';
+    if (/^https?:\/\//i.test(s) || /^\/\//.test(s) || s.startsWith('/')) return s;
+    return '';
+  }
   swatch(c) { return this.SWATCH[c] || 'linear-gradient(135deg,#9AA0AD,#5A6070)'; }
 
   /* Regroupe les montures disponibles au stock général en modèles */
@@ -481,12 +500,16 @@ class Component extends DCLogic {
           couleurs: new Map(),
           glassIds: new Map(),
           total: 0,
-          photoUrl: m.photo || m.photo_monture_url || m.photoMontureUrl || m.photoMonture || null
+          photoUrl: this.normalizePhotoUrl(m.photo || m.photoFront || m.photo_monture_url || m.photoMontureUrl || m.photoMonture || null),
+          photoFrontUrl: this.normalizePhotoUrl(m.photoFront || m.photo_monture_url || m.photo || m.photoMontureUrl || m.photoMonture || null),
+          photoBackUrl: this.normalizePhotoUrl(m.photoBack || m.photo_arriere_url || m.photo_branche_url || m.photoArriereUrl || m.photoBackUrl || null)
         };
         map.set(key, g);
       }
       g.total++;
-      if (!g.photoUrl) g.photoUrl = m.photo || m.photo_monture_url || m.photoMontureUrl || m.photoMonture || null;
+      if (!g.photoUrl) g.photoUrl = this.normalizePhotoUrl(m.photo || m.photoFront || m.photo_monture_url || m.photoMontureUrl || m.photoMonture || null);
+      if (!g.photoFrontUrl) g.photoFrontUrl = this.normalizePhotoUrl(m.photoFront || m.photo_monture_url || m.photo || m.photoMontureUrl || m.photoMonture || null);
+      if (!g.photoBackUrl) g.photoBackUrl = this.normalizePhotoUrl(m.photoBack || m.photo_arriere_url || m.photo_branche_url || m.photoArriereUrl || m.photoBackUrl || null);
       if (m.matiere && g.matieres.indexOf(m.matiere) < 0) g.matieres.push(m.matiere);
       if (m.prix && (!g.prix || m.prix < g.prix)) g.prix = m.prix;
       const c = m.couleur || 'Sans couleur';
@@ -576,12 +599,26 @@ class Component extends DCLogic {
     const dejaSel = g && selC ? this.panierQty(g.key, selC) : 0;
     const maxSel = g && selC ? g.couleurs.get(selC).length - dejaSel : 0;
     const qty = Math.max(1, Math.min(Math.max(maxSel, 1), parseInt(s.qty, 10) || 1));
+    const detImageView = s.detImageView || 'front';
+    const detFrontUrl = g ? (g.photoFrontUrl || g.photoUrl || '') : '';
+    const detBackUrl = g ? (g.photoBackUrl || '') : '';
+    const detCurrentImage = detImageView === 'back' ? detBackUrl || detFrontUrl : detFrontUrl || detBackUrl;
+    const detHasBack = !!detBackUrl;
+    const detTabFrontStyle = 'padding:8px 12px;border-radius:999px;border:1px solid ' + (detImageView === 'front' ? 'rgba(242,19,142,.32)' : 'var(--ink-12)') + ';background:' + (detImageView === 'front' ? 'rgba(242,19,142,.12)' : 'var(--srf-8)') + ';color:var(--ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer';
+    const detTabBackStyle = 'padding:8px 12px;border-radius:999px;border:1px solid ' + (detImageView === 'back' ? 'rgba(242,19,142,.32)' : 'var(--ink-12)') + ';background:' + (detImageView === 'back' ? 'rgba(242,19,142,.12)' : 'var(--srf-8)') + ';color:var(--ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer';
 
     const det = g ? {
       detOuvert: true,
       detSlotId: 'cat-' + this.slug(g.key),
       detSlotHint: 'Photo ' + g.marque,
-      detPhotoUrl: g.photoUrl || '',
+      detPhotoUrl: detFrontUrl || detBackUrl || '',
+      detCurrentImage,
+      detHasBack,
+      detImageView,
+      detTabFrontStyle,
+      detTabBackStyle,
+      setDetImageFront: () => this.setState({ detImageView: 'front' }),
+      setDetImageBack: () => this.setState({ detImageView: 'back' }),
       detMarque: g.marque,
       detType: g.type, detGamme: g.gamme,
       detSousTitre: `${g.forme} · ${g.genre} · ${g.total} exemplaires au stock général`,
