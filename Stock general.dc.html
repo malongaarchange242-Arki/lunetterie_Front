@@ -413,6 +413,7 @@ input::placeholder{color:var(--ink-34)}
 
                   <div style="flex:none;width:152px;display:flex;align-items:center">
                     <div style="{{ l.uidStyle }}">{{ l.uidLabel }}</div>
+                    <button onClick="{{ l.onDuplicate }}" title="Dupliquer cette monture sur les lignes restantes" style="{{ l.duplicateStyle }}"><span data-icon="copy" style="display:grid;place-items:center;font-size:13px"></span></button>
                   </div>
                 </div>
               </sc-for>
@@ -2215,6 +2216,37 @@ class Component extends DCLogic {
         const curL = (st.lignes || {})[cart.id] || lignesState;
         return { lignes: { ...(st.lignes || {}), [cart.id]: curL.map(l => l.key === key ? { ...l, ...patch } : l) } };
       });
+      const duplicateLine = source => {
+        if (source.saved) return;
+        if (!source.ref || !source.forme || !source.marque || !source.couleur || !source.matiere) {
+          this.toast('triangle-alert', 'Ligne incomplète', 'Renseignez la référence et les caractéristiques avant de dupliquer.', 'warn');
+          return;
+        }
+        const remaining = lignesState.filter(line => !line.saved && line.key !== source.key);
+        if (!remaining.length) {
+          this.toast('copy', 'Aucune ligne restante', 'Cette monture est déjà la seule ligne à compléter.', 'info');
+          return;
+        }
+        this.setState(st => {
+          const currentLines = (st.lignes || {})[cart.id] || lignesState;
+          return {
+            lignes: {
+              ...(st.lignes || {}),
+              [cart.id]: currentLines.map(line => line.saved || line.key === source.key ? line : {
+                ...line,
+                ref: source.ref,
+                refId: '',
+                forme: source.forme,
+                marque: source.marque,
+                couleur: source.couleur,
+                matiere: source.matiere,
+                photos: (source.photos || []).map(photo => ({ ...photo }))
+              })
+            }
+          };
+        });
+        this.toast('copy', 'Monture dupliquée', `${remaining.length} ligne(s) pré-remplie(s) avec la même référence et les mêmes photos.`, 'ok');
+      };
       const photoView = photo => {
         const kind = String(photo && (photo.kind || photo.type || '')).toLowerCase();
         return kind === 'branche' || kind === 'branch' ? 'branche' : (kind === 'rear' || kind === 'arriere' ? 'rear' : 'face');
@@ -2360,6 +2392,10 @@ class Component extends DCLogic {
         insightStyle: `margin-top:6px;min-height:14px;font:500 10px/1.4 Manrope,sans-serif;color:transparent`,
         uidLabel: l.saved ? l.uid : 'ID à l\'enregistrement',
         uidStyle: `font:500 9.5px/1.4 'JetBrains Mono',monospace;letter-spacing:.06em;word-break:break-all;color:${l.saved ? 'var(--ok-ink)' : 'var(--ink-5)'}`,
+        onDuplicate: () => duplicateLine(l),
+        duplicateStyle: l.saved
+          ? 'display:none'
+          : 'width:30px;height:30px;margin-left:8px;border-radius:9px;border:1px solid var(--ink-12);background:var(--srf-7);color:var(--info-ink);cursor:pointer;display:grid;place-items:center;flex:none',
         saveLabel: l.saved ? 'Rouvrir' : 'Enregistrer',
         saveIcon: l.saved ? 'undo-2' : (l.ref && l.forme && l.marque && l.couleur && l.matiere ? 'save' : 'lock'),
         saveStyle: l.saved || (l.ref && l.forme && l.marque && l.couleur && l.matiere)
