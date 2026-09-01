@@ -411,16 +411,11 @@ input::placeholder{color:var(--ink-34)}
 
                   <div style="flex:none;width:152px;display:flex;flex-direction:column;gap:7px">
                     <div style="{{ l.uidStyle }}">{{ l.uidLabel }}</div>
+                    <button onClick="{{ l.onSave }}" style="{{ l.saveStyle }}"><span data-icon="{{ l.saveIcon }}" style="display:grid;place-items:center;font-size:14px"></span>{{ l.saveLabel }}</button>
                   </div>
                 </div>
               </sc-for>
             </div>
-
-            <sc-if value="{{ showGlobalSave }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;justify-content:flex-end;margin:8px 0 18px">
-                <button onClick="{{ saveAllLines }}" style="{{ saveAllStyle }}"><span data-icon="save" style="display:grid;place-items:center;font-size:14px"></span>Enregistrer</button>
-              </div>
-            </sc-if>
 
             <sc-if value="{{ cartonPlein }}" hint-placeholder-val="{{ false }}">
               <div style="padding:26px;border-radius:24px;background:rgba(52,201,141,.1);border:1px solid rgba(30,143,99,.28);backdrop-filter:blur(20px);margin-bottom:20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
@@ -614,11 +609,11 @@ input::placeholder{color:var(--ink-34)}
         <sc-if value="{{ stockTableVisible }}" hint-placeholder-val="{{ true }}">
         <div style="border-radius:24px;overflow:hidden;border:1px solid var(--ink-09);background:linear-gradient(160deg,var(--srf-9),var(--srf-64));backdrop-filter:blur(24px);box-shadow:0 24px 56px -30px var(--ink-2)">
          <div style="overflow-x:auto"><div style="min-width:960px">
-          <div style="display:grid;grid-template-columns:58px minmax(110px,1fr) minmax(96px,.9fr) minmax(86px,.8fr) minmax(92px,.85fr) minmax(100px,.9fr) minmax(100px,.9fr) minmax(100px,.9fr) minmax(90px,.8fr) minmax(190px,1.3fr) minmax(150px,1.1fr);gap:14px;padding:14px 22px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
-            <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>GENRE</div><div>COULEUR</div><div>MATIÈRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div>VALISE / CARTON</div><div style="text-align:right">IDENTIFIANT</div>
+          <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(150px,1.1fr) minmax(140px,1.1fr);gap:14px;padding:14px 22px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
+            <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>GENRE</div><div>COULEUR</div><div>MATIÈRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div>EMPLACEMENT</div><div>VALISE / CARTON</div><div style="text-align:right">IDENTIFIANT</div>
           </div>
           <sc-for list="{{ stockRows }}" as="r" hint-placeholder-count="0">
-            <div style="display:grid;grid-template-columns:58px minmax(110px,1fr) minmax(96px,.9fr) minmax(86px,.8fr) minmax(92px,.85fr) minmax(100px,.9fr) minmax(100px,.9fr) minmax(100px,.9fr) minmax(90px,.8fr) minmax(190px,1.3fr) minmax(150px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
+            <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(150px,1.1fr) minmax(140px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
               <div style="{{ r.photoStyle }}">
                 <sc-if value="{{ r.photoUrl }}" hint-placeholder-val="false"><img bindSrc="{{ r.photoUrl }}" alt="Photo monture" style="display:block;width:100%;height:100%;object-fit:cover"></sc-if>
                 <sc-if value="{{ r.photoMissing }}" hint-placeholder-val="true"><span data-icon="glasses" style="display:grid;place-items:center;font-size:17px;color:var(--srf-9)"></span></sc-if>
@@ -631,6 +626,7 @@ input::placeholder{color:var(--ink-34)}
               <div style="min-width:0;font:500 12px/1.3 Manrope,sans-serif;color:var(--ink-68)">{{ r.matiere }}</div>
               <div style="min-width:0;font:500 12px/1.3 Manrope,sans-serif;color:var(--ink-68)">{{ r.gamme }}</div>
               <div style="min-width:0;text-align:right;font:500 12px/1.3 'JetBrains Mono',monospace;color:var(--ok-ink);white-space:nowrap">{{ r.prix }}</div>
+              <div style="min-width:0;font:500 11px/1.3 Manrope,sans-serif;color:var(--ink-68);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.emplacement }}</div>
               <div style="min-width:0;font:500 11px/1.35 Manrope,sans-serif;color:var(--ink-68);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.valiseCarton }}</div>
               <div style="min-width:0;text-align:right;font:500 10.5px/1.4 'JetBrains Mono',monospace;color:var(--info-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.uid }}</div>
             </div>
@@ -1210,14 +1206,8 @@ class Component extends DCLogic {
 
   photoUrl(raw) {
     const value = String(raw || '').trim();
-    if (!value) return '';
-    if (/^(data:|https?:\/\/)/i.test(value)) {
-      const match = value.match(/(?:data:image\/[^\s;]+;base64,[A-Za-z0-9+/=]+|https?:\/\/[^\s\])'",]+)/i);
-      return match ? match[0] : '';
-    }
-    if (/^-?\d+(?:\.\d+)?$/.test(value)) return '';
-    if (value.startsWith('linear-gradient(') || value.startsWith('radial-gradient(') || value.startsWith('#')) return '';
-    return '';
+    const match = value.match(/https?:\/\/[^\s\])'",]+/i);
+    return match ? match[0] : value;
   }
 
   apiHeaders() {
@@ -1493,10 +1483,10 @@ class Component extends DCLogic {
           gamme: item.gamme || item.mount_type || '—',
           type: item.type || item.mount_type || 'Vue',
           prix: Number(item.price ?? item.prix) || 0,
-          site: this.normalizeSiteName(item.station_name || item.stationName || 'Stock général'),
+          site: item.station_name || 'Stock général',
           emplacement: item.location_code || item.location || '—',
-          valise: item.case_code || item.valise_code || item.valise_couleur || item.valise || '—',
-          carton: item.box_code || item.location_code || item.carton_code || item.carton || '—',
+          valise: item.valise_code || item.valise_couleur || item.valise || '—',
+          carton: item.box_code || item.carton_code || item.carton || '—',
           ref_bon: item.reception_command_code || item.ref_bon || '—',
           cmdId: item.reception_command_id || item.command_id || item.cmdId || null,
           valId: item.case_id || item.valId || null,
@@ -1587,39 +1577,6 @@ class Component extends DCLogic {
   }
 
   fcfa(n) { return (n || 0).toLocaleString('fr-FR') + ' F CFA'; }
-  normalizeSiteName(raw) {
-    const s = String(raw ?? '').trim();
-    if (!s) return 'Stock général';
-    const norm = s.toLowerCase().replace(/\s+/g, ' ').trim();
-    const aliases = {
-      'stock general': 'Stock général',
-      'stock général': 'Stock général',
-      'stock magasin': 'Stock général',
-      'stock magasin (pointe-noire)': 'Stock général',
-      'magasin': 'Stock général',
-      'stock': 'Stock général',
-      'station pointe-noire': 'Pointe-Noire',
-      'pointe-noire': 'Pointe-Noire',
-      'pointe noire': 'Pointe-Noire',
-      'station brazzaville': 'Brazzaville',
-      'brazzaville': 'Brazzaville',
-      'station kinshasa': 'Kinshasa',
-      'kinshasa': 'Kinshasa',
-      'station lubumbashi': 'Lubumbashi',
-      'lubumbashi': 'Lubumbashi',
-      'station kolwezi': 'Kolwezi',
-      'kolwezi': 'Kolwezi'
-    };
-    if (aliases[norm]) return aliases[norm];
-    if (norm.startsWith('station ')) return String(s).replace(/^\s*Station\s+/i, '').trim() || 'Stock général';
-    if (norm.startsWith('stock ')) return 'Stock général';
-    if (norm.includes('pointe')) return 'Pointe-Noire';
-    if (norm.includes('brazzaville')) return 'Brazzaville';
-    if (norm.includes('kinshasa')) return 'Kinshasa';
-    if (norm.includes('lubumbashi')) return 'Lubumbashi';
-    if (norm.includes('kolwezi')) return 'Kolwezi';
-    return s;
-  }
   dateFr() {
     const d = new Date();
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
@@ -2121,39 +2078,23 @@ class Component extends DCLogic {
         };
       });
 
-      const need = photos.length > 0 ? 2 : 0;
-      
-      const multi = {
-        couleur: (cart.couleurs || []).length > 1,
-        forme: formes.length > 1,
-        matiere: (cart.matieres || []).length > 1,
-        marque: (cart.marques || []).length > 1
-      };
-      
-      const lineReady = line => {
-        const refT = (line.ref || '').trim();
-        const hasEnoughPhotos = (line.photos || []).length >= need;
-        const hasAllSelects = (!multi.couleur || !!line.couleur)
-          && (!multi.forme || !!line.forme)
-          && (!multi.matiere || !!line.matiere)
-          && (!multi.marque || !!line.marque);
-        return refT.length >= 3 && hasEnoughPhotos && hasAllSelects;
-      };
-
       const connected = s.phoneCarton === cart.id;
       const allRefs = this.cartonRefs(cart);
       const readN = Math.min(allRefs.length, (s.refRead || {})[cart.id] || 0);
       const readRefs = allRefs.slice(0, readN);
 
       const refPool = readRefs.map(r => {
+        const usedRefIds = {};
+        lignesState.forEach(l => { if (l.refId) usedRefIds[l.refId] = true; });
+        const isUsed = !!usedRefIds[r.id];
         const picked = s.pickRef === r.id;
         return {
           ref: r.ref, meta: r.meta,
-          icon: 'scan-barcode',
-          title: picked ? 'Sélectionnée — cliquez le champ réf d\'une ligne' : 'Glissez-la sur une ligne',
-          style: `display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;border-radius:12px;font:600 11.5px/1.3 'JetBrains Mono',monospace;cursor:grab;transition:all .22s ${ease};opacity:1;border:1.5px solid ${picked ? 'var(--acc-strong)' : 'var(--ink-12)'};background:var(--srf-8);color:var(--ink-72);box-shadow:${picked ? '0 0 0 3px rgba(242,19,142,.2)' : 'none'}`,
+          icon: isUsed ? 'check' : 'scan-barcode',
+          title: isUsed ? 'Déjà posée sur une ligne' : (picked ? 'Sélectionnée — cliquez le champ réf d\'une ligne' : 'Glissez-la sur une ligne'),
+          style: `display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;border-radius:12px;font:600 11.5px/1.3 'JetBrains Mono',monospace;cursor:${isUsed ? 'default' : 'grab'};transition:all .22s ${ease};opacity:${isUsed ? .38 : 1};border:1.5px solid ${picked ? 'var(--acc-strong)' : (isUsed ? 'rgba(30,143,99,.4)' : 'var(--ink-12)')};background:${isUsed ? 'rgba(52,201,141,.1)' : 'var(--srf-8)'};color:${isUsed ? 'var(--ok-ink)' : 'var(--ink-72)'};box-shadow:${picked ? '0 0 0 3px rgba(242,19,142,.2)' : 'none'}`,
           onDragStart: e => { try { e.dataTransfer.setData('text/plain', r.id); } catch (err) {} this.dragRef = r.id; },
-          onPick: () => this.setState(st => ({ pickRef: st.pickRef === r.id ? null : r.id }))
+          onPick: () => { if (isUsed) return; this.setState(st => ({ pickRef: st.pickRef === r.id ? null : r.id })); }
         };
       });
 
@@ -2181,6 +2122,7 @@ class Component extends DCLogic {
           if (!draggedPhotoId) return;
           const draggedPhoto = (cart.photos || []).find(p => p.id === draggedPhotoId);
           if (!draggedPhoto) return;
+          // Vérifier si la photo est déjà dans CETTE LIGNE (pas d'autres)
           const isAlreadyInThisLine = (l.photos || []).some(p => p.id === draggedPhotoId);
           if (isAlreadyInThisLine) return;
           setLigne(l.key, { photos: [...(l.photos || []), { ...draggedPhoto, view: 'face' }] });
@@ -2191,6 +2133,7 @@ class Component extends DCLogic {
           if (!pickedPhotoId) return;
           const pickedPhoto = (cart.photos || []).find(p => p.id === pickedPhotoId);
           if (!pickedPhoto) return;
+          // Vérifier si la photo est déjà dans CETTE LIGNE (pas d'autres)
           const isAlreadyInThisLine = (l.photos || []).some(p => p.id === pickedPhotoId);
           if (isAlreadyInThisLine) return;
           setLigne(l.key, { photos: [...(l.photos || []), { ...pickedPhoto, view: 'face' }] });
@@ -2213,6 +2156,7 @@ class Component extends DCLogic {
           if (!draggedRefId) return;
           const draggedRef = readRefs.find(r => r.id === draggedRefId);
           if (!draggedRef) return;
+          // Vérifier si la référence est déjà dans CETTE LIGNE (pas d'autres)
           if (l.refId === draggedRefId) return;
           setLigne(l.key, { ref: draggedRef.ref, refId: draggedRef.id });
           this.dragRef = null;
@@ -2222,6 +2166,7 @@ class Component extends DCLogic {
           if (!pickedRefId) return;
           const pickedRef = readRefs.find(r => r.id === pickedRefId);
           if (!pickedRef) return;
+          // Vérifier si la référence est déjà dans CETTE LIGNE (pas d'autres)
           if (l.refId === pickedRefId) return;
           setLigne(l.key, { ref: pickedRef.ref, refId: pickedRef.id });
           this.setState({ pickRef: null });
@@ -2236,126 +2181,10 @@ class Component extends DCLogic {
         onSave: () => {}
       }));
 
-      const saveAllLines = async () => {
-        const pending = lignesState.filter(line => !line.saved && lineReady(line));
-        if (!pending.length) return;
-
-        const existingSaisies = cart.saisies || [];
-        const added = pending.map((line, offset) => {
-          const refT = (line.ref || '').trim();
-          const seq = existingSaisies.length + offset + 1;
-          const uid = `${cart.code}-${String(seq).padStart(3, '0')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-          const face = (line.photos || []).find(p => p.view === 'face');
-          const back = (line.photos || []).find(p => p.view === 'arriere');
-          return {
-            id: 'm' + Date.now() + offset + Math.random().toString(36).slice(2, 5),
-            ref: refT,
-            refId: line.refId || '',
-            forme: line.forme,
-            marque: line.marque,
-            couleur: line.couleur,
-            matiere: line.matiere,
-            uid,
-            photos: (line.photos || []).slice(),
-            photo: photoImages[seq % photoImages.length],
-            photoFace: face ? face.src : '',
-            photoDos: back ? back.src : ''
-          };
-        });
-
-        const savedByKey = {};
-        added.forEach((m, i) => { savedByKey[pending[i].key] = m.uid; });
-
-        this.setArrivees(list => list.map(c => c.id !== cmd.id ? c : {
-          ...c,
-          valises: c.valises.map(v => v.id !== val.id ? v : {
-            ...v,
-            cartons: v.cartons.map(k => k.id !== cart.id ? k : { ...k, saisies: [...(k.saisies || []), ...added] })
-          })
-        }));
-
-        pending.forEach(line => {
-          setLigne(line.key, { saved: true, uid: savedByKey[line.key], ref: (line.ref || '').trim() });
-        });
-
-        // Save to backend database
-        for (let i = 0; i < added.length; i++) {
-          const m = added[i];
-          const line = pending[i];
-          try {
-            const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/glasses`, {
-              method: 'POST',
-              headers: {
-                ...this.apiHeaders(),
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                barcode: '',
-                reference: m.ref || '',
-                price: Number(cart.prix) || 0,
-                photo_monture_url: m.photoFace || '',
-                photo_branche_url: m.photoFace || '',
-                photo_arriere_url: m.photoDos || '',
-                reception_command_id: cmd && cmd.id != null ? Number(cmd.id) : null,
-                notes: `Forme: ${m.forme || '—'}, Marque: ${m.marque || '—'}, Couleur: ${m.couleur || '—'}, Matière: ${m.matiere || '—'}`
-              })
-            });
-            if (!response.ok) {
-              const raw = await response.text();
-              console.warn(`Erreur création monture ${m.uid}:`, response.status, raw);
-            }
-          } catch (error) {
-            console.warn(`Erreur API création monture ${m.uid}:`, error);
-          }
-        }
-
-        const S = window.LStore;
-        if (S) {
-          const monturesToStore = added.map((m, i) => ({
-            uid: m.uid,
-            ref: m.ref,
-            marque: pending[i].marque,
-            forme: pending[i].forme,
-            couleur: pending[i].couleur,
-            matiere: pending[i].matiere,
-            gamme: cart.gamme,
-            type: cart.type,
-            genre: val.genre,
-            prix: cart.prix,
-            valise: val.couleur,
-            carton: cart.code,
-            site: 'Stock général',
-            statut: 'stock',
-            photo: m.photoFace || m.photoDos || '',
-            photoFace: m.photoFace || '',
-            photoDos: m.photoDos || ''
-          }));
-          S.set({ montures: [...monturesToStore, ...(S.get().montures || [])] });
-          pending.forEach((line, i) => {
-            S.mouvement({
-              sens: 'entree',
-              de: 'Pré-enregistrement',
-              vers: 'Stock général',
-              ref: cmd.ref,
-              motif: 'Enregistrement',
-              qty: 1,
-              valise: val.couleur,
-              carton: cart.code,
-              monture: added[i].ref
-            });
-          });
-        }
-
-        this.toast('fingerprint', `${pending.length} ligne${pending.length > 1 ? 's' : ''} enregistrée${pending.length > 1 ? 's' : ''}`, `${pending.length} monture${pending.length > 1 ? 's' : ''} ajoutée${pending.length > 1 ? 's' : ''} au stock`, 'ok');
-      };
-
       return {
         lignes, pool, kVarChips, refPool,
-        showGlobalSave: lignesState.length > 0 && lignesState.every(line => lineReady(line)),
-        saveAllStyle: `display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 22px;border-radius:999px;border:1px solid rgba(191,33,120,.4);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 10px 22px -14px rgba(191,33,120,.8);transition:all .22s ${ease}`,
-        saveAllLines,
         poolVide: photos.length === 0,
-        poolLabel: photos.length ? `${photos.length} / ${photos.length}` : `0 / ${(cart.qty || 0) * 2}`,
+        poolLabel: `${photos.length - Object.keys(used).length} / ${photos.length}`,
         refPoolVide: readRefs.length === 0,
         refPoolLabel: `${readRefs.length}`,
         refPoolEmptyHint: connected ? 'Activez la lecture sur votre téléphone pour que les réfs tombent ici' : 'Connectez votre téléphone d\'abord.',
@@ -3073,6 +2902,7 @@ class Component extends DCLogic {
             ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
             genre: m.genre || '—', couleur: m.couleur || '—', matiere: m.matiere || '—',
             prix: this.fcfa(m.prix), uid: m.uid,
+            emplacement: m.location || m.emplacement || m.carton || '—',
             valiseCarton: (m.valise && m.carton)
               ? `${m.valise} / ${m.carton}`
               : (m.valise || m.carton)
