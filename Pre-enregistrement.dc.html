@@ -1071,7 +1071,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
           <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-68)">PHOTOS DES MONTURES</span>
           <span style="margin-left:auto;font:600 11px/1 'JetBrains Mono',monospace;color:{{ kPhotoColor }}">{{ kPhotoLabel }}</span>
         </div>
-        <div style="font:400 11.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:12px;text-wrap:pretty">Deux photos par monture : une de face, une de dos. Le magasinier du stock général les associera ligne par ligne à l'enregistrement.</div>
+        <div style="font:400 11.5px/1.55 Manrope,sans-serif;color:var(--ink-66);margin-bottom:12px;text-wrap:pretty">Trois photos par monture : une de face, une de dos et une de branche pour lire automatiquement la référence.</div>
         <div onDragOver="{{ onPhotoDragOver }}" onDrop="{{ onPhotoDrop }}" style="position:relative;padding:22px 18px;border-radius:16px;border:1.5px dashed rgba(95,194,217,.5);background:rgba(95,194,217,.07);text-align:center;margin-bottom:12px">
           <input type="file" multiple="{{ true }}" accept="image/*" onChange="{{ onPhotoInput }}" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer">
           <span data-icon="image-plus" style="display:grid;place-items:center;font-size:22px;color:var(--info-ink);margin:0 auto 9px"></span>
@@ -1807,7 +1807,7 @@ class Component extends DCLogic {
         return;
       }
       this.setState(st => ({ kPhotos: [...(st.kPhotos || []), ...ok].filter(p => p && this.isValidImageSource(p.src)) }));
-      this.toast('image-plus', `${ok.length} photo(s) ajoutée(s)`, 'Vue de face et vue arrière par monture', 'ok');
+      this.toast('image-plus', `${ok.length} photo(s) ajoutée(s)`, 'Face, arrière et branche par monture', 'ok');
     });
   }
 
@@ -2593,8 +2593,8 @@ class Component extends DCLogic {
         imgSrc: p.src,
         onRemove: () => this.setState(st => ({ kPhotos: (st.kPhotos || []).filter(x => x.id !== p.id) }))
       })),
-      kPhotoLabel: `${(s.kPhotos || []).length} / ${(nextQty || 0) * 2} photos`,
-      kPhotoColor: (nextQty && (s.kPhotos || []).length >= nextQty * 2) ? 'var(--ok-ink)' : 'var(--ink-5)',
+          kPhotoLabel: `${(s.kPhotos || []).length} / ${(nextQty || 0) * 3} photos`,
+          kPhotoColor: (nextQty && (s.kPhotos || []).length >= nextQty * 3) ? 'var(--ok-ink)' : 'var(--ink-5)',
       onPhotoInput: e => { this.readPhotos(e.target.files); e.target.value = ''; },
       onPhotoDragOver: e => e.preventDefault(),
       onPhotoDrop: e => { e.preventDefault(); this.readPhotos(e.dataTransfer && e.dataTransfer.files); },

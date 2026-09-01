@@ -295,7 +295,7 @@ input::placeholder{color:var(--ink-34)}
               <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--info-ink)">PHOTOS DU CARTON</span>
               <span style="margin-left:auto;font:600 10.5px/1.4 'JetBrains Mono',monospace;color:var(--ink-66);white-space:nowrap">{{ poolLabel }}</span>
             </div>
-            <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-64);margin-bottom:14px;text-wrap:pretty">Glissez une photo sur le cadre d'une ligne, ou cliquez la photo puis le cadre. Cliquez une photo posée pour dire si c'est la vue de face ou la vue arrière.</div>
+            <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-64);margin-bottom:14px;text-wrap:pretty">Glissez les trois vues sur une ligne. Cliquez une photo posée pour faire défiler face, arrière et branche ; la référence est lue automatiquement sur la branche.</div>
             <sc-if value="{{ poolVide }}" hint-placeholder-val="{{ true }}">
               <div style="padding:26px 18px;border-radius:16px;border:1.5px dashed var(--ink-14);background:var(--srf-5);text-align:center">
                 <span data-icon="image-off" style="display:grid;place-items:center;font-size:22px;color:var(--ink-3);margin:0 auto 10px"></span>
@@ -1153,7 +1153,7 @@ class Component extends DCLogic {
     cmdId: null, valId: null, cartId: null,
     fForme: '', fMarque: '', fCouleur: '', fMatiere: '', fRef: '', photo: false, photoPreview: null, photoData: null, branchPhotoData: null, backPhotoData: null, captureLabel: 'Prendre une photo', quantiteACreer: 1,
     scanning: false, helpOpen: false, toast: null,
-    lignes: {}, pickPhoto: null, viewMenu: null, phoneCarton: null, refRead: {}, pickRef: null,
+    lignes: {}, pickPhoto: null, viewMenu: null, phoneCarton: null, refRead: {}, branchRefs: {}, pickRef: null,
     manualCode: '', phonePaired: false, pairing: false, pairCode: '', pairQrUrl: '', scanTarget: null, userName: 'Utilisateur',
     stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes', stockDetailOpen: false, stockDetail: null, compoOnglet: 'Marque',
     magasin: 'Pointe-Noire', origFilter: 'tous', demId: null, sorties: 0,
@@ -1318,7 +1318,7 @@ class Component extends DCLogic {
             const fd = new FormData();
             fd.append('image', blob, 'branche.jpg');
             try {
-              const analysisResponse = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/analyze?kind=branche`, { method: 'POST', headers: this.apiHeaders(), body: fd });
+              const analysisResponse = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/analyze-branche`, { method: 'POST', headers: this.apiHeaders(), body: fd });
               const analysisPayload = await analysisResponse.json().catch(() => ({}));
               if (!analysisResponse.ok || analysisPayload.success === false) throw new Error(analysisPayload.error || 'Analyse impossible');
               const result = analysisPayload.data || analysisPayload;
@@ -1328,6 +1328,7 @@ class Component extends DCLogic {
                 const s = this.state;
                 const currentCartId = s.cartId;
                 const currentReadN = (s.refRead || {})[currentCartId] || 0;
+                this.addBranchReference(currentCartId, reference);
                 this.setState(st => ({
                   fRef: reference,
                   refRead: { ...(st.refRead || {}), [currentCartId]: currentReadN + 1 }
@@ -1352,6 +1353,50 @@ class Component extends DCLogic {
         reader.readAsDataURL(blob);
       } catch (_) { this.toast('triangle-alert', 'Photo non lisible', 'R�essayez depuis le t�l�phone.', 'warn'); }
     }
+  }
+  async extractBranchReference(photoSrc, cartonId, lineKey) {
+    try {
+      const response = await fetch(photoSrc);
+      if (!response.ok) throw new Error('Photo de branche non lisible');
+      const fd = new FormData();
+      fd.append('image', await response.blob(), 'branche.jpg');
+      const analysisResponse = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/analyze-branche`, {
+        method: 'POST', headers: this.apiHeaders(), body: fd
+      });
+      const payload = await analysisResponse.json().catch(() => ({}));
+      if (!analysisResponse.ok || payload.success === false) throw new Error(payload.error || 'Analyse impossible');
+      const result = payload.data || payload;
+      const reference = String(result.reference || '').trim().toUpperCase();
+      if (!reference) {
+        this.toast('triangle-alert', 'Référence non détectée', 'Saisissez-la manuellement.', 'warn');
+        return;
+      }
+      this.addBranchReference(cartonId, reference, lineKey);
+      this.setState(st => ({
+        lignes: {
+          ...(st.lignes || {}),
+          [cartonId]: ((st.lignes || {})[cartonId] || []).map(line => line.key === lineKey ? { ...line, ref: reference } : line)
+        }
+      }));
+      this.toast('scan-text', 'Référence lue', reference, 'ok');
+    } catch (error) {
+      this.toast('triangle-alert', 'Analyse branche impossible', error.message || 'Saisissez la référence manuellement.', 'warn');
+    }
+  }
+  addBranchReference(cartonId, reference, lineKey) {
+    const value = String(reference || '').trim().toUpperCase();
+    if (!value || !cartonId) return;
+    this.setState(st => {
+      const current = (st.branchRefs || {})[cartonId] || [];
+      if (current.some(item => item.ref === value)) return null;
+      const item = {
+        id: `${cartonId}-ocr-${Date.now()}-${current.length}`,
+        ref: value,
+        meta: 'OCR branche',
+        lineKey: lineKey || ''
+      };
+      return { branchRefs: { ...(st.branchRefs || {}), [cartonId]: [...current, item] } };
+    });
   }
   async startValiseScan(command, valise) {
     const code = String(valise && (valise.code || valise.couleur || valise.id || '')).toUpperCase();
@@ -2157,8 +2202,10 @@ class Component extends DCLogic {
       const allRefs = this.cartonRefs(cart);
       const readN = Math.min(allRefs.length, (s.refRead || {})[cart.id] || 0);
       const readRefs = allRefs.slice(0, readN);
+      const branchRefs = (s.branchRefs || {})[cart.id] || [];
+      const visibleRefs = readRefs.concat(branchRefs);
 
-      const refPool = readRefs.map(r => {
+      const refPool = visibleRefs.map(r => {
         const usedRefIds = {};
         lignesState.forEach(l => { if (l.refId) usedRefIds[l.refId] = true; });
         const isUsed = !!usedRefIds[r.id];
@@ -2196,11 +2243,16 @@ class Component extends DCLogic {
         ],
         photos: (l.photos || []).map((ph, pi) => ({
           imgStyle: `position:absolute;inset:0;display:block;background:var(--srf-7) center/cover no-repeat url("${ph.src}")`,
-          title: (ph.view === 'face' ? 'Vue de face' : 'Vue arrière') + ' — cliquez pour changer',
+          title: `${ph.view === 'face' ? 'Vue de face' : (ph.view === 'rear' ? 'Vue arrière' : 'Vue de branche')} — cliquez pour changer`,
           style: `position:absolute;top:2px;left:${pi * 28}px;z-index:${pi + 2};width:52px;height:52px;padding:0;overflow:hidden;border-radius:12px;background:var(--srf-8);cursor:pointer;box-shadow:0 8px 18px -10px var(--ink-3);border:1.5px solid ${ph.view === 'face' ? 'rgba(51,135,156,.65)' : 'rgba(191,33,120,.6)'}`,
-          tag: ph.view === 'face' ? 'F' : 'A',
-          tagStyle: `position:absolute;bottom:2px;right:2px;width:14px;height:14px;border-radius:5px;display:grid;place-items:center;font:600 8px/1 'JetBrains Mono',monospace;color:#fff;background:${ph.view === 'face' ? '#33879C' : '#BF2178'}`,
-          onClick: e => { e.stopPropagation(); }
+          tag: ph.view === 'face' ? 'F' : (ph.view === 'rear' ? 'A' : 'B'),
+          tagStyle: `position:absolute;bottom:2px;right:2px;width:14px;height:14px;border-radius:5px;display:grid;place-items:center;font:600 8px/1 'JetBrains Mono',monospace;color:#fff;background:${ph.view === 'face' ? '#33879C' : (ph.view === 'rear' ? '#BF2178' : '#E8B93A')}`,
+          onClick: e => {
+            e.stopPropagation();
+            const nextView = ph.view === 'face' ? 'rear' : (ph.view === 'rear' ? 'branche' : 'face');
+            setLigne(l.key, { photos: (l.photos || []).map((photo, index) => index === pi ? { ...photo, view: nextView } : photo) });
+            if (nextView === 'branche') this.extractBranchReference(ph.src, cart.id, l.key);
+          }
         })),
         wellEmpty: (l.photos || []).length === 0,
         wellStyle: `position:relative;flex:none;width:86px;height:56px;border-radius:14px;display:grid;place-items:center;cursor:${s.pickPhoto ? 'copy' : 'default'};border:1.5px dashed ${(l.photos || []).length ? 'transparent' : 'var(--ink-16)'};background:${(l.photos || []).length ? 'transparent' : 'var(--srf-5)'}`,
@@ -2243,7 +2295,7 @@ class Component extends DCLogic {
           e.preventDefault();
           const draggedRefId = this.dragRef;
           if (!draggedRefId) return;
-          const draggedRef = readRefs.find(r => r.id === draggedRefId);
+          const draggedRef = visibleRefs.find(r => r.id === draggedRefId);
           if (!draggedRef) return;
           // Vérifier si la référence est déjà dans CETTE LIGNE (pas d'autres)
           if (l.refId === draggedRefId) return;
@@ -2253,7 +2305,7 @@ class Component extends DCLogic {
         onRefClick: () => {
           const pickedRefId = s.pickRef;
           if (!pickedRefId) return;
-          const pickedRef = readRefs.find(r => r.id === pickedRefId);
+          const pickedRef = visibleRefs.find(r => r.id === pickedRefId);
           if (!pickedRef) return;
           // Vérifier si la référence est déjà dans CETTE LIGNE (pas d'autres)
           if (l.refId === pickedRefId) return;
@@ -2329,12 +2381,14 @@ class Component extends DCLogic {
         let savedCount = 0;
         for (const ligne of lignesCompletes) {
           // Pré-charger les photos avant de créer la FormData
-          let faceBlob = null, rearBlob = null;
+          let faceBlob = null, rearBlob = null, branchBlob = null;
           if (ligne.photos && Array.isArray(ligne.photos)) {
             const facePhoto = ligne.photos.find(p => p.view === 'face');
             const rearPhoto = ligne.photos.find(p => p.view === 'rear');
+            const branchPhoto = ligne.photos.find(p => p.view === 'branche');
             if (facePhoto && facePhoto.src) faceBlob = await fetchImageBlob(facePhoto.src);
             if (rearPhoto && rearPhoto.src) rearBlob = await fetchImageBlob(rearPhoto.src);
+            if (branchPhoto && branchPhoto.src) branchBlob = await fetchImageBlob(branchPhoto.src);
           }
           
           const fd = new FormData();
@@ -2356,6 +2410,7 @@ class Component extends DCLogic {
           // Ajouter les photos
           if (faceBlob && faceBlob.size > 0) fd.append('image', faceBlob, 'monture.jpg');
           if (rearBlob && rearBlob.size > 0) fd.append('rear_image', rearBlob, 'arriere.jpg');
+          if (branchBlob && branchBlob.size > 0) fd.append('branch_image', branchBlob, 'branche.jpg');
           
           try {
             const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception`, {
@@ -2398,8 +2453,8 @@ class Component extends DCLogic {
         createMontures,
         poolVide: photos.length === 0,
         poolLabel: `${photos.length - Object.keys(used).length} / ${photos.length}`,
-        refPoolVide: readRefs.length === 0,
-        refPoolLabel: `${readRefs.length}`,
+        refPoolVide: visibleRefs.length === 0,
+        refPoolLabel: `${visibleRefs.length}`,
         refPoolEmptyHint: connected ? 'Activez la lecture sur votre téléphone pour que les réfs tombent ici' : 'Connectez votre téléphone d\'abord.',
         kQrBlocks: this.qrBlocks(cart.code),
         phoneHint: connected ? 'Téléphone associé · appuyez pour déconnecter' : 'Connectez votre téléphone pour lire les réfs des branches',
