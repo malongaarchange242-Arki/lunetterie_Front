@@ -715,7 +715,7 @@ class Component extends DCLogic {
       toggleTheme: () => { if (S) S.setTheme(theme === 'dark' ? 'light' : 'dark'); },
       retourLabel: this.fromAdmin() ? 'Poste administrateur' : 'Poste responsable magasin',
       goMagasin: () => { window.location.href = this.fromAdmin() ? 'Admin.dc.html' : 'Responsable magasin.dc.html'; },
-      logout: () => { window.location.href = 'Connexion.dc.html'; },
+      logout: () => { window.location.href = 'index.html'; },
       stop: e => e.stopPropagation(),
 
       boutique: s.boutique,

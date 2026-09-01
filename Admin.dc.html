@@ -1591,9 +1591,26 @@ class Component extends DCLogic {
     const validations = valView.map(d => {
       const on = s.valOuvert === d.id;
       const uids = d.uids || [];
-      const lignes = uids.length
-        ? uids.map(u => inventaireDB.find(m => m.uid === u)).filter(Boolean)
+      const directLignes = Array.isArray(d.items)
+        ? d.items.map(item => ({
+            ref: item.reference || item.ref || item.barcode || item.uid || '—',
+            uid: item.uid || item.barcode || item.reference || '',
+            marque: item.brand || item.marque || '—',
+            forme: item.forme || '—',
+            couleur: item.couleur || '—',
+            emplacement: item.emplacement || item.location_code || '—',
+            prix: Number(item.prix || 0)
+          }))
         : [];
+      const lignes = directLignes.length
+        ? directLignes
+        : (uids.length
+          ? uids.map(u => inventaireDB.find(m => m.uid === u)).filter(Boolean).map(m => ({
+              ref: m.ref, uid: m.uid, marque: m.marque, forme: m.forme, couleur: m.couleur,
+              emplacement: `Valise ${m.valise || '—'} · Carton ${m.carton || '—'}`,
+              prix: Number(m.prix || 0)
+            }))
+          : []);
       const crit = [
         { l: 'Type', v: d.type || 'Tous' },
         { l: 'Gamme', v: d.gamme || 'Toutes' },
