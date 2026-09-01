@@ -377,9 +377,11 @@ input::placeholder{color:var(--ink-34)}
                     </sc-if>
                   </div>
 
-                  <div style="flex:none;width:150px;min-width:0">
-                    <div style="font:600 11.5px/1.35 Manrope,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.emplacement }}</div>
-                    <div style="font:400 10.5px/1.45 Manrope,sans-serif;color:var(--ink-64);margin-top:4px;text-wrap:pretty">{{ l.fixe }}</div>
+                  <div style="{{ l.photoThumbStyle }}" title="Photo de la monture"></div>
+
+                  <div style="{{ l.containerStyle }}">
+                    <div style="{{ l.containerTextStyle }}">{{ l.containerLabel }}</div>
+                    <div style="{{ l.containerSubStyle }}">{{ l.containerMeta }}</div>
                   </div>
 
                   <sc-for list="{{ l.selects }}" as="sel" hint-placeholder-count="0">
@@ -2131,8 +2133,17 @@ class Component extends DCLogic {
         n: String(idx + 1).padStart(2, '0'),
         rowStyle: `display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;padding:14px 16px;border-radius:20px;backdrop-filter:blur(20px);transition:all .3s ${ease};box-shadow:inset 0 1px 0 var(--srf-9);border:1px solid ${l.saved ? 'rgba(30,143,99,.34)' : 'var(--ink-09)'};background:${l.saved ? 'rgba(52,201,141,.11)' : glass}`,
         numStyle: `flex:none;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;align-self:center;font:600 11px/1 'JetBrains Mono',monospace;background:${l.saved ? 'rgba(52,201,141,.2)' : 'var(--srf-7)'};border:1px solid ${l.saved ? 'rgba(30,143,99,.34)' : 'var(--ink-12)'};color:${l.saved ? 'var(--ok-ink)' : 'var(--ink-6)'}`,
-        emplacement: `Valise ${val ? val.couleur : '—'} · ${cart.code}`,
-        fixe: [val ? val.genre : '', cart.gamme, cart.type].filter(Boolean).join(' · '),
+        // Image de la monture (première photo si disponible)
+        photoThumb: (l.photos && l.photos.length > 0) ? l.photos[0].src : null,
+        photoThumbStyle: (l.photos && l.photos.length > 0) 
+          ? `flex:none;width:72px;height:72px;border-radius:14px;background:center/cover no-repeat url("${l.photos[0].src}");border:1.5px solid var(--ink-12)`
+          : `flex:none;width:72px;height:72px;border-radius:14px;background:var(--srf-7) center/cover no-repeat;border:1.5px dashed var(--ink-12)`,
+        // Conteneur: VALISE/CARTON avec codes
+        containerLabel: val && cart ? `${val.id ? 'VAL-' + String(val.id).padStart(3, '0') : '?'}/${cart.code || '?'}` : '—',
+        containerStyle: `flex:none;width:140px;min-width:0`,
+        containerTextStyle: `font:600 11.5px/1.35 Manrope,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`,
+        containerSubStyle: `font:400 10.5px/1.45 Manrope,sans-serif;color:var(--ink-64);margin-top:2px;text-wrap:pretty`,
+        containerMeta: [val ? val.genre : '', cart.gamme, cart.type].filter(Boolean).join(' · '),
         selects: [
           { label: 'FORME', value: l.forme || '', opts: formes.map(f => ({ label: f, value: f })), onChange: e => setLigne(l.key, { forme: e.target.value }), style: 'width:100%;padding:8px 9px;border-radius:10px;border:1px solid var(--ink-12);background:var(--srf-7);color:var(--ink);font:500 11px/1.3 Manrope,sans-serif' },
           { label: 'MARQUE', value: l.marque || '', opts: (cart.marques || []).map(m => ({ label: m, value: m })), onChange: e => setLigne(l.key, { marque: e.target.value }), style: 'width:100%;padding:8px 9px;border-radius:10px;border:1px solid var(--ink-12);background:var(--srf-7);color:var(--ink);font:500 11px/1.3 Manrope,sans-serif' },
