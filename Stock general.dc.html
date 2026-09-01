@@ -2469,6 +2469,15 @@ class Component extends DCLogic {
             if (facePhoto && facePhoto.src) faceBlob = await fetchImageBlob(facePhoto.src);
             if (rearPhoto && rearPhoto.src) rearBlob = await fetchImageBlob(rearPhoto.src);
             if (branchPhoto && branchPhoto.src) branchBlob = await fetchImageBlob(branchPhoto.src);
+            if (!faceBlob) {
+              const fallbackPhoto = ligne.photos.find(p => p.view !== 'branche' && p.src) || ligne.photos.find(p => p.src);
+              if (fallbackPhoto) faceBlob = await fetchImageBlob(fallbackPhoto.src);
+            }
+          }
+
+          if (!faceBlob || faceBlob.size === 0) {
+            this.toast('triangle-alert', 'Photo monture manquante', `Ajoutez une photo face à la ligne ${ligne.key}.`, 'warn');
+            return;
           }
           
           const fd = new FormData();
@@ -2497,7 +2506,9 @@ class Component extends DCLogic {
               method: 'POST', headers: this.apiHeaders(), body: fd
             });
             const payload = await response.json().catch(() => ({}));
-            if (!response.ok || payload.success === false) throw new Error(payload.error || 'Enregistrement backend impossible');
+            if (!response.ok || payload.success === false) {
+              throw new Error(payload.error || payload.message || payload.detail || `Erreur HTTP ${response.status}`);
+            }
             const saved = payload.data || payload;
             const uid = saved && saved.barcode;
             if (!uid) throw new Error('Identifiant non reçu par le backend');
