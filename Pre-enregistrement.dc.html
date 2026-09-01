@@ -2212,26 +2212,32 @@ class Component extends DCLogic {
       ...(() => {
         const PER = { tout: Infinity, '7j': 7, '30j': 30, annee: 365 };
         const lim = PER[s.histPeriod] ?? Infinity;
+        const getHistoryDate = c => {
+          const ship = normalizeShip(c && c.ship);
+          return ship.arriveDate || ship.date || c.date || c.arrived_at || c.arrivedAt || c.updated_at || null;
+        };
         const view = arrivees
           .filter(c => {
-            const date = normalizeShip(c && c.ship).arriveDate;
-            return !!date && this.daysAgo(date) <= lim;
+            const date = getHistoryDate(c);
+            if (!date) return true;
+            return this.daysAgo(date) <= lim;
           })
           .slice()
           .sort((a, b) => {
-            const da = normalizeShip(a.ship).arriveDate;
-            const db = normalizeShip(b.ship).arriveDate;
-            const d = (this.parseFr(da) || new Date(0)) - (this.parseFr(db) || new Date(0));
+            const da = getHistoryDate(a);
+            const db = getHistoryDate(b);
+            const d = (this.parseFr(da) || new Date()) - (this.parseFr(db) || new Date());
             return s.histTri === 'desc' ? -d : d;
           });
 
         const card = c => {
           const ship = normalizeShip(c && c.ship);
+          const dateRef = getHistoryDate(c);
           return {
             ref: c.ref, provenance: c.provenance, destination: c.destination,
             unites: Number(ship.total || c.unites || 0).toLocaleString('fr-FR'),
-            dateExp: ship.date || c.date,
-            dateArr: ship.arriveDate,
+            dateExp: ship.date || c.date || dateRef || '—',
+            dateArr: ship.arriveDate || dateRef || '—',
             valiseCount: ship.valises.length,
             cartonCount: ship.valises.reduce((a, v) => a + (Array.isArray(v.cartons) ? v.cartons.length : 0), 0),
             statutStyle: chip('rgba(63,214,154,.15)', 'rgba(63,214,154,.38)', 'var(--ok-ink)'),
@@ -2241,16 +2247,18 @@ class Component extends DCLogic {
         };
 
         const recents = view.filter(c => {
-          const date = normalizeShip(c && c.ship).arriveDate;
-          return !!date && this.daysAgo(date) < 30;
+          const date = getHistoryDate(c);
+          if (!date) return true;
+          return this.daysAgo(date) < 30;
         });
         const olds = view.filter(c => {
-          const date = normalizeShip(c && c.ship).arriveDate;
-          return !!date && this.daysAgo(date) >= 30;
+          const date = getHistoryDate(c);
+          if (!date) return false;
+          return this.daysAgo(date) >= 30;
         });
         const byMonth = new Map();
         olds.forEach(c => {
-          const date = normalizeShip(c.ship).arriveDate;
+          const date = getHistoryDate(c);
           const key = date ? this.moisLabel(date) : 'Sans date';
           if (!byMonth.has(key)) byMonth.set(key, []);
           byMonth.get(key).push(c);
