@@ -513,7 +513,7 @@ input::placeholder{color:var(--ink-34)}
                       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:7px">
                         <span data-icon="package" style="display:grid;place-items:center;font-size:17px;color:var(--info-ink);flex:none"></span>
                         <div style="flex:1;min-width:0">
-                          <div style="font:700 13px/1.3 'JetBrains Mono',monospace">{{ k.code }}</div>
+                          <div style="font:700 13px/1.3 'JetBrains Mono',monospace">Carton {{ k.code }}</div>
                           <div style="font:500 9.5px/1.4 'JetBrains Mono',monospace;color:var(--info-ink);margin-top:2px">Réf: {{ k.cartonCode }}</div>
                         </div>
                         <span style="font:500 11.5px/1.3 Manrope,sans-serif;color:var(--ink-66);white-space:nowrap">{{ k.countLabel }}</span>
@@ -1719,16 +1719,34 @@ class Component extends DCLogic {
           groupes[v][k] = groupes[v][k] || [];
           groupes[v][k].push(x);
         });
-        const valises = Object.keys(groupes).sort().map(v => {
-          const cartons = Object.keys(groupes[v]).sort().map(k => {
+        const formatSequenceLabel = (raw, prefix, idx, digits = 2) => {
+          const text = String(raw ?? '').trim();
+          if (text && text !== '—' && text !== 'NULL' && text !== 'null') {
+            const match = /(\d+)/.exec(text);
+            if (match) return String(Number(match[1])).padStart(digits, '0');
+            return text;
+          }
+          return String(idx).padStart(digits, '0');
+        };
+        const formatReference = (raw, prefix, idx, digits = 3) => {
+          const text = String(raw ?? '').trim();
+          if (text && text !== '—' && text !== 'NULL' && text !== 'null') {
+            return text;
+          }
+          return `${prefix}-${String(idx).padStart(digits, '0')}`;
+        };
+        const valises = Object.keys(groupes).sort().map((v, valIndex) => {
+          const cartons = Object.keys(groupes[v]).sort().map((k, cartonIndex) => {
             const items = groupes[v][k];
             const on = s.boxOuvert === v + '|' + k;
             const surSite = {};
             items.forEach(x => { const st = x.statut === 'transit' ? x.site + ' (transit)' : x.site; surSite[st] = (surSite[st] || 0) + 1; });
             const mvts = mouvementsDB.filter(mv => (mv.carton || '') === k).slice(0, 4);
+            const cartonLabel = formatSequenceLabel(k, 'CTN', cartonIndex + 1, 2);
+            const cartonRef = formatReference(k, 'CTN', cartonIndex + 1, 3);
             return {
-              code: k,
-              cartonCode: k,
+              code: cartonLabel,
+              cartonCode: cartonRef,
               countLabel: `${items.length} monture(s)`,
               repartition: Object.keys(surSite).sort().map(st => `${st} : ${surSite[st]}`).join(' · '),
               ouvert: on,
@@ -1757,11 +1775,13 @@ class Component extends DCLogic {
           // Extraire la couleur réelle de la première monture de cette valise
           const allItemsInValise = Object.values(groupes[v]).flat();
           const couleurValise = allItemsInValise.length > 0 ? (allItemsInValise[0].couleur || '—') : '—';
+          const valiseLabel = formatSequenceLabel(v, 'VAL', valIndex + 1, 2);
+          const valiseRef = formatReference(v, 'VAL', valIndex + 1, 3);
           return {
             code: v,
             couleur: couleurValise,
-            label: v,
-            valisCode: v,
+            label: valiseLabel,
+            valisCode: valiseRef,
             totalLabel: `${Object.values(groupes[v]).reduce((a, l) => a + l.length, 0)} monture(s) · ${cartons.length} carton(s)`,
             swatchStyle: `width:18px;height:18px;border-radius:6px;flex:none;background:${this.COULEURS_VALISE[couleurValise] || '#8A8A93'};border:1px solid var(--ink-16)`,
             cartons
