@@ -3222,7 +3222,9 @@ class Component extends DCLogic {
                 valeur: item.name || item.value || '—',
                 ecart: Number(item.quantity || item.ecart || 0)
               }));
-              totalEcart = DB.stockNeeds.reduce((sum, item) => sum + Number(item.quantity || item.ecart || 0), 0);
+              const totauxParAxe = {};
+              lignes.forEach(item => { totauxParAxe[item.axe] = (totauxParAxe[item.axe] || 0) + item.ecart; });
+              totalEcart = Math.max(0, ...Object.values(totauxParAxe));
             } else {
               // Fall back to local calculation
               const parAxe = {};
@@ -3255,19 +3257,40 @@ class Component extends DCLogic {
               besoinStyle: lignes.length
                 ? `display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap;box-shadow:0 14px 30px -14px rgba(191,33,120,.6),inset 0 1px 0 var(--srf-5);transition:all .28s ${ease}`
                 : `display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13.5px/1.3 Manrope,sans-serif;cursor:not-allowed;white-space:nowrap`,
-              envoyerBesoins: () => {
+              envoyerBesoins: async () => {
                 if (!lignes.length) return;
-                const S1 = window.LStore;
-                if (!S1) return;
-                const num = S1.nextSeq('appro');
-                const ref = `APP-2026-${String(num).padStart(4, '0')}`;
-                S1.set({
-                  approvisionnements: [{
-                    id: 'ap' + Date.now(), ref, date: S1.dateFr(), statut: 'attente',
-                    total: totalEcart, lignes: lignes
-                  }, ...(S1.get().approvisionnements || [])]
-                });
-                this.toast('send', 'Liste envoyée à l\'administrateur', `${ref} · ${totalEcart} monture(s)`, 'ok');
+                const token = localStorage.getItem('token');
+                if (!token) {
+                  this.toast('triangle-alert', 'Connexion requise', 'Reconnectez-vous pour envoyer les besoins.', 'warn');
+                  return;
+                }
+                try {
+                  const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/supplier-orders`, {
+                    method: 'POST',
+                    headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      supplier: 'À définir',
+                      provenance: 'À définir',
+                      destination: 'Stock général',
+                      quantity: totalEcart,
+                      order_date: this.isoToday(),
+                      transport: 'À définir',
+                      gender: 'UNISEXE',
+                      gamme: 'mixte',
+                      note: `Besoins calculés: ${JSON.stringify(lignes)}`
+                    })
+                  });
+                  const payload = await response.json().catch(() => ({}));
+                  const order = payload && payload.data && payload.data.order;
+                  if (!response.ok || !order || !order.id) {
+                    throw new Error((payload && (payload.error || payload.message)) || 'Envoi des besoins impossible');
+                  }
+                  await this.loadBackendData();
+                  this.toast('send', 'Liste envoyée à l\'administrateur', `${order.reference} · ${totalEcart.toLocaleString('fr-FR')} monture(s)`, 'ok');
+                } catch (error) {
+                  console.error('Erreur envoi besoins fournisseur:', error);
+                  this.toast('triangle-alert', 'Envoi impossible', error.message || 'Les besoins n\'ont pas pu être enregistrés.', 'warn');
+                }
               },
               approSuivi: appros.slice(0, 4).map(a => ({
                 ref: a.ref, date: a.date,
