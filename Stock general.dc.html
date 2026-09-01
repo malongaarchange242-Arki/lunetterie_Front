@@ -1153,7 +1153,7 @@ class Component extends DCLogic {
     cmdId: null, valId: null, cartId: null,
     fForme: '', fMarque: '', fCouleur: '', fMatiere: '', fRef: '', photo: false, photoPreview: null, photoData: null, branchPhotoData: null, backPhotoData: null, captureLabel: 'Prendre une photo', quantiteACreer: 1,
     scanning: false, helpOpen: false, toast: null,
-    lignes: {}, pickPhoto: null, viewMenu: null, phoneCarton: null, refRead: {}, branchRefs: {}, pickRef: null,
+    lignes: {}, pickPhoto: null, viewMenu: null, phoneCarton: null, refRead: {}, branchRefs: {}, branchAnalysisStarted: {}, pickRef: null,
     manualCode: '', phonePaired: false, pairing: false, pairCode: '', pairQrUrl: '', scanTarget: null, userName: 'Utilisateur',
     stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes', stockDetailOpen: false, stockDetail: null, compoOnglet: 'Marque',
     magasin: 'Pointe-Noire', origFilter: 'tous', demId: null, sorties: 0,
@@ -1215,7 +1215,11 @@ class Component extends DCLogic {
     this.loadBackendData();
     this.loadExpedierData();
   }
-  componentDidUpdate() { this.icons(); this.paintBg(); }
+  componentDidUpdate() {
+    this.icons();
+    this.paintBg();
+    if (this.state.screen === 'saisie' && this.state.cartId) this.analyzeCartonBranches(this.state.cartId);
+  }
   paintBg() {
     const t = window.LStore ? window.LStore.theme() : 'light';
     try { document.body.style.background = (t === 'dark') ? '#0F0E13' : '#EFEBF2'; } catch (e) {}
@@ -1397,6 +1401,19 @@ class Component extends DCLogic {
       };
       return { branchRefs: { ...(st.branchRefs || {}), [cartonId]: [...current, item] } };
     });
+  }
+  analyzeCartonBranches(cartonId) {
+    const state = this.state;
+    if (state.branchAnalysisStarted && state.branchAnalysisStarted[cartonId]) return;
+    const arrivals = (window.LStore ? window.LStore.get().arrivees : []) || [];
+    const carton = arrivals.flatMap(command => (command.valises || []).flatMap(valise => valise.cartons || [])).find(item => String(item.id) === String(cartonId));
+    const branchPhotos = carton ? (carton.photos || []).filter(photo => {
+      const kind = String(photo && (photo.kind || photo.type || '')).toLowerCase();
+      return kind === 'branche' || kind === 'branch';
+    }) : [];
+    if (!branchPhotos.length) return;
+    this.setState(current => ({ branchAnalysisStarted: { ...(current.branchAnalysisStarted || {}), [cartonId]: true } }));
+    branchPhotos.forEach(photo => this.extractBranchReference(photo.src || photo.url, cartonId));
   }
   async startValiseScan(command, valise) {
     const code = String(valise && (valise.code || valise.couleur || valise.id || '')).toUpperCase();
