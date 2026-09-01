@@ -437,7 +437,14 @@ input::placeholder{color:var(--ink-34)}
               </div>
               <sc-for list="{{ invRows }}" as="r" hint-placeholder-count="6">
                 <div style="display:grid;grid-template-columns:54px minmax(106px,1.1fr) minmax(92px,.9fr) minmax(84px,.8fr) minmax(96px,.9fr) minmax(96px,.9fr) minmax(126px,1.1fr) minmax(104px,.9fr) 88px;gap:14px;padding:12px 20px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
-                  <div style="{{ r.photoStyle }}"><span data-icon="glasses" style="display:grid;place-items:center;font-size:16px;color:var(--srf-9)"></span></div>
+                  <div style="display:flex;align-items:center;justify-content:center">
+                    <sc-if value="{{ r.photoUrl }}" hint-placeholder-val="false">
+                      <img src="{{ r.photoUrl }}" alt="Photo monture" style="display:block;width:44px;height:44px;object-fit:cover;border-radius:12px;border:1px solid var(--ink-12);background:var(--srf-7)">
+                    </sc-if>
+                    <sc-if value="{{ !r.photoUrl }}" hint-placeholder-val="false">
+                      <div style="{{ r.photoStyle }}"><span data-icon="glasses" style="display:grid;place-items:center;font-size:16px;color:var(--srf-9)"></span></div>
+                    </sc-if>
+                  </div>
                   <div style="min-width:0;font:600 12.5px/1.3 'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.ref }}</div>
                   <div style="min-width:0;font:500 12px/1.4 Manrope,sans-serif;color:var(--ink-72)">{{ r.marque }}</div>
                   <div style="min-width:0;font:500 12px/1.4 Manrope,sans-serif;color:var(--ink-72)">{{ r.forme }}</div>
@@ -1188,6 +1195,7 @@ class Component extends DCLogic {
           valise: g.location_code || '—',
           carton: g.location_code || '—',
           photo: index % 4,
+          photoUrl: g.photo_monture_url || g.photoMontureUrl || g.photo_url || g.image_url || g.photo || null,
           raw: g
         }));
         if (window.LStore) window.LStore.set({ montures: mappedInventory });
@@ -1888,6 +1896,7 @@ class Component extends DCLogic {
           invRows: view.map(m => ({
             ref: m.ref, marque: m.marque, forme: m.forme, couleur: m.couleur,
             gamme: m.gamme, uid: m.uid, prix: this.fcfa(m.prix), site: m.site,
+            photoUrl: m.photoUrl || m.raw?.photo_monture_url || m.raw?.photoMontureUrl || m.raw?.photo_url || m.raw?.image_url || '',
             photoStyle: `width:44px;height:44px;border-radius:12px;flex:none;display:grid;place-items:center;background:${this.PHOTOS[m.photo % this.PHOTOS.length]};border:1px solid var(--ink-12);box-shadow:inset 0 1px 0 var(--srf-3)`,
             siteStyle: m.site === 'Stock général' ? tagWip : tagNeutre
           }))
