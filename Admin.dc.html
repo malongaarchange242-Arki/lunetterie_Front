@@ -216,9 +216,9 @@ input::placeholder{color:var(--ink-34)}
         </sc-if>
 
         <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-66);margin-bottom:16px">ARRIVÉS AU STOCK GÉNÉRAL</div>
-        <sc-if value="{{ hasBonsArrivés }}" hint-placeholder-val="{{ false }}">
+        <sc-if value="{{ hasBonsArrives }}" hint-placeholder-val="{{ false }}">
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px">
-            <sc-for list="{{ bonsArrivés }}" as="b" hint-placeholder-count="2">
+            <sc-for list="{{ bonsArrives }}" as="b" hint-placeholder-count="2">
               <div style="{{ b.cardStyle }}">
                 <div style="display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px dashed var(--ink-14);margin-bottom:14px;flex-wrap:wrap">
                   <div style="min-width:0;flex:1">
@@ -244,7 +244,7 @@ input::placeholder{color:var(--ink-34)}
             </sc-for>
           </div>
         </sc-if>
-        <sc-if value="{{ hasBonsArrivés }}" hint-placeholder-val="{{ false }}">
+        <sc-if value="{{ hasBonsArrives }}" hint-placeholder-val="{{ false }}">
           <div style="padding:24px;border-radius:18px;background:var(--srf-7);border:1.5px dashed var(--ink-12);text-align:center">
             <div style="font:500 13px/1.4 Manrope,sans-serif;color:var(--ink-62)">Aucun bon arrivé au stock général</div>
           </div>
@@ -924,6 +924,28 @@ class Component extends DCLogic {
   }
   fcfa(n) { return (n || 0).toLocaleString('fr-FR') + ' F CFA'; }
   milliers(n) { return Math.round((n || 0) / 1000).toLocaleString('fr-FR') + ' k'; }
+  apiBaseUrl() { return 'https://api-lunetterie.universearch.com'; }
+  apiHeaders(extra = {}) {
+    const token = localStorage.getItem('token');
+    return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+  }
+  async findStationIdByName(name) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl()}/api/v1/auth/stations`, { headers: this.apiHeaders() });
+      if (!response.ok) return null;
+      const payload = await response.json();
+      const stations = payload && Array.isArray(payload.stations) ? payload.stations : (payload && payload.data && Array.isArray(payload.data.stations) ? payload.data.stations : []);
+      const target = String(name || '').trim();
+      const station = stations.find(st => {
+        const current = String(st && st.name ? st.name : '').trim();
+        return current.toLowerCase() === target.toLowerCase() || this.normalizeSiteName(current) === this.normalizeSiteName(target);
+      });
+      return station ? Number(station.id) : null;
+    } catch (error) {
+      console.error('Erreur chargement stations:', error);
+      return null;
+    }
+  }
   normalizeSiteName(raw) {
     const s = String(raw ?? '').trim();
     if (!s) return 'Stock général';
@@ -1482,7 +1504,7 @@ class Component extends DCLogic {
       return orig && (orig.statut === 'attente' || orig.statut === 'preenr' || orig.statut === 'envoye');
     });
     
-    const bonsArrivés = bons.filter((b, idx) => {
+    const bonsArrives = bons.filter((b, idx) => {
       const orig = bonsDB[idx];
       return orig && orig.statut === 'arrive';
     });
@@ -1965,9 +1987,9 @@ class Component extends DCLogic {
       ],
       bons,
       bonsEnAttente,
-      bonsArrivés,
+      bonsArrives,
       hasBonsEnAttente: bonsEnAttente.length > 0,
-      hasBonsArrivés: bonsArrivés.length > 0,
+      hasBonsArrives: bonsArrives.length > 0,
       fournisseurOpts: this.FOURNISSEURS.map(f => ({ label: f, value: f })),
       provenanceOpts: this.PROVENANCES.map(p => ({ label: p, value: p })),
       bFournisseur: String(s.bFournisseur || ''), bProvenance: String(s.bProvenance || 'Dubaï'), bUnites: String(s.bUnites || ''), bDate: this.normalizeDateInput(s.bDate),
@@ -2111,23 +2133,85 @@ class Component extends DCLogic {
           }),
           listeCode: liste ? `INT-${s.tDestination.slice(0, 3).toUpperCase()}-${String(1000 + (liste.length * 7)).slice(-4)}` : '',
           listeBarcodeStyle: liste ? this.barcode(`INT-${s.tDestination}-${liste.length}`, 44) : '',
-          envoyerListe: () => {
+          envoyerListe: async () => {
             if (!liste || !liste.length) return;
-            const S = window.LStore;
-            const num = S ? S.nextSeq('demande') : 0;
-            const ref = `INT-2026-${num}`;
-            const code = `INT-${s.tDestination.slice(0, 3).toUpperCase()}-${String(num).slice(-4)}`;
-            const dem = {
-              id: 'i' + Date.now(), ref, magasin: s.tDestination, source: s.tOrigine, origine: 'admin',
-              date: this.dateFr(), motif: `${s.tMotif} · depuis ${s.tOrigine}`,
-              type: s.tForme === 'Toutes' ? '' : s.tForme, gamme: s.tGamme === 'Toutes' ? '' : s.tGamme,
-              genre: s.tGenre === 'Tous' ? '' : s.tGenre, couleur: s.tCouleur === 'Toutes' ? '' : s.tCouleur,
-              besoin: liste.length, uids: liste, barcodeNum: code,
-              statut: 'valide', scanned: [], expedie: false, cartonCode: null
-            };
-            S.set({ demandes: [dem, ...demandesDB] });
-            this.setState({ tListe: null, tUnites: '', screen: 'mouvements' });
-            this.toast('send', 'Liste envoyée', `${ref} · code ${code}`, 'ok');
+            const token = localStorage.getItem('token');
+            if (!token) {
+              this.toast('triangle-alert', 'Connexion requise', 'Reconnectez-vous pour envoyer la liste.', 'warn');
+              return;
+            }
+            try {
+              const fromStationID = await this.findStationIdByName(s.tOrigine);
+              const toStationID = await this.findStationIdByName(s.tDestination);
+              if (!fromStationID || !toStationID) {
+                throw new Error('Impossible de retrouver les stations de départ et d’arrivée.');
+              }
+
+              const createRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/transfers`, {
+                method: 'POST',
+                headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  from_station_id: fromStationID,
+                  to_station_id: toStationID,
+                  notes: `${s.tMotif} · depuis ${s.tOrigine}`
+                })
+              });
+
+              if (!createRes.ok) {
+                const payload = await createRes.json().catch(() => null);
+                const message = payload && payload.message ? payload.message : 'Échec de création du transfert.';
+                throw new Error(message);
+              }
+
+              const createPayload = await createRes.json();
+              const transfer = createPayload && createPayload.transfer ? createPayload.transfer : (createPayload && createPayload.data ? createPayload.data : createPayload);
+              const transferId = transfer && transfer.id ? Number(transfer.id) : null;
+              if (!transferId) {
+                throw new Error('Réponse du transfert invalide.');
+              }
+
+              for (const uid of liste) {
+                const itemRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/transfers/${transferId}/items`, {
+                  method: 'POST',
+                  headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ barcode: uid })
+                });
+                if (!itemRes.ok) {
+                  const payload = await itemRes.json().catch(() => null);
+                  const message = payload && payload.message ? payload.message : `Erreur pour ${uid}`;
+                  throw new Error(message);
+                }
+              }
+
+              const dispatchRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/transfers/${transferId}/dispatch`, {
+                method: 'POST',
+                headers: this.apiHeaders()
+              });
+              if (!dispatchRes.ok) {
+                const payload = await dispatchRes.json().catch(() => null);
+                const message = payload && payload.message ? payload.message : 'Échec de dispatch du transfert.';
+                throw new Error(message);
+              }
+
+              const S = window.LStore;
+              const num = S ? S.nextSeq('demande') : 0;
+              const ref = `INT-2026-${num}`;
+              const code = `INT-${s.tDestination.slice(0, 3).toUpperCase()}-${String(num).slice(-4)}`;
+              const dem = {
+                id: 'i' + Date.now(), ref, magasin: s.tDestination, source: s.tOrigine, origine: 'admin',
+                date: this.dateFr(), motif: `${s.tMotif} · depuis ${s.tOrigine}`,
+                type: s.tForme === 'Toutes' ? '' : s.tForme, gamme: s.tGamme === 'Toutes' ? '' : s.tGamme,
+                genre: s.tGenre === 'Tous' ? '' : s.tGenre, couleur: s.tCouleur === 'Toutes' ? '' : s.tCouleur,
+                besoin: liste.length, uids: liste, barcodeNum: code,
+                statut: 'valide', scanned: [], expedie: false, cartonCode: null
+              };
+              if (S) S.set({ demandes: [dem, ...demandesDB] });
+              this.setState({ tListe: null, tUnites: '', screen: 'mouvements' });
+              this.toast('send', 'Liste envoyée', `${ref} · code ${code}`, 'ok');
+            } catch (error) {
+              console.error('Erreur envoi liste interne:', error);
+              this.toast('triangle-alert', 'Envoi impossible', error && error.message ? error.message : 'Vérifiez la connexion ou la station.', 'warn');
+            }
           },
           annulerListe: () => this.setState({ tListe: null })
         };
