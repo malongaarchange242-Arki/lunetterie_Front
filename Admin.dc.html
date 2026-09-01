@@ -1012,6 +1012,7 @@ class Component extends DCLogic {
     return `height:${h}px;width:100%;background-image:linear-gradient(90deg,${bars.join(',')});background-size:${x}px 100%;background-repeat:repeat-x`;
   }
   phaseExp(d, cartons) {
+    if (d.expPhase) return d.expPhase;
     if (d.statut === 'refuse' || d.statut === 'refusee') return 'refusee';
     if (d.statut === 'attente') return 'attente';
     if (!d.expedie) return 'preparation';
@@ -1231,6 +1232,53 @@ class Component extends DCLogic {
         return [];
       });
   }
+  loadTransfers() {
+    const token = localStorage.getItem('token');
+    if (!token) return Promise.resolve();
+    const headers = { Authorization: `Bearer ${token}` };
+    return Promise.all([
+      fetch('https://api-lunetterie.universearch.com/api/v1/inventory/transfers', { headers }),
+      fetch('https://api-lunetterie.universearch.com/api/v1/auth/stations', { headers })
+    ])
+      .then(async ([transferResponse, stationResponse]) => {
+        if (!transferResponse.ok) throw new Error('Chargement des transferts impossible');
+        const transferPayload = await transferResponse.json();
+        const stationPayload = stationResponse.ok ? await stationResponse.json() : {};
+        const stations = stationPayload && stationPayload.data && Array.isArray(stationPayload.data.stations)
+          ? stationPayload.data.stations : [];
+        const stationNames = new Map(stations.map(station => [Number(station.id), station.name]));
+        const transfers = transferPayload && transferPayload.data && Array.isArray(transferPayload.data.transfers)
+          ? transferPayload.data.transfers : [];
+        const mappedTransfers = transfers.map(transfer => ({
+          id: transfer.id,
+          ref: `INT-${String(transfer.id).padStart(4, '0')}`,
+          origine: stationNames.get(Number(transfer.from_station_id)) || `Station ${transfer.from_station_id}`,
+          magasin: stationNames.get(Number(transfer.to_station_id)) || `Station ${transfer.to_station_id}`,
+          date: this.formatTransferDate(transfer.created_at),
+          besoin: Array.isArray(transfer.items) ? transfer.items.length : 0,
+          motif: (transfer.notes || 'Transfert interne').replace(/\s*depuis\s+.*$/i, ''),
+          statut: 'valide',
+          expPhase: transfer.status === 'RECEIVED' ? 'finalisee' : (transfer.status === 'IN_TRANSIT' ? 'transit' : 'preparation'),
+          cartonCode: '',
+          barcodeNum: `INT-${transfer.id}`,
+          type: 'Transfert interne',
+          gamme: 'Toutes',
+          genre: 'Tous',
+          transferStatus: transfer.status,
+          transferItems: transfer.items || []
+        }));
+        if (window.LStore) window.LStore.set({ transfers: mappedTransfers });
+        return mappedTransfers;
+      })
+      .catch(() => {
+        if (window.LStore) window.LStore.set({ transfers: [] });
+        return [];
+      });
+  }
+  formatTransferDate(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('fr-FR');
+  }
   loadInventory() {
     const token = localStorage.getItem('token');
     if (!token) return Promise.resolve();
@@ -1388,6 +1436,7 @@ class Component extends DCLogic {
 
     this.loadBons();
     this.loadValidations();
+    this.loadTransfers();
     this.loadInventory();
     this.loadBoxes();
     this.loadMovements();
@@ -1457,6 +1506,8 @@ class Component extends DCLogic {
     const S = window.LStore;
     const bonsDB = Array.isArray(s.apiBons) ? s.apiBons : (DB.bons || []);
     const demandesDB = DB.demandes || [];
+    const transfersDB = DB.transfers || [];
+    const networkDemandes = demandesDB.concat(transfersDB);
     const inventaireDB = DB.montures || [];
     const mouvementsDB = DB.mouvements || [];
     const ease = 'cubic-bezier(.22,1,.36,1)';
@@ -1851,7 +1902,7 @@ class Component extends DCLogic {
           finalisee: { label: 'Finalisée', style: tagOk, ordre: 5 },
           refusee: { label: 'Refusée', style: tagMag, ordre: 6 }
         };
-        const all = demandesDB.map(d => ({ d, ph: this.phaseExp(d, cartons) }));
+        const all = networkDemandes.map(d => ({ d, ph: this.phaseExp(d, cartons) }));
         const view = all.filter(x => s.expFilter === 'tous' || x.ph === s.expFilter);
         const n = ph => all.filter(x => x.ph === ph).length;
         return {
@@ -1874,7 +1925,7 @@ class Component extends DCLogic {
           })),
           expCountLabel: `${view.length} expédition${view.length > 1 ? 's' : ''}`,
           expVide: view.length === 0,
-          expAnyExist: demandesDB.length > 0,
+          expAnyExist: networkDemandes.length > 0,
           expRempli: view.length > 0,
           expditions: view
             .sort((a, b) => PH[a.ph].ordre - PH[b.ph].ordre)
@@ -2272,7 +2323,7 @@ class Component extends DCLogic {
       setTMotif: e => this.setState({ tMotif: e.target.value }),
       ...(() => {
         const cartons2 = (window.LStore ? window.LStore.get().cartonsBoutique : []) || [];
-        const miennes = demandesDB.filter(d => d.origine === 'admin');
+        const miennes = demandesDB.filter(d => d.origine === 'admin').concat(transfersDB);
         const LAB = {
           attente: 'En attente', preparation: 'En préparation', transit: 'En transit',
           reception: 'En réception', finalisee: 'Finalisée', refusee: 'Refusée'
