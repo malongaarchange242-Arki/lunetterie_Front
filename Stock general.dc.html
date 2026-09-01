@@ -2309,9 +2309,12 @@ class Component extends DCLogic {
         return { lignes: { ...(st.lignes || {}), [cart.id]: curL.map(l => l.key === key ? { ...l, ...patch } : l) } };
       });
       const duplicateLine = source => {
-        if (source.saved) return;
+        if (!source || source.saved) {
+          this.toast('triangle-alert', 'Ligne invalide', 'Cette ligne ne peut pas être dupliquée.', 'warn');
+          return;
+        }
         if (!source.forme || !source.marque || !source.couleur || !source.matiere) {
-          this.toast('triangle-alert', 'Ligne incomplète', 'Renseignez au moins les caractéristiques avant de dupliquer.', 'warn');
+          this.toast('triangle-alert', 'Ligne incomplète', 'Renseignez la forme, la marque, la couleur et la matière avant de dupliquer.', 'warn');
           return;
         }
         const remaining = lignesState.filter(line => !line.saved && line.key !== source.key);
@@ -2319,25 +2322,35 @@ class Component extends DCLogic {
           this.toast('copy', 'Aucune ligne restante', 'Cette monture est déjà la seule ligne à compléter.', 'info');
           return;
         }
+        const hasRef = source.ref && String(source.ref).trim().length > 0;
+        const hasPhotos = Array.isArray(source.photos) && source.photos.length > 0;
         this.setState(st => {
           const currentLines = (st.lignes || {})[cart.id] || lignesState;
           return {
             lignes: {
               ...(st.lignes || {}),
-              [cart.id]: currentLines.map(line => line.saved || line.key === source.key ? line : {
-                ...line,
-                ref: source.ref || line.ref || '',
-                refId: source.refId || line.refId || '',
-                forme: source.forme,
-                marque: source.marque,
-                couleur: source.couleur,
-                matiere: source.matiere,
-                photos: (source.photos || []).map(photo => ({ ...photo }))
+              [cart.id]: currentLines.map(line => {
+                if (line.saved || line.key === source.key) return line;
+                return {
+                  ...line,
+                  ref: hasRef ? source.ref : line.ref || '',
+                  refId: hasRef ? (source.refId || source.ref || '') : (line.refId || ''),
+                  forme: source.forme,
+                  marque: source.marque,
+                  couleur: source.couleur,
+                  matiere: source.matiere,
+                  photos: hasPhotos ? (source.photos || []).map(photo => ({
+                    ...photo,
+                    view: photo.view || photo.kind || 'face',
+                    id: `${photo.id || 'photo'}-copy-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
+                  })) : (line.photos || [])
+                };
               })
             }
           };
         });
-        this.toast('copy', 'Monture dupliquée', `${remaining.length} ligne(s) pré-remplie(s) avec la même référence et les mêmes photos.`, 'ok');
+        const count = remaining.length;
+        this.toast('copy', `Monture dupliquée sur ${count} ligne${count > 1 ? 's' : ''}`, `${count} ligne${count > 1 ? 's' : ''} pré-remplie${count > 1 ? 's' : ''} avec les mêmes caractéristiques${hasRef ? ' et référence' : ''}${hasPhotos ? ' et photos' : ''}.`, 'ok');
       };
       const photoView = photo => {
         const kind = String(photo && (photo.kind || photo.type || '')).toLowerCase();
