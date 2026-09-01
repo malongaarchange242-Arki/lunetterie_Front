@@ -619,7 +619,7 @@ input::placeholder{color:var(--ink-34)}
             <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>GENRE</div><div>COULEUR</div><div>MATIÈRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div>EMPLACEMENT</div><div>VALISE / CARTON</div><div style="text-align:right">IDENTIFIANT</div>
           </div>
           <sc-for list="{{ stockRows }}" as="r" hint-placeholder-count="0">
-            <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(150px,1.1fr) minmax(140px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
+            <div onClick="{{ r.onClick }}" style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(150px,1.1fr) minmax(140px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s;cursor:pointer" style-hover="background:var(--srf-7)">
               <div style="{{ r.photoStyle }}">
                 <sc-if value="{{ r.photoUrl }}" hint-placeholder-val="false"><img bindSrc="{{ r.photoUrl }}" alt="Photo monture" style="display:block;width:100%;height:100%;object-fit:cover"></sc-if>
                 <sc-if value="{{ r.photoMissing }}" hint-placeholder-val="true"><span data-icon="glasses" style="display:grid;place-items:center;font-size:17px;color:var(--srf-9)"></span></sc-if>
@@ -640,6 +640,50 @@ input::placeholder{color:var(--ink-34)}
          </div></div>
         </div>
         </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ stockDetailOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeStockDetail }}" style="position:fixed;inset:0;z-index:90;background:rgba(13,13,13,.58);backdrop-filter:blur(18px);display:grid;place-items:center;padding:24px;animation:rise .24s cubic-bezier(.22,1,.36,1)">
+        <div onClick="{{ stop }}" style="width:min(920px,100%);max-height:88vh;overflow:auto;border-radius:28px;padding:26px;background:linear-gradient(150deg,var(--srf-96),var(--srf-8));border:1px solid var(--srf-6);backdrop-filter:blur(44px);box-shadow:0 34px 80px -30px var(--ink-28),inset 0 1px 0 var(--srf-9)">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px">
+            <div>
+              <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--info-ink);margin-bottom:10px">DÉTAIL DE LA MONTURE</div>
+              <div style="font:600 22px/1.25 Sora,sans-serif;letter-spacing:-.02em">{{ stockDetail.ref }}</div>
+            </div>
+            <button onClick="{{ closeStockDetail }}" style="width:36px;height:36px;border-radius:12px;border:1px solid var(--ink-1);background:var(--srf-8);color:var(--ink);cursor:pointer;display:grid;place-items:center;flex:none"><span data-icon="x" style="display:grid;place-items:center;font-size:16px"></span></button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:20px">
+            <div style="padding:14px;border-radius:20px;background:var(--srf-66);border:1px solid var(--ink-08)">
+              <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:10px">PHOTO DE FACE</div>
+              <div style="width:100%;aspect-ratio:1;border-radius:16px;overflow:hidden;background:linear-gradient(140deg,#9AA0AD,#5A6070);border:1px solid var(--ink-12)">
+                <sc-if value="{{ stockDetail.photoFrontUrl }}" hint-placeholder-val="false"><img bindSrc="{{ stockDetail.photoFrontUrl }}" alt="Photo face" style="display:block;width:100%;height:100%;object-fit:cover"></sc-if>
+                <sc-if value="{{ stockDetail.photoFrontUrl }}" hint-placeholder-val="true"><span data-icon="glasses" style="display:grid;place-items:center;width:100%;height:100%;font-size:36px;color:var(--srf-9)"></span></sc-if>
+              </div>
+            </div>
+            <div style="padding:14px;border-radius:20px;background:var(--srf-66);border:1px solid var(--ink-08)">
+              <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:10px">PHOTO ATTACHÉE</div>
+              <div style="width:100%;aspect-ratio:1;border-radius:16px;overflow:hidden;background:linear-gradient(140deg,#A69FBC,#5A5368);border:1px solid var(--ink-12)">
+                <sc-if value="{{ stockDetail.photoBackUrl }}" hint-placeholder-val="false"><img bindSrc="{{ stockDetail.photoBackUrl }}" alt="Photo attachée" style="display:block;width:100%;height:100%;object-fit:cover"></sc-if>
+                <sc-if value="{{ stockDetail.photoBackUrl }}" hint-placeholder-val="true"><span data-icon="camera" style="display:grid;place-items:center;width:100%;height:100%;font-size:36px;color:var(--srf-9)"></span></sc-if>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px">
+            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">MARQUE</div><div style="font:600 14px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.marque }}</div></div>
+            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">FORME</div><div style="font:600 14px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.forme }}</div></div>
+            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">GENRE</div><div style="font:600 14px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.genre }}</div></div>
+            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">COULEUR</div><div style="font:600 14px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.couleur }}</div></div>
+            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">MATIÈRE</div><div style="font:600 14px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.matiere }}</div></div>
+            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">GAMME</div><div style="font:600 14px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.gamme }}</div></div>
+            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">PRIX</div><div style="font:600 14px/1.4 'JetBrains Mono',monospace;color:var(--ok-ink)">{{ stockDetail.prix }}</div></div>
+            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">EMPLACEMENT</div><div style="font:600 12.5px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.emplacement }}</div></div>
+            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">VALISE / CARTON</div><div style="font:600 12.5px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.valiseCarton }}</div></div>
+            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">IDENTIFIANT</div><div style="font:600 12.5px/1.4 'JetBrains Mono',monospace;color:var(--info-ink)">{{ stockDetail.uid }}</div></div>
+          </div>
+        </div>
       </div>
     </sc-if>
 
@@ -1111,7 +1155,7 @@ class Component extends DCLogic {
     scanning: false, helpOpen: false, toast: null,
     lignes: {}, pickPhoto: null, viewMenu: null, phoneCarton: null, refRead: {}, pickRef: null,
     manualCode: '', phonePaired: false, pairing: false, pairCode: '', pairQrUrl: '', scanTarget: null, userName: 'Utilisateur',
-    stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes', compoOnglet: 'Marque',
+    stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes', stockDetailOpen: false, stockDetail: null, compoOnglet: 'Marque',
     magasin: 'Pointe-Noire', origFilter: 'tous', demId: null, sorties: 0,
     expeditions: [], expId: null,
     demandes: [
@@ -3067,6 +3111,9 @@ class Component extends DCLogic {
           stockAucunResultat: dispoAll.length > 0 && view.length === 0,
           stockTableVisible: view.length > 0,
           stockFiltresVisible: dispoAll.length > 0,
+          stockDetailOpen: !!s.stockDetailOpen,
+          stockDetail: s.stockDetail || null,
+          closeStockDetail: () => this.setState({ stockDetailOpen: false, stockDetail: null }),
           stockRows: view.slice().reverse().map(m => ({
             ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
             genre: m.genre || '—', couleur: m.couleur || '—', matiere: m.matiere || '—',
@@ -3077,9 +3124,31 @@ class Component extends DCLogic {
               : (m.valise || m.carton)
                 ? `${m.valise || m.carton} / ${m.carton || m.valise || '—'}`
                 : '— / —',
-            photoUrl: this.photoUrl(m.photo),
-            photoMissing: !this.photoUrl(m.photo),
-            photoStyle: `width:46px;height:46px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden;background:linear-gradient(140deg,#9AA0AD,#5A6070);border:1px solid var(--ink-12);box-shadow:inset 0 1px 0 var(--srf-3)`
+            photoUrl: this.photoUrl(m.photoFront || m.photo || m.photoMonture || ''),
+            photoMissing: !this.photoUrl(m.photoFront || m.photo || m.photoMonture || ''),
+            photoStyle: `width:46px;height:46px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden;background:linear-gradient(140deg,#9AA0AD,#5A6070);border:1px solid var(--ink-12);box-shadow:inset 0 1px 0 var(--srf-3)`,
+            onClick: () => this.setState({
+              stockDetailOpen: true,
+              stockDetail: {
+                ref: m.ref,
+                marque: m.marque || '—',
+                forme: m.forme || '—',
+                genre: m.genre || '—',
+                couleur: m.couleur || '—',
+                matiere: m.matiere || '—',
+                gamme: m.gamme || '—',
+                prix: this.fcfa(m.prix),
+                emplacement: m.location || m.emplacement || m.carton || '—',
+                valiseCarton: (m.valise && m.carton)
+                  ? `${m.valise} / ${m.carton}`
+                  : (m.valise || m.carton)
+                    ? `${m.valise || m.carton} / ${m.carton || m.valise || '—'}`
+                    : '— / —',
+                uid: m.uid,
+                photoFrontUrl: this.photoUrl(m.photoFront || m.photo || m.photoMonture || ''),
+                photoBackUrl: this.photoUrl(m.photoBack || m.photoBranche || m.photoArriere || '')
+              }
+            })
           }))
         };
       })(),
