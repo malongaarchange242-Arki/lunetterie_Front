@@ -2059,6 +2059,10 @@ class Component extends DCLogic {
 
       const photos = cart.photos || [];
       const lignesState = (s.lignes || {})[cart.id] || this.buildLignes(cart);
+      const used = {};
+      lignesState.forEach(l => (l.photos || []).forEach(p => {
+        if (p.id) used[p.id] = true;
+      }));
 
       const setLigne = (key, patch) => this.setState(st => {
         const curL = (st.lignes || {})[cart.id] || lignesState;
