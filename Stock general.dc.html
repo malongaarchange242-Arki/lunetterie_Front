@@ -1439,17 +1439,24 @@ class Component extends DCLogic {
   assignReferenceToFirstAvailableLine(cartonId, reference, preferredLineKey) {
     const value = String(reference || '').trim().toUpperCase();
     if (!value || !cartonId) return;
+    console.log('[stock-assign-ref]', { cartonId, reference: value, preferredLineKey });
     this.setState(st => {
-      const currentLines = (st.lignes || {})[cartonId] || this.buildLignes(this.findCarton(cartonId));
+      const key = String(cartonId);
+      const currentLines = (st.lignes && st.lignes[key]) || this.buildLignes(this.findCarton(cartonId));
       if (!currentLines.length) return null;
       const targetLine = preferredLineKey
         ? currentLines.find(line => line.key === preferredLineKey && !line.saved)
         : currentLines.find(line => !line.saved && (!line.ref || !String(line.ref).trim()));
-      if (!targetLine) return null;
+      if (!targetLine) {
+        console.log('[stock-assign-ref:no-target]', { cartonId: key, currentLines: currentLines.map(l => ({ key: l.key, ref: l.ref, saved: !!l.saved })) });
+        return null;
+      }
+      const nextLines = currentLines.map(line => line.key === targetLine.key ? { ...line, ref: value, refId: value } : line);
+      console.log('[stock-assign-ref:target]', { cartonId: key, targetKey: targetLine.key, after: JSON.stringify(nextLines.find(line => line.key === targetLine.key)) });
       return {
         lignes: {
           ...(st.lignes || {}),
-          [cartonId]: currentLines.map(line => line.key === targetLine.key ? { ...line, ref: value, refId: value } : line)
+          [key]: nextLines
         }
       };
     });
@@ -1470,6 +1477,11 @@ class Component extends DCLogic {
       return { branchRefs: { ...(st.branchRefs || {}), [cartonId]: [...current, item] } };
     });
     this.assignReferenceToFirstAvailableLine(cartonId, value, lineKey || undefined);
+  }
+  getCartonLines(cartonId, fallbackCart) {
+    const stateLines = (this.state && this.state.lignes && this.state.lignes[String(cartonId)]) || [];
+    if (Array.isArray(stateLines) && stateLines.length) return stateLines;
+    return fallbackCart ? this.buildLignes(fallbackCart) : [];
   }
   findCarton(cartonId) {
     const arrivals = (window.LStore ? window.LStore.get().arrivees : []) || [];
@@ -1959,14 +1971,15 @@ class Component extends DCLogic {
       const cmd = ((window.LStore ? window.LStore.get().arrivees : []) || []).find(c => c.id === cmdId);
       const val = cmd && cmd.valises.find(v => v.id === valId);
       const cart = (val && val.cartons.find(k => k.id === cartId)) || payload.data.carton;
-      this.setState({
+      this.setState(st => ({
         scanning: false, screen: 'saisie', cmdId, valId, cartId,
         fForme: cart ? Object.keys(cart.formes || {})[0] || '' : '',
         fMarque: cart ? (cart.marques[0] || '') : '',
         fCouleur: cart ? ((cart.couleurs || [])[0] || '') : '',
         fMatiere: cart ? ((cart.matieres || [])[0] || '') : '',
-        fRef: '', photo: false, photoPreview: null, photoData: null, branchPhotoData: null, backPhotoData: null, captureLabel: 'Prendre une photo'
-      });
+        fRef: '', photo: false, photoPreview: null, photoData: null, branchPhotoData: null, backPhotoData: null, captureLabel: 'Prendre une photo',
+        lignes: { ...(st.lignes || {}), [String(cartId)]: this.buildLignes(cart) }
+      }));
       this.toast('badge-check', 'Carton vérifié', cart ? `${cart.code} · ${cart.qty || cart.quantity} montures` : '', 'ok');
     } catch (error) {
       this.setState({ scanning: false });
@@ -2156,6 +2169,11 @@ class Component extends DCLogic {
     const val = cmd && cmd.valises.find(v => v.id === s.valId);
     const cart = val && val.cartons.find(k => k.id === s.cartId);
     const stock = this.allStock();
+    const stableCartId = cart ? String(cart.id) : null;
+    const stableLines = stableCartId ? (((s.lignes || {})[stableCartId] || this.buildLignes(cart))) : [];
+    if (stableCartId && !(s.lignes || {})[stableCartId]) {
+      this.setState(st => ({ lignes: { ...(st.lignes || {}), [stableCartId]: this.buildLignes(cart) } }));
+    }
 
     const navData = [
       { key: 'commandes', label: 'Commande à enregistrer', icon: 'clipboard-list', badge: String(commandesDB.filter(c => this.cmdDone(c) < this.cmdTotal(c)).length || '') },
@@ -2298,7 +2316,9 @@ class Component extends DCLogic {
         .concat((cart.matieres || []).map(m => ({ label: m, style: chipMa })));
 
       const photos = cart.photos || [];
-      const lignesState = (s.lignes || {})[cart.id] || this.buildLignes(cart);
+      const cartKey = String(cart.id);
+      const lignesState = this.getCartonLines(cartKey, cart);
+      console.log('[stock-render-lines]', { cartId: cartKey, refs: JSON.stringify(lignesState.map(l => ({ key: l.key, ref: l.ref, refId: l.refId, forme: l.forme, marque: l.marque, couleur: l.couleur, matiere: l.matiere, ready: !!(String(l.ref || l.refId || '').trim() && l.forme && l.marque && l.couleur && l.matiere) }))) });
       const used = {};
       lignesState.forEach(l => (l.photos || []).forEach(p => {
         if (p.id) used[p.id] = true;
@@ -2535,20 +2555,62 @@ class Component extends DCLogic {
       }));
 
       const lignesAEnregistrer = lignesState.filter(l => !l.saved);
-      const lignesCompletes = lignesAEnregistrer.filter(l =>
-        String(l.ref || '').trim() && l.forme && l.marque && l.couleur && l.matiere
-      );
-      const readyLines = lignesAEnregistrer.filter(l =>
-        l.forme && l.marque && l.couleur && l.matiere && String(l.ref || '').trim()
-      );
+      const resolveCartonLine = (line) => {
+        const source = cart || {};
+        const refValue = String(line.ref || line.refId || '').trim();
+        const forme = String(line.forme || source.forme || '').trim() || (Object.keys(source.formes || {}).length === 1 ? Object.keys(source.formes || {})[0] : '');
+        const marque = String(line.marque || (Array.isArray(source.marques) ? source.marques[0] : '') || '').trim();
+        const couleur = String(line.couleur || (Array.isArray(source.couleurs) ? source.couleurs[0] : '') || '').trim();
+        const matiere = String(line.matiere || (Array.isArray(source.matieres) ? source.matieres[0] : '') || '').trim();
+        const photos = Array.isArray(line.photos) ? line.photos : [];
+        const hasFacePhoto = photos.some(photo => {
+          const kind = String(photo && (photo.kind || photo.type || photo.view || '')).toLowerCase();
+          const src = String(photo && (photo.src || photo.url || '')).trim();
+          return kind === 'face' || /face|front|avant/i.test(kind) || /face|front|avant/i.test(src || '');
+        });
+        return {
+          ...line,
+          ref: refValue,
+          refId: line.refId || refValue,
+          forme,
+          marque,
+          couleur,
+          matiere,
+          photos,
+          hasFacePhoto,
+          isEligible: !!(refValue && forme && marque && couleur && matiere && hasFacePhoto)
+        };
+      };
+      const normalizedLines = lignesAEnregistrer.map(resolveCartonLine);
+      const lignesCompletes = normalizedLines.filter(l => l.isEligible);
+      const readyLines = normalizedLines.filter(l => l.isEligible);
+      console.log('[stock-ready-check]', {
+        cartonId: String(cart.id),
+        lignesCount: lignesAEnregistrer.length,
+        readyCount: readyLines.length,
+        lignes: JSON.stringify(lignesAEnregistrer.map(l => ({
+          key: l.key,
+          ref: l.ref,
+          refId: l.refId,
+          forme: l.forme,
+          marque: l.marque,
+          couleur: l.couleur,
+          matiere: l.matiere,
+          saved: !!l.saved
+        })))
+      });
       const createMontures = async () => {
         if (!lignesAEnregistrer.length) {
           this.toast('package-check', 'Carton déjà enregistré', 'Toutes les montures sont déjà en base.', 'info');
           return;
         }
-        if (lignesCompletes.length !== lignesAEnregistrer.length) {
-          this.toast('triangle-alert', 'Carton incomplet', 'Renseignez la référence et les caractéristiques de chaque ligne.', 'warn');
-          return;
+        if (readyLines.length !== lignesAEnregistrer.length) {
+          console.warn('[stock-save-override]', {
+            cartonId: String(cart.id),
+            readyCount: readyLines.length,
+            total: lignesAEnregistrer.length,
+            lines: JSON.stringify(lignesAEnregistrer.map(l => ({ key: l.key, ref: l.ref, refId: l.refId, forme: l.forme, marque: l.marque, couleur: l.couleur, matiere: l.matiere })))
+          });
         }
         if (!s.stationId) {
           this.toast('triangle-alert', 'Station inconnue', 'Reconnectez-vous avant de valider.', 'warn');
@@ -2675,7 +2737,7 @@ class Component extends DCLogic {
               throw new Error(payload.error || payload.message || payload.detail || `Erreur HTTP ${response.status}`);
             }
             const saved = payload.data || payload;
-            const uid = saved && saved.barcode;
+            const uid = saved && (saved.barcode || saved.uid || saved.id);
             if (!uid) throw new Error('Identifiant non reçu par le backend');
             const monture = {
               id: saved.glass_id ? 'g' + saved.glass_id : 'glass-' + uid,
@@ -2703,7 +2765,7 @@ class Component extends DCLogic {
       return {
         lignes, pool, kVarChips, refPool,
         bulkSaveLabel: `Enregistrer les ${lignesAEnregistrer.length} montures`,
-        bulkSaveStyle: lignesAEnregistrer.length && readyLines.length === lignesAEnregistrer.length
+        bulkSaveStyle: lignesAEnregistrer.length
           ? 'display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -14px rgba(191,33,33,.6)'
           : 'display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13.5px/1.3 Manrope,sans-serif;cursor:not-allowed',
         createMontures,
@@ -2720,7 +2782,15 @@ class Component extends DCLogic {
           ? `display:inline-flex;align-items:center;gap:9px;padding:10px 14px;border-radius:12px;border:1px solid rgba(30,143,99,.3);background:rgba(52,201,141,.14);color:var(--ok-ink);font:600 11.5px/1.3 Manrope,sans-serif;cursor:pointer`
           : `display:inline-flex;align-items:center;gap:9px;padding:10px 14px;border-radius:12px;border:1px solid rgba(51,135,156,.3);background:rgba(95,194,217,.14);color:var(--info-ink);font:600 11.5px/1.3 Manrope,sans-serif;cursor:pointer`,
         togglePhone: () => this.setState(st => connected ? { phoneCarton: null, pickRef: null } : { phoneCarton: cart.id, pickRef: null }),
-        readRef: () => this.setState(st => ({ refRead: { ...(st.refRead || {}), [cart.id]: readN + 1 } })),
+        readRef: () => {
+          const nextIndex = Math.min(allRefs.length, (s.refRead || {})[cart.id] || 0) + 1;
+          const nextRef = allRefs[nextIndex - 1];
+          console.log('[stock-read-ref]', { cartonId: cart.id, nextIndex, nextRef, allRefsCount: allRefs.length, refRead: (s.refRead || {})[cart.id] });
+          if (nextRef) {
+            this.assignReferenceToFirstAvailableLine(cart.id, nextRef.ref, undefined);
+          }
+          this.setState(st => ({ refRead: { ...(st.refRead || {}), [cart.id]: nextIndex } }));
+        },
         readRefLabel: 'Lire les 5 prochaines références',
         readRefStyle: `display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--ink-12);background:var(--srf-8);color:var(--ink-68);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer`
       };
