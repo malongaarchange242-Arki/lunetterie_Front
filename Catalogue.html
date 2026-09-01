@@ -463,6 +463,8 @@ class Component extends DCLogic {
     const map = new Map();
     stock.forEach(m => {
       const key = [m.marque, m.forme, m.type, m.gamme, m.genre].join('|');
+      const rawBarcode = String(m.barcode || m.uid || m.id || '').trim();
+      const rawId = m.id != null ? Number(m.id) : null;
       let g = map.get(key);
       if (!g) {
         g = {
@@ -472,7 +474,7 @@ class Component extends DCLogic {
           type: m.type || '—',
           gamme: m.gamme || '—',
           genre: m.genre || '—',
-          reference: m.ref || m.reference || m.barcode || '',
+          reference: m.ref || m.reference || rawBarcode || '',
           locationCode: m.valise || m.location_code || m.carton || '',
           matieres: [],
           prix: m.prix || 0,
@@ -492,8 +494,8 @@ class Component extends DCLogic {
         g.couleurs.set(c, []);
         g.glassIds.set(c, []);
       }
-      g.couleurs.get(c).push(m.uid);
-      if (m.id != null) g.glassIds.get(c).push(Number(m.id));
+      if (rawBarcode) g.couleurs.get(c).push(rawBarcode);
+      if (rawId != null) g.glassIds.get(c).push(rawId);
     });
     const result = Array.from(map.values()).sort((a, b) => b.total - a.total);
     console.log('modelesSrc: Final result =', result.length, 'groupes');
@@ -711,17 +713,22 @@ class Component extends DCLogic {
           const ids = e.grp.glassIds.get(e.couleur) || [];
           const selected = pool.slice(0, e.qty);
           selected.forEach((uid, index) => {
-            const glassId = ids[index];
-            if (glassId == null) return;
-            payloadItems.push({
-              glass_id: Number(glassId),
+            const glassId = ids[index] ?? ids[0];
+            const item = {
               barcode: String(uid),
               reference: String(e.grp.reference || e.grp.marque || uid),
               brand: String(e.grp.marque || '—'),
               location_code: String(e.grp.locationCode || '')
-            });
+            };
+            if (glassId != null) item.glass_id = Number(glassId);
+            payloadItems.push(item);
           });
         });
+
+        if (!payloadItems.length) {
+          this.toast('alert-triangle', 'Aucune monture valide', 'Les IDs de stock sont absents ou non lisibles pour cette sélection', 'warn');
+          return;
+        }
 
         try {
           const token = localStorage.getItem('token');
@@ -737,8 +744,11 @@ class Component extends DCLogic {
           });
 
           if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.message || 'Erreur de création de la liste');
+            const raw = await response.text();
+            let payload = {};
+            try { payload = JSON.parse(raw); } catch (_) {}
+            const msg = payload.message || payload.error || payload.detail || raw || 'Erreur de création de la liste';
+            throw new Error(msg);
           }
 
           const un = f => {

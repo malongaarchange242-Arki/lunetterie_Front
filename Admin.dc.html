@@ -439,7 +439,7 @@ input::placeholder{color:var(--ink-34)}
                 <div style="display:grid;grid-template-columns:54px minmax(106px,1.1fr) minmax(92px,.9fr) minmax(84px,.8fr) minmax(96px,.9fr) minmax(96px,.9fr) minmax(126px,1.1fr) minmax(104px,.9fr) 88px;gap:14px;padding:12px 20px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s" style-hover="background:var(--srf-7)">
                   <div style="display:flex;align-items:center;justify-content:center">
                     <sc-if value="{{ r.photoUrl }}" hint-placeholder-val="false">
-                      <img src="{{ r.photoUrl }}" alt="Photo monture" style="display:block;width:44px;height:44px;object-fit:cover;border-radius:12px;border:1px solid var(--ink-12);background:var(--srf-7)">
+                      <img bindSrc="{{ r.photoUrl }}" alt="Photo monture" style="display:block;width:44px;height:44px;object-fit:cover;border-radius:12px;border:1px solid var(--ink-12);background:var(--srf-7)">
                     </sc-if>
                     <sc-if value="{{ !r.photoUrl }}" hint-placeholder-val="false">
                       <div style="{{ r.photoStyle }}"><span data-icon="glasses" style="display:grid;place-items:center;font-size:16px;color:var(--srf-9)"></span></div>
@@ -529,7 +529,7 @@ input::placeholder{color:var(--ink-34)}
                             <sc-for list="{{ k.lignes }}" as="l" hint-placeholder-count="2">
                               <div style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:16px;background:var(--srf-72);border:1px solid var(--ink-08);flex-wrap:wrap">
                                 <sc-if value="{{ l.photoUrl }}" hint-placeholder-val="false">
-                                  <img src="{{ l.photoUrl }}" alt="Photo monture" style="display:block;width:50px;height:50px;object-fit:cover;border-radius:12px;border:1px solid var(--ink-12);flex:none">
+                                  <img bindSrc="{{ l.photoUrl }}" alt="Photo monture" style="display:block;width:50px;height:50px;object-fit:cover;border-radius:12px;border:1px solid var(--ink-12);flex:none">
                                 </sc-if>
                                 <sc-if value="{{ !l.photoUrl }}" hint-placeholder-val="false">
                                   <div style="{{ l.photoStyle }}"><span data-icon="glasses" style="display:grid;place-items:center;font-size:15px;color:var(--srf-9)"></span></div>
