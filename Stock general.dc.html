@@ -1669,11 +1669,17 @@ class Component extends DCLogic {
       
       const apiMontures = glasses.map(item => {
         let photoSrc = item.photo_monture_url || item.photoMontureUrl || item.photo_url || item.photo || item.image_url || '';
+        let backPhotoSrc = item.photo_arriere_url || item.photoArriereUrl || item.photoBackUrl || item.photoBack || item.back_photo_url || item.photo_branche_url || item.photoBrancheUrl || '';
         if (!photoSrc && item.photos && Array.isArray(item.photos) && item.photos.length > 0) {
           const firstPhoto = item.photos[0];
           photoSrc = typeof firstPhoto === 'string' ? firstPhoto : (firstPhoto.src || firstPhoto.url || '');
         }
+        if (!backPhotoSrc && item.photos && Array.isArray(item.photos) && item.photos.length > 1) {
+          const secondPhoto = item.photos[1];
+          backPhotoSrc = typeof secondPhoto === 'string' ? secondPhoto : (secondPhoto.src || secondPhoto.url || '');
+        }
         if (!photoSrc && item.photo_data) photoSrc = item.photo_data;
+        if (!backPhotoSrc && item.photo_back_data) backPhotoSrc = item.photo_back_data;
 
         return {
           uid: item.barcode || item.id || `${Date.now()}-${Math.random()}`,
@@ -1697,6 +1703,8 @@ class Component extends DCLogic {
           cartId: item.box_id || item.cartId || null,
           statut: item.status || 'EN_STOCK_GENERAL',
           photo: this.photoUrl(photoSrc),
+          photoFront: this.photoUrl(photoSrc),
+          photoBack: this.photoUrl(backPhotoSrc),
           sorti: item.status !== 'EN_STOCK_GENERAL' && item.status !== 'stock'
         };
       });
@@ -3518,8 +3526,8 @@ class Component extends DCLogic {
             if (!photoSrc && m.image_url) photoSrc = m.image_url;
             if (!photoSrc && m.photoUrl) photoSrc = m.photoUrl;
 
-            const rowPhoto = this.photoUrl(photoSrc);
-            const backPhoto = this.photoUrl(m.photoBack || m.photoArriere || m.back_photo_url || '');
+            const rowPhoto = this.photoUrl(m.photoFront || m.photo || m.photo_monture_url || m.photoMontureUrl || photoSrc || '');
+            const backPhoto = this.photoUrl(m.photoBack || m.photoArriere || m.photo_arriere_url || m.photoBackUrl || m.back_photo_url || '');
 
             return {
               ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
