@@ -601,6 +601,18 @@ input::placeholder{color:var(--ink-34)}
                 <button onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</button>
               </sc-for>
             </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-62);width:66px;flex:none">VALISE</span>
+              <sc-for list="{{ stockValiseOpts }}" as="o" hint-placeholder-count="3">
+                <button onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</button>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-62);width:66px;flex:none">CARTON</span>
+              <sc-for list="{{ stockCartonOpts }}" as="o" hint-placeholder-count="3">
+                <button onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</button>
+              </sc-for>
+            </div>
           </div>
         </div>
         </sc-if>
@@ -616,11 +628,11 @@ input::placeholder{color:var(--ink-34)}
         <sc-if value="{{ stockTableVisible }}" hint-placeholder-val="{{ true }}">
         <div style="border-radius:24px;overflow:hidden;border:1px solid var(--ink-09);background:linear-gradient(160deg,var(--srf-9),var(--srf-64));backdrop-filter:blur(24px);box-shadow:0 24px 56px -30px var(--ink-2)">
          <div style="overflow-x:auto"><div style="min-width:960px">
-          <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(150px,1.1fr) minmax(140px,1.1fr);gap:14px;padding:14px 22px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
-            <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>GENRE</div><div>COULEUR</div><div>MATIÈRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div>EMPLACEMENT</div><div>VALISE / CARTON</div><div style="text-align:right">IDENTIFIANT</div>
+          <div style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(120px,.8fr);gap:14px;padding:14px 22px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
+            <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>GENRE</div><div>COULEUR</div><div>MATIÈRE</div><div>GAMME</div><div style="text-align:right">PRIX</div><div>EMPLACEMENT</div><div>VALISE</div>
           </div>
           <sc-for list="{{ stockRows }}" as="r" hint-placeholder-count="0">
-            <div onClick="{{ r.onClick }}" style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(150px,1.1fr) minmax(140px,1.1fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s;cursor:pointer" style-hover="background:var(--srf-7)">
+            <div onClick="{{ r.onClick }}" style="display:grid;grid-template-columns:56px minmax(110px,1fr) minmax(92px,.85fr) minmax(84px,.75fr) minmax(90px,.8fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(96px,.85fr) minmax(88px,.75fr) minmax(110px,.9fr) minmax(120px,.8fr);gap:14px;padding:12px 22px;border-bottom:1px solid var(--ink-06);align-items:center;transition:background .2s;cursor:pointer" style-hover="background:var(--srf-7)">
               <div style="{{ r.photoStyle }}">
                 <sc-if value="{{ r.photoUrl }}" hint-placeholder-val="false"><img bindSrc="{{ r.photoUrl }}" alt="Photo monture" style="display:block;width:100%;height:100%;object-fit:cover"></sc-if>
                 <sc-if value="{{ r.photoMissing }}" hint-placeholder-val="true"><span data-icon="glasses" style="display:grid;place-items:center;font-size:17px;color:var(--srf-9)"></span></sc-if>
@@ -634,8 +646,7 @@ input::placeholder{color:var(--ink-34)}
               <div style="min-width:0;font:500 12px/1.3 Manrope,sans-serif;color:var(--ink-68)">{{ r.gamme }}</div>
               <div style="min-width:0;text-align:right;font:500 12px/1.3 'JetBrains Mono',monospace;color:var(--ok-ink);white-space:nowrap">{{ r.prix }}</div>
               <div style="min-width:0;font:500 11px/1.3 Manrope,sans-serif;color:var(--ink-68);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.emplacement }}</div>
-              <div style="min-width:0;font:500 11px/1.35 Manrope,sans-serif;color:var(--ink-68);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.valiseCarton }}</div>
-              <div style="min-width:0;text-align:right;font:500 10.5px/1.4 'JetBrains Mono',monospace;color:var(--info-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.uid }}</div>
+              <div style="min-width:0;font:500 11px/1.35 Manrope,sans-serif;color:var(--ink-68);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.valise }}</div>
             </div>
           </sc-for>
          </div></div>
@@ -681,8 +692,7 @@ input::placeholder{color:var(--ink-34)}
             <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">GAMME</div><div style="font:600 14px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.gamme }}</div></div>
             <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">PRIX</div><div style="font:600 14px/1.4 'JetBrains Mono',monospace;color:var(--ok-ink)">{{ stockDetail.prix }}</div></div>
             <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">EMPLACEMENT</div><div style="font:600 12.5px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.emplacement }}</div></div>
-            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">VALISE / CARTON</div><div style="font:600 12.5px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.valiseCarton }}</div></div>
-            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">IDENTIFIANT</div><div style="font:600 12.5px/1.4 'JetBrains Mono',monospace;color:var(--info-ink)">{{ stockDetail.uid }}</div></div>
+            <div style="padding:14px 16px;border-radius:18px;background:var(--srf-66);border:1px solid var(--ink-08)"><div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-66);margin-bottom:8px">VALISE</div><div style="font:600 12.5px/1.4 Manrope,sans-serif;color:var(--ink)">{{ stockDetail.valise }}</div></div>
           </div>
         </div>
       </div>
@@ -1165,7 +1175,8 @@ class Component extends DCLogic {
     scanning: false, helpOpen: false, toast: null,
     lignes: {}, pickPhoto: null, viewMenu: null, phoneCarton: null, refRead: {}, branchRefs: {}, branchAnalysisStarted: {}, pickRef: null,
     manualCode: '', phonePaired: false, pairing: false, pairCode: '', pairQrUrl: '', scanTarget: null, userName: 'Utilisateur',
-    stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes', stockDetailOpen: false, stockDetail: null, compoOnglet: 'Marque',
+    apiData: { arrivees: [], montures: [], demandes: [], cartonsBoutique: [], stockNeeds: [], approvisionnements: [] },
+    stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes', stockValise: 'Toutes', stockCarton: 'Toutes', stockDetailOpen: false, stockDetail: null, compoOnglet: 'Marque',
     magasin: 'Pointe-Noire', origFilter: 'tous', demId: null, sorties: 0,
     expeditions: [], expId: null,
     demandes: [
@@ -1212,10 +1223,32 @@ class Component extends DCLogic {
     photoData: null,
     branchPhotoData: null,
     backPhotoData: null,
-    captureLabel: 'Prendre une photo'
+    captureLabel: 'Prendre une photo',
+    apiData: {
+      arrivees: [],
+      montures: [],
+      demandes: [],
+      cartonsBoutique: [],
+      stockNeeds: [],
+      approvisionnements: []
+    }
   };
 
-  store() { return window.LStore ? window.LStore.get() : {}; }
+  store() {
+    const localStore = window.LStore ? window.LStore.get() : {};
+    const apiData = (this.state && this.state.apiData) ? this.state.apiData : null;
+    if (!apiData || typeof apiData !== 'object') return localStore;
+    return {
+      ...localStore,
+      ...apiData,
+      arrivees: Array.isArray(apiData.arrivees) ? apiData.arrivees : (Array.isArray(localStore.arrivees) ? localStore.arrivees : []),
+      montures: Array.isArray(apiData.montures) ? apiData.montures : (Array.isArray(localStore.montures) ? localStore.montures : []),
+      demandes: Array.isArray(apiData.demandes) ? apiData.demandes : (Array.isArray(localStore.demandes) ? localStore.demandes : []),
+      cartonsBoutique: Array.isArray(apiData.cartonsBoutique) ? apiData.cartonsBoutique : (Array.isArray(localStore.cartonsBoutique) ? localStore.cartonsBoutique : []),
+      stockNeeds: Array.isArray(apiData.stockNeeds) ? apiData.stockNeeds : (Array.isArray(localStore.stockNeeds) ? localStore.stockNeeds : []),
+      approvisionnements: Array.isArray(apiData.approvisionnements) ? apiData.approvisionnements : (Array.isArray(localStore.approvisionnements) ? localStore.approvisionnements : [])
+    };
+  }
   componentDidMount() {
     this.icons();
     this.paintBg();
@@ -1269,8 +1302,14 @@ class Component extends DCLogic {
   }
 
   photoUrl(raw) {
+    if (raw && typeof raw === 'object') {
+      const candidate = raw.src || raw.url || raw.photo_url || raw.image_url || raw.data_url || raw.path || raw.public_url || raw.href || raw.link || '';
+      return this.photoUrl(candidate);
+    }
     const value = String(raw || '').trim();
-    const match = value.match(/https?:\/\/[^\s\])'",]+/i);
+    if (!value) return '';
+    if (/^(https?:\/\/|data:|blob:)/i.test(value)) return value;
+    const match = value.match(/(https?:\/\/|data:image\/|blob:)[^\s\])'",]+/i);
     return match ? match[0] : value;
   }
 
@@ -1596,9 +1635,15 @@ class Component extends DCLogic {
         }))
       }));
       
-      S.set({ 
-        arrivees: updated_arrivees,
-        montures: glasses.map(item => ({
+      const apiMontures = glasses.map(item => {
+        let photoSrc = item.photo_monture_url || item.photoMontureUrl || item.photo_url || item.photo || item.image_url || '';
+        if (!photoSrc && item.photos && Array.isArray(item.photos) && item.photos.length > 0) {
+          const firstPhoto = item.photos[0];
+          photoSrc = typeof firstPhoto === 'string' ? firstPhoto : (firstPhoto.src || firstPhoto.url || '');
+        }
+        if (!photoSrc && item.photo_data) photoSrc = item.photo_data;
+
+        return {
           uid: item.barcode || item.id || `${Date.now()}-${Math.random()}`,
           code: item.barcode || item.code || '',
           ref: item.reference || item.ref || '—',
@@ -1619,9 +1664,24 @@ class Component extends DCLogic {
           valId: item.case_id || item.valId || null,
           cartId: item.box_id || item.cartId || null,
           statut: item.status || 'EN_STOCK_GENERAL',
-          photo: this.photoUrl(item.photo_monture_url || item.photoMontureUrl || ''),
+          photo: this.photoUrl(photoSrc),
           sorti: item.status !== 'EN_STOCK_GENERAL' && item.status !== 'stock'
-        }))
+        };
+      });
+
+      const apiData = {
+        arrivees: updated_arrivees,
+        montures: apiMontures,
+        demandes: Array.isArray(this.state?.apiData?.demandes) ? this.state.apiData.demandes : [],
+        cartonsBoutique: Array.isArray(this.state?.apiData?.cartonsBoutique) ? this.state.apiData.cartonsBoutique : [],
+        stockNeeds: Array.isArray(this.state?.apiData?.stockNeeds) ? this.state.apiData.stockNeeds : [],
+        approvisionnements: Array.isArray(this.state?.apiData?.approvisionnements) ? this.state.apiData.approvisionnements : []
+      };
+
+      this.setState({ apiData });
+      S.set({ 
+        arrivees: updated_arrivees,
+        montures: apiMontures
       });
     } catch (error) {
       console.error('Erreur chargement backend stock général:', error);
@@ -1657,6 +1717,12 @@ class Component extends DCLogic {
           }));
 
         if (mappedDemandes.length > 0) {
+          this.setState(prev => ({
+            apiData: {
+              ...(prev.apiData || {}),
+              demandes: mappedDemandes
+            }
+          }));
           S.set({ demandes: mappedDemandes });
         }
       }
@@ -1681,6 +1747,12 @@ class Component extends DCLogic {
         }));
 
         if (mappedBoxes.length > 0) {
+          this.setState(prev => ({
+            apiData: {
+              ...(prev.apiData || {}),
+              cartonsBoutique: mappedBoxes
+            }
+          }));
           S.set({ cartonsBoutique: mappedBoxes });
         }
       }
@@ -3238,11 +3310,14 @@ class Component extends DCLogic {
       ...(() => {
         const dispoAll = dispoStock;
         const uniq = key => Array.from(new Set(dispoAll.map(m => m[key]).filter(Boolean))).sort();
+        const uniqAccessor = accessor => Array.from(new Set(dispoAll.map(accessor).filter(Boolean))).sort();
         const q = (s.stockQ || '').trim().toLowerCase();
         const view = dispoAll.filter(m =>
           (s.stockMarque === 'Toutes' || m.marque === s.stockMarque) &&
           (s.stockForme === 'Toutes' || m.forme === s.stockForme) &&
           (s.stockGamme === 'Toutes' || m.gamme === s.stockGamme) &&
+          (s.stockValise === 'Toutes' || (m.valise || '—') === s.stockValise) &&
+          (s.stockCarton === 'Toutes' || (m.carton || '—') === s.stockCarton) &&
           (!q || [m.ref, m.uid, m.couleur, m.matiere, m.marque].join(' ').toLowerCase().includes(q))
         );
         const pill = on => `padding:8px 14px;border-radius:999px;cursor:pointer;font:600 11.5px/1.3 Manrope,sans-serif;white-space:nowrap;transition:all .24s ${ease};` +
@@ -3251,57 +3326,73 @@ class Component extends DCLogic {
         const group = (key, sel, field) => ['Toutes', ...uniq(key)].map(v => ({
           label: v, onClick: () => this.setState({ [field]: v }), style: pill(sel === v)
         }));
+        const groupAccessor = (accessor, sel, field) => ['Toutes', ...uniqAccessor(accessor)].map(v => ({
+          label: v, onClick: () => this.setState({ [field]: v }), style: pill(sel === v)
+        }));
+        const valiseAccessor = m => m.valise || '—';
+        const cartonAccessor = m => m.carton || '—';
         return {
           stockQ: s.stockQ,
           setStockQ: e => this.setState({ stockQ: e.target.value }),
           stockMarqueOpts: group('marque', s.stockMarque, 'stockMarque'),
           stockFormeOpts: group('forme', s.stockForme, 'stockForme'),
           stockGammeOpts: group('gamme', s.stockGamme, 'stockGamme'),
+          stockValiseOpts: groupAccessor(valiseAccessor, s.stockValise, 'stockValise'),
+          stockCartonOpts: groupAccessor(cartonAccessor, s.stockCarton, 'stockCarton'),
           stockViewLabel: `${view.length} monture${view.length > 1 ? 's' : ''} affichée${view.length > 1 ? 's' : ''} sur ${dispoAll.length}`,
           stockFiltre: view.length !== dispoAll.length,
-          resetStockFiltres: () => this.setState({ stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes' }),
+          resetStockFiltres: () => this.setState({ stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes', stockValise: 'Toutes', stockCarton: 'Toutes' }),
           stockAucunResultat: dispoAll.length > 0 && view.length === 0,
           stockTableVisible: view.length > 0,
           stockFiltresVisible: dispoAll.length > 0,
           stockDetailOpen: !!s.stockDetailOpen,
           stockDetail: s.stockDetail || null,
           closeStockDetail: () => this.setState({ stockDetailOpen: false, stockDetail: null }),
-          stockRows: view.slice().reverse().map(m => ({
-            ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
-            genre: m.genre || '—', couleur: m.couleur || '—', matiere: m.matiere || '—',
-            prix: this.fcfa(m.prix), uid: m.uid,
-            emplacement: m.location || m.emplacement || m.carton || '—',
-            valiseCarton: (m.valise && m.carton)
-              ? `${m.valise} / ${m.carton}`
-              : (m.valise || m.carton)
-                ? `${m.valise || m.carton} / ${m.carton || m.valise || '—'}`
-                : '— / —',
-            photoUrl: this.photoUrl(m.photoFront || m.photo || m.photoMonture || ''),
-            photoMissing: !this.photoUrl(m.photoFront || m.photo || m.photoMonture || ''),
-            photoStyle: `width:46px;height:46px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden;background:linear-gradient(140deg,#9AA0AD,#5A6070);border:1px solid var(--ink-12);box-shadow:inset 0 1px 0 var(--srf-3)`,
-            onClick: () => this.setState({
-              stockDetailOpen: true,
-              stockDetail: {
-                ref: m.ref,
-                marque: m.marque || '—',
-                forme: m.forme || '—',
-                genre: m.genre || '—',
-                couleur: m.couleur || '—',
-                matiere: m.matiere || '—',
-                gamme: m.gamme || '—',
-                prix: this.fcfa(m.prix),
-                emplacement: m.location || m.emplacement || m.carton || '—',
-                valiseCarton: (m.valise && m.carton)
-                  ? `${m.valise} / ${m.carton}`
-                  : (m.valise || m.carton)
-                    ? `${m.valise || m.carton} / ${m.carton || m.valise || '—'}`
-                    : '— / —',
-                uid: m.uid,
-                photoFrontUrl: this.photoUrl(m.photoFront || m.photo || m.photoMonture || ''),
-                photoBackUrl: this.photoUrl(m.photoBack || m.photoBranche || m.photoArriere || '')
-              }
-            })
-          }))
+          stockRows: view.slice().reverse().map(m => {
+            let photoSrc = '';
+            if (m.photo) {
+              photoSrc = typeof m.photo === 'string' ? m.photo : (m.photo.src || m.photo.url || '');
+            }
+            if (!photoSrc && m.photoMonture) {
+              photoSrc = typeof m.photoMonture === 'string' ? m.photoMonture : (m.photoMonture.src || m.photoMonture.url || '');
+            }
+            if (!photoSrc && m.photo_url) photoSrc = m.photo_url;
+            if (!photoSrc && m.photoFront) photoSrc = m.photoFront;
+            if (!photoSrc && m.image_url) photoSrc = m.image_url;
+            if (!photoSrc && m.photoUrl) photoSrc = m.photoUrl;
+
+            const rowPhoto = this.photoUrl(photoSrc);
+            const backPhoto = this.photoUrl(m.photoBack || m.photoArriere || m.back_photo_url || '');
+
+            return {
+              ref: m.ref, marque: m.marque, forme: m.forme, gamme: m.gamme,
+              genre: m.genre || '—', couleur: m.couleur || '—', matiere: m.matiere || '—',
+              prix: this.fcfa(m.prix), uid: m.uid,
+              emplacement: m.location || m.emplacement || m.carton || '—',
+              valise: m.valise || '—',
+              photoUrl: rowPhoto,
+              photoMissing: !rowPhoto,
+              photoStyle: `width:46px;height:46px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden;background:linear-gradient(140deg,#9AA0AD,#5A6070);border:1px solid var(--ink-12);box-shadow:inset 0 1px 0 var(--srf-3)`,
+              onClick: () => this.setState({
+                stockDetailOpen: true,
+                stockDetail: {
+                  ref: m.ref,
+                  marque: m.marque || '—',
+                  forme: m.forme || '—',
+                  genre: m.genre || '—',
+                  couleur: m.couleur || '—',
+                  matiere: m.matiere || '—',
+                  gamme: m.gamme || '—',
+                  prix: this.fcfa(m.prix),
+                  emplacement: m.location || m.emplacement || m.carton || '—',
+                  valise: m.valise || '—',
+                  uid: m.uid,
+                  photoFrontUrl: rowPhoto,
+                  photoBackUrl: backPhoto
+                }
+              })
+            };
+          })
         };
       })(),
       ...(() => {
