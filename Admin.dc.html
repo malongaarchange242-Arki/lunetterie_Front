@@ -2212,7 +2212,12 @@ class Component extends DCLogic {
                   const errorMsg = payload && payload.error ? payload.error : (payload && payload.message ? payload.message : `Erreur pour ${uid}`);
                   const itemDetail = inventaireDB && Array.isArray(inventaireDB) ? inventaireDB.find(x => x.uid === uid) : null;
                   console.error(`❌ Failed to add item ${uid}:`, { error: errorMsg, itemDetail });
-                  throw new Error(errorMsg);
+                    if (itemDetail) {
+                      console.log(`   📋 Item details: ref=${itemDetail.ref}, site="${itemDetail.site}", statut=${itemDetail.statut}, montureUrl="${itemDetail.montureUrl}"`);
+                    } else {
+                      console.log(`   ⚠️ Item not found in local inventory (inventaireDB)`);
+                    }
+                    throw new Error(errorMsg);
                 }
                 console.log(`✓ Item added: ${uid}`);
               }
