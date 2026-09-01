@@ -1877,7 +1877,7 @@ class Component extends DCLogic {
     const normalizeShip = ship => ({
       valises: Array.isArray(ship && ship.valises) ? ship.valises : [],
       scanned: Array.isArray(ship && ship.scanned) ? ship.scanned : [],
-      total: Number(ship && ship.total ?? 0),
+      total: Number((ship && ship.total) ?? 0),
       date: ship && ship.date ? ship.date : null,
       arriveDate: ship && ship.arriveDate ? ship.arriveDate : null
     });
@@ -2094,7 +2094,7 @@ class Component extends DCLogic {
     return {
       orbAStyle: `position:absolute;top:-180px;left:-140px;width:620px;height:620px;border-radius:999px;background:radial-gradient(circle at 35% 35%,rgba(242,19,142,${(.14 * glow).toFixed(3)}),transparent 68%);filter:blur(60px);animation:orbA 22s ease-in-out infinite;animation-play-state:${anim}`,
       orbBStyle: `position:absolute;bottom:-240px;right:-120px;width:660px;height:660px;border-radius:999px;background:radial-gradient(circle at 60% 40%,rgba(95,194,217,${(.16 * glow).toFixed(3)}),transparent 66%);filter:blur(70px);animation:orbB 26s ease-in-out infinite;animation-play-state:${anim}`,
-      avatarStyle: `position:relative;width:48px;height:48px;border-radius:999px;flex:none;display:grid;place-items:center;background:radial-gradient(circle at 32% 28%,#3A3A3A,#141414 62%,#0A0A0A);border:1px solid var(--ink-1);box-shadow:0 16px 32px -14px rgba(0,0,0,.95),0 .toFixed(2)}),inset 0 1px 0 var(--srf-24)`,
+      avatarStyle: `position:relative;width:48px;height:48px;border-radius:999px;flex:none;display:grid;place-items:center;background:radial-gradient(circle at 32% 28%,#3A3A3A,#141414 62%,#0A0A0A);border:1px solid var(--ink-1);box-shadow:0 16px 32px -14px rgba(0,0,0,.95),0 12px 28px -18px rgba(0,0,0,.85),inset 0 1px 0 var(--srf-24)`,
       domeStyle: `position:absolute;top:50%;right:-32%;width:66%;aspect-ratio:1;transform:translateY(-50%);border-radius:999px;background:radial-gradient(circle at 26% 30%,rgba(247,214,231,${(.30 * glow).toFixed(3)}),rgba(247,214,231,.14) 52%,rgba(191,33,120,.10) 88%);filter:blur(2px);animation:orbB 30s ease-in-out infinite;animation-play-state:${anim}`,
       
       currentUserDisplayName,
@@ -2242,7 +2242,7 @@ class Component extends DCLogic {
           archiveCount: olds.length,
           archives: Array.from(byMonth.entries()).map(([mois, list]) => ({
             mois,
-            countLabel: `${list.length} commande${list.length > 1 ? 's' : ''} · ${list.reduce((a, c) => a + c.ship.total, 0).toLocaleString('fr-FR')} u.`,
+            countLabel: `${list.length} commande${list.length > 1 ? 's' : ''} · ${list.reduce((a, c) => a + Number(normalizeShip(c && c.ship).total || 0), 0).toLocaleString('fr-FR')} u.`,
             items: list.map(card)
           })),
           histPeriodOpts: [
