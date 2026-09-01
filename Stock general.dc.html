@@ -409,12 +409,16 @@ input::placeholder{color:var(--ink-34)}
                     <div style="{{ l.insightStyle }}">{{ l.insight }}</div>
                   </div>
 
-                  <div style="flex:none;width:152px;display:flex;flex-direction:column;gap:7px">
+                  <div style="flex:none;width:152px;display:flex;align-items:center">
                     <div style="{{ l.uidStyle }}">{{ l.uidLabel }}</div>
-                    <button onClick="{{ l.onSave }}" style="{{ l.saveStyle }}"><span data-icon="{{ l.saveIcon }}" style="display:grid;place-items:center;font-size:14px"></span>{{ l.saveLabel }}</button>
                   </div>
                 </div>
               </sc-for>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px">
+              <span style="font:500 11.5px/1.4 Manrope,sans-serif;color:var(--ink-64)">{{ bulkSaveLabel }}</span>
+              <button onClick="{{ createMontures }}" style="{{ bulkSaveStyle }}"><span data-icon="package-plus" style="display:grid;place-items:center;font-size:17px"></span>Enregistrer le carton</button>
             </div>
 
             <sc-if value="{{ cartonPlein }}" hint-placeholder-val="{{ false }}">
@@ -2064,7 +2068,8 @@ class Component extends DCLogic {
         lignes: [], pool: [], poolVide: true, poolLabel: '—', kVarChips: [],
         refPool: [], refPoolVide: true, refPoolLabel: '—', refPoolEmptyHint: '',
         kQrBlocks: [], phoneHint: '', phoneIcon: 'qr-code', phoneLabel: '', phoneBtnStyle: '',
-        togglePhone: () => {}, readRef: () => {}, readRefLabel: '', readRefStyle: ''
+        togglePhone: () => {}, readRef: () => {}, readRefLabel: '', readRefStyle: '',
+        bulkSaveLabel: '', bulkSaveStyle: '', createMontures: () => {}
       };
 
       const chipF = 'padding:4px 10px;border-radius:999px;white-space:nowrap;font:600 10.5px/1.4 Manrope,sans-serif;background:rgba(95,194,217,.18);border:1px solid rgba(51,135,156,.3);color:var(--info-ink)';
@@ -2220,8 +2225,104 @@ class Component extends DCLogic {
         }
       }));
 
+      const lignesAEnregistrer = lignesState.filter(l => !l.saved);
+      const lignesCompletes = lignesAEnregistrer.filter(l =>
+        String(l.ref || '').trim() && l.forme && l.marque && l.couleur && l.matiere
+      );
+      const createMontures = async () => {
+        if (!lignesAEnregistrer.length) {
+          this.toast('package-check', 'Carton déjà enregistré', 'Toutes les montures sont déjà en base.', 'info');
+          return;
+        }
+        if (lignesCompletes.length !== lignesAEnregistrer.length) {
+          this.toast('triangle-alert', 'Carton incomplet', 'Renseignez la référence et les caractéristiques de chaque ligne.', 'warn');
+          return;
+        }
+        if (!s.stationId) {
+          this.toast('triangle-alert', 'Station inconnue', 'Reconnectez-vous avant de valider.', 'warn');
+          return;
+        }
+        // Helpers pour convertir et ajouter les photos
+        const dataUrlToBlob = dataUrl => {
+          const parts = String(dataUrl).split(',');
+          const meta = parts[0] || '';
+          const mime = (meta.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+          const binary = atob(parts[1] || '');
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return new Blob([bytes], { type: mime });
+        };
+        const appendImage = (fd, fieldName, dataUrl, fileName) => {
+          if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return;
+          const blob = dataUrlToBlob(dataUrl);
+          if (blob && blob.size > 0) fd.append(fieldName, blob, fileName);
+        };
+        
+        let savedCount = 0;
+        for (const ligne of lignesCompletes) {
+          const fd = new FormData();
+          fd.append('station_id', String(s.stationId));
+          fd.append('reference', String(ligne.ref).trim());
+          fd.append('brand', ligne.marque || '');
+          fd.append('marque', ligne.marque || '');
+          fd.append('shape', ligne.forme || '');
+          fd.append('color', ligne.couleur || '');
+          fd.append('material', ligne.matiere || '');
+          fd.append('gender', val && val.genre ? val.genre : '');
+          fd.append('gamme', cart.gamme || '');
+          fd.append('mount_type', cart.type || '');
+          fd.append('reception_command_code', cmd.ref || '');
+          fd.append('pre_registration_box_id', String(cart.id));
+          fd.append('carton_code', cart.code || '');
+          if (cart.prix != null) fd.append('price', String(cart.prix));
+          
+          // Ajouter les photos de la ligne
+          if (ligne.photos && Array.isArray(ligne.photos)) {
+            const facePhoto = ligne.photos.find(p => p.view === 'face');
+            const rearPhoto = ligne.photos.find(p => p.view === 'rear');
+            if (facePhoto && facePhoto.src) appendImage(fd, 'image', facePhoto.src, 'monture.jpg');
+            if (rearPhoto && rearPhoto.src) appendImage(fd, 'rear_image', rearPhoto.src, 'arriere.jpg');
+          }
+          
+          try {
+            const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception`, {
+              method: 'POST', headers: this.apiHeaders(), body: fd
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.success === false) throw new Error(payload.error || 'Enregistrement backend impossible');
+            const saved = payload.data || payload;
+            const uid = saved && saved.barcode;
+            if (!uid) throw new Error('Identifiant non reçu par le backend');
+            const monture = {
+              id: saved.glass_id ? 'g' + saved.glass_id : 'glass-' + uid,
+              ref: String(ligne.ref).trim(), forme: ligne.forme, marque: ligne.marque,
+              couleur: ligne.couleur, matiere: ligne.matiere, uid
+            };
+            this.setArrivees(list => list.map(c => c.id !== cmd.id ? c : {
+              ...c, valises: c.valises.map(v => v.id !== val.id ? v : {
+                ...v, cartons: v.cartons.map(k => k.id !== cart.id ? k : {
+                  ...k, saisies: [...(k.saisies || []), monture]
+                })
+              })
+            }));
+            const S = window.LStore;
+            if (S) S.set({ montures: [{ uid, ref: monture.ref, marque: ligne.marque, forme: ligne.forme, couleur: ligne.couleur, matiere: ligne.matiere, gamme: cart.gamme, type: cart.type, genre: val.genre, prix: cart.prix, valise: val.couleur, carton: cart.code, site: 'Stock général', statut: 'stock', backendId: saved.glass_id, location: saved.location_code || saved.location }, ...(S.get().montures || [])] });
+            savedCount++;
+          } catch (error) {
+            this.toast('triangle-alert', 'Enregistrement interrompu', `${savedCount} ligne(s) enregistrée(s) · ${error.message || 'Backend indisponible'}`, 'warn');
+            return;
+          }
+        }
+        this.toast('package-check', 'Carton enregistré', `${savedCount} monture(s) ajoutée(s) dans glasses.`, 'ok');
+      };
+
       return {
         lignes, pool, kVarChips, refPool,
+        bulkSaveLabel: `Enregistrer les ${lignesAEnregistrer.length} montures`,
+        bulkSaveStyle: lignesAEnregistrer.length && lignesCompletes.length === lignesAEnregistrer.length
+          ? 'display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -14px rgba(191,33,33,.6)'
+          : 'display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13.5px/1.3 Manrope,sans-serif;cursor:not-allowed',
+        createMontures,
         poolVide: photos.length === 0,
         poolLabel: `${photos.length - Object.keys(used).length} / ${photos.length}`,
         refPoolVide: readRefs.length === 0,
