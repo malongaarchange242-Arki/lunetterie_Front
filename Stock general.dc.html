@@ -1896,7 +1896,27 @@ class Component extends DCLogic {
     const s = this.state;
     const DB = this.store();
     const S = window.LStore;
-    const commandesDB = DB.arrivees || [];
+    const commandesDB = (Array.isArray(DB.arrivees) ? DB.arrivees : [])
+      .filter(Boolean)
+      .map(c => ({
+        ...c,
+        valises: (Array.isArray(c.valises) ? c.valises : [])
+          .filter(Boolean)
+          .map(v => ({
+            ...v,
+            cartons: (Array.isArray(v.cartons) ? v.cartons : [])
+              .filter(Boolean)
+              .map(k => ({
+                ...k,
+                formes: k.formes && typeof k.formes === 'object' ? k.formes : {},
+                marques: Array.isArray(k.marques) ? k.marques : [],
+                couleurs: Array.isArray(k.couleurs) ? k.couleurs : [],
+                matieres: Array.isArray(k.matieres) ? k.matieres : [],
+                photos: (Array.isArray(k.photos) ? k.photos : []).filter(Boolean),
+                saisies: (Array.isArray(k.saisies) ? k.saisies : []).filter(Boolean)
+              }))
+          }))
+      }));
     const demandesDB = DB.demandes || [];
     const expeditionsDB = DB.cartonsBoutique || [];
     const ease = 'cubic-bezier(.22,1,.36,1)';
