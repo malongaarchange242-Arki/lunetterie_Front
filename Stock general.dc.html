@@ -2128,7 +2128,12 @@ class Component extends DCLogic {
         numStyle: `flex:none;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;align-self:center;font:600 11px/1 'JetBrains Mono',monospace;background:${l.saved ? 'rgba(52,201,141,.2)' : 'var(--srf-7)'};border:1px solid ${l.saved ? 'rgba(30,143,99,.34)' : 'var(--ink-12)'};color:${l.saved ? 'var(--ok-ink)' : 'var(--ink-6)'}`,
         emplacement: `Valise ${val ? val.couleur : '—'} · ${cart.code}`,
         fixe: [val ? val.genre : '', cart.gamme, cart.type].filter(Boolean).join(' · '),
-        selects: [],
+        selects: [
+          { label: 'FORME', value: l.forme || '', opts: formes.map(f => ({ label: f, value: f })), onChange: e => setLigne(l.key, { forme: e.target.value }), style: 'width:100%;padding:8px 9px;border-radius:10px;border:1px solid var(--ink-12);background:var(--srf-7);color:var(--ink);font:500 11px/1.3 Manrope,sans-serif' },
+          { label: 'MARQUE', value: l.marque || '', opts: (cart.marques || []).map(m => ({ label: m, value: m })), onChange: e => setLigne(l.key, { marque: e.target.value }), style: 'width:100%;padding:8px 9px;border-radius:10px;border:1px solid var(--ink-12);background:var(--srf-7);color:var(--ink);font:500 11px/1.3 Manrope,sans-serif' },
+          { label: 'COULEUR', value: l.couleur || '', opts: (cart.couleurs || []).map(c => ({ label: c, value: c })), onChange: e => setLigne(l.key, { couleur: e.target.value }), style: 'width:100%;padding:8px 9px;border-radius:10px;border:1px solid var(--ink-12);background:var(--srf-7);color:var(--ink);font:500 11px/1.3 Manrope,sans-serif' },
+          { label: 'MATIÈRE', value: l.matiere || '', opts: (cart.matieres || []).map(m => ({ label: m, value: m })), onChange: e => setLigne(l.key, { matiere: e.target.value }), style: 'width:100%;padding:8px 9px;border-radius:10px;border:1px solid var(--ink-12);background:var(--srf-7);color:var(--ink);font:500 11px/1.3 Manrope,sans-serif' }
+        ],
         photos: (l.photos || []).map((ph, pi) => ({
           imgStyle: `position:absolute;inset:0;display:block;background:var(--srf-7) center/cover no-repeat url("${ph.src}")`,
           title: (ph.view === 'face' ? 'Vue de face' : 'Vue arrière') + ' — cliquez pour changer',
@@ -2200,9 +2205,19 @@ class Component extends DCLogic {
         uidLabel: l.saved ? l.uid : 'ID à l\'enregistrement',
         uidStyle: `font:500 9.5px/1.4 'JetBrains Mono',monospace;letter-spacing:.06em;word-break:break-all;color:${l.saved ? 'var(--ok-ink)' : 'var(--ink-5)'}`,
         saveLabel: l.saved ? 'Rouvrir' : 'Enregistrer',
-        saveIcon: l.saved ? 'undo-2' : 'lock',
-        saveStyle: `display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px 14px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-66);color:var(--ink-36);font:600 11.5px/1.3 Manrope,sans-serif;cursor:not-allowed`,
-        onSave: () => {}
+        saveIcon: l.saved ? 'undo-2' : (l.ref && l.forme && l.marque && l.couleur && l.matiere ? 'save' : 'lock'),
+        saveStyle: l.saved || (l.ref && l.forme && l.marque && l.couleur && l.matiere)
+          ? `display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px 14px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 11.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 10px 22px -12px rgba(191,33,120,.75)`
+          : `display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px 14px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-66);color:var(--ink-36);font:600 11.5px/1.3 Manrope,sans-serif;cursor:not-allowed`,
+        onSave: () => {
+          if (l.saved) return;
+          if (!l.ref || !l.forme || !l.marque || !l.couleur || !l.matiere) {
+            this.toast('triangle-alert', 'Ligne incomplète', 'Renseignez la référence et les quatre caractéristiques.', 'warn');
+            return;
+          }
+          this.setState({ fRef: l.ref, fForme: l.forme, fMarque: l.marque, fCouleur: l.couleur, fMatiere: l.matiere });
+          this.toast('save', 'Ligne prête', 'Les valeurs sont maintenant reprises dans le formulaire.', 'info');
+        }
       }));
 
       return {

@@ -1,270 +1,368 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="fr">
+<head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Lecteur mobile - Lunetterie</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 <style>
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  background: linear-gradient(135deg, #0f0e13, #1a1826);
-  color: #f7f7fa;
-  font: 16px system-ui, -apple-system, sans-serif;
-  padding: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
+:root{
+  --page:#0F0E13;
+  --ink:#F2F2F2;
+  --acc:#F2138E;
+  --acc-2:#BF2178;
+  --acc-soft:#F97FBE;
+  --info:#5FC2D9;
+  --info-soft:#7FD4E8;
+  --ok:#4FDCA4;
+  --line:rgba(255,255,255,.14);
+  --ease:cubic-bezier(.22,1,.36,1);
 }
-main {
-  width: 100%;
-  max-width: 500px;
-  padding: 24px;
-  animation: slideIn 0.4s ease-out;
-}
-@keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-.screen { display: none; animation: slideIn 0.3s ease-out; }
-.screen.active { display: block; }
-
-.card {
-  background: linear-gradient(150deg, #1c1e27, #252a35);
-  border: 1px solid #353846;
-  border-radius: 20px;
-  padding: 28px;
-  margin: 16px 0;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  min-height:100vh;
+  min-height:100dvh;
+  background:var(--page);
+  color:var(--ink);
+  font:400 16px/1.5 Manrope,system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  display:flex;
+  justify-content:center;
+  align-items:flex-start;
+  padding:28px 16px calc(28px + env(safe-area-inset-bottom));
+  position:relative;
+  overflow-x:hidden;
 }
 
-h1 {
-  font-size: 28px;
-  margin: 0 0 8px;
-  font-weight: 600;
-  letter-spacing: -0.5px;
+/* ---- Ambiance : orbes + grille ---- */
+.bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;background:var(--page)}
+.bg .wash{position:absolute;inset:0;background:
+  radial-gradient(1000px 700px at 8% -10%,rgba(242,19,142,.16),transparent 62%),
+  radial-gradient(900px 720px at 92% 108%,rgba(95,194,217,.12),transparent 64%)}
+.bg .orb-a{position:absolute;top:-200px;left:-160px;width:560px;height:560px;border-radius:999px;
+  background:radial-gradient(circle at 35% 35%,rgba(242,19,142,.30),transparent 68%);
+  filter:blur(60px);animation:orbA 22s ease-in-out infinite}
+.bg .orb-b{position:absolute;bottom:-260px;right:-140px;width:600px;height:600px;border-radius:999px;
+  background:radial-gradient(circle at 60% 40%,rgba(95,194,217,.20),transparent 66%);
+  filter:blur(70px);animation:orbB 26s ease-in-out infinite}
+.bg .grid{position:absolute;inset:0;
+  background-image:linear-gradient(rgba(242,242,242,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(242,242,242,.03) 1px,transparent 1px);
+  background-size:78px 78px;
+  mask-image:radial-gradient(120% 90% at 40% 8%,#000 30%,transparent 82%);
+  -webkit-mask-image:radial-gradient(120% 90% at 40% 8%,#000 30%,transparent 82%)}
+@keyframes orbA{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(50px,-70px,0) scale(1.12)}}
+@keyframes orbB{0%,100%{transform:translate3d(0,0,0) scale(1.05)}50%{transform:translate3d(-60px,60px,0) scale(.92)}}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+main{
+  position:relative;
+  z-index:1;
+  width:100%;
+  max-width:460px;
+  animation:rise .5s var(--ease);
 }
 
-p { margin: 0; color: #b6bac8; font-size: 14px; }
+[data-lucide]{width:1em;height:1em;display:inline-block;vertical-align:-.125em;stroke-width:2}
 
-.status {
-  padding: 14px 16px;
-  border-radius: 12px;
-  margin-bottom: 16px;
-  font-weight: 500;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* ---- En-tête marque ---- */
+.brandbar{display:flex;align-items:center;gap:13px;padding:2px 4px 20px;flex-wrap:wrap}
+.brandbar .logo{width:44px;height:44px;border-radius:14px;overflow:hidden;background:#F2F2F2;flex:none;
+  box-shadow:0 10px 24px -12px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.5)}
+.brandbar .logo img{width:100%;height:100%;object-fit:cover;display:block}
+.brandbar .names{display:flex;flex-direction:column;gap:5px;min-width:0}
+.brandbar .name{font:600 13.5px/1.3 Sora,sans-serif;letter-spacing:.02em}
+.brandbar .sub{font:500 9px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5)}
+.brandbar .sep{width:1px;height:30px;background:var(--line)}
+.brandbar .tag{font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:var(--info)}
+
+/* ---- Écrans ---- */
+.screen{display:none;animation:rise .34s var(--ease)}
+.screen.active{display:block}
+
+.card{
+  padding:28px;
+  border-radius:28px;
+  background:linear-gradient(150deg,rgba(255,255,255,.10),rgba(255,255,255,.035));
+  border:1px solid rgba(255,255,255,.14);
+  backdrop-filter:blur(34px) saturate(160%);
+  -webkit-backdrop-filter:blur(34px) saturate(160%);
+  box-shadow:0 40px 90px -30px rgba(0,0,0,.85),inset 0 1px 0 rgba(255,255,255,.18);
 }
 
-.status.ok { background: rgba(52, 201, 141, 0.15); border: 1px solid rgba(30, 143, 99, 0.3); color: #34c98d; }
-.status.err { background: rgba(255, 122, 146, 0.15); border: 1px solid rgba(255, 122, 146, 0.3); color: #ff7a92; }
-.status.info { background: rgba(95, 194, 217, 0.15); border: 1px solid rgba(51, 135, 156, 0.3); color: #5fc2d9; }
+.eyebrow{font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info);margin-bottom:12px}
 
-.status::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-  background: currentColor;
+h1{
+  display:flex;align-items:center;gap:11px;
+  font:600 24px/1.2 Sora,sans-serif;
+  letter-spacing:-.028em;
+  margin:0 0 10px;
+}
+h1 .h-ic{width:40px;height:40px;border-radius:13px;flex:none;display:grid;place-items:center;font-size:19px;
+  background:linear-gradient(145deg,var(--acc),var(--acc-2));color:#fff;
+  box-shadow:0 12px 26px -12px rgba(242,19,142,.85),inset 0 1px 0 rgba(255,255,255,.42)}
+
+p{margin:0;font:300 13px/1.6 Manrope,sans-serif;color:rgba(242,242,242,.6);text-wrap:pretty}
+
+/* ---- Statut ---- */
+.status{
+  display:flex;align-items:center;gap:10px;
+  padding:13px 16px;
+  border-radius:16px;
+  margin:16px 0 4px;
+  font:500 12.5px/1.4 'JetBrains Mono',monospace;
+  letter-spacing:.01em;
+}
+.status::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor;flex:none;box-shadow:0 0 10px currentColor}
+.status.ok{background:rgba(79,220,164,.12);border:1px solid rgba(79,220,164,.32);color:var(--ok)}
+.status.err{background:rgba(242,19,142,.12);border:1px solid rgba(242,19,142,.34);color:var(--acc-soft)}
+.status.info{background:rgba(95,194,217,.12);border:1px solid rgba(95,194,217,.30);color:var(--info-soft)}
+
+/* ---- Boutons ---- */
+.btn{
+  width:100%;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:16px 22px;
+  margin-top:12px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.22);
+  font:600 15px/1 Manrope,sans-serif;
+  cursor:pointer;
+  transition:transform .26s var(--ease),box-shadow .26s var(--ease),background .26s var(--ease),color .26s var(--ease);
+}
+.btn i{font-size:18px}
+.btn-primary{background:linear-gradient(145deg,var(--acc),var(--acc-2));color:#fff;
+  box-shadow:0 18px 40px -16px rgba(242,19,142,.9),inset 0 1px 0 rgba(255,255,255,.45)}
+.btn-primary:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 24px 50px -16px rgba(242,19,142,1),inset 0 1px 0 rgba(255,255,255,.45)}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.btn-secondary{background:rgba(95,194,217,.14);border-color:rgba(95,194,217,.42);color:var(--info)}
+.btn-secondary:hover:not(:disabled){background:rgba(95,194,217,.24);transform:translateY(-1px)}
+.btn-back{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.16);color:rgba(242,242,242,.7)}
+.btn-back:hover:not(:disabled){background:rgba(255,255,255,.12);color:#F2F2F2}
+
+/* ---- Champs ---- */
+.section-label{
+  display:flex;align-items:center;gap:9px;
+  font:600 12.5px/1.3 Manrope,sans-serif;
+  color:#F2F2F2;
+  margin:20px 0 10px;
+}
+.step-indicator{
+  display:inline-grid;place-items:center;
+  width:22px;height:22px;border-radius:999px;
+  background:rgba(95,194,217,.18);border:1px solid rgba(95,194,217,.4);
+  color:var(--info);font:600 11px/1 'JetBrains Mono',monospace;
+}
+input[type="text"],input[type="password"]{
+  width:100%;
+  padding:15px 18px;
+  margin-top:12px;
+  border-radius:999px;
+  border:1.5px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.05);
+  color:#F2F2F2;
+  font:500 14px/1 Manrope,sans-serif;
+  transition:border-color .26s var(--ease),box-shadow .26s var(--ease);
+}
+input::placeholder{color:rgba(242,242,242,.34)}
+input:focus{outline:none;border-color:var(--info);box-shadow:0 0 0 4px rgba(95,194,217,.15)}
+input:disabled{opacity:.7}
+
+/* ---- Vidéo ---- */
+.video-container{
+  position:relative;
+  border-radius:20px;
+  overflow:hidden;
+  background:#000;
+  margin:16px 0;
+  border:1px solid rgba(255,255,255,.12);
+}
+video{width:100%;aspect-ratio:1;background:#000;object-fit:cover;display:block}
+.video-overlay{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:78%;aspect-ratio:3/4;
+  border:2px solid rgba(95,194,217,.55);
+  border-radius:14px;
+  pointer-events:none;
+  box-shadow:0 0 0 9999px rgba(0,0,0,.34),inset 0 0 24px rgba(95,194,217,.25);
 }
 
-button, input {
-  width: 100%;
-  padding: 16px;
-  border-radius: 12px;
-  font: inherit;
-  margin-top: 12px;
-  border: 0;
-  cursor: pointer;
-  transition: all 0.26s ease;
+small{
+  display:block;
+  margin-top:10px;
+  font:400 11.5px/1.5 Manrope,sans-serif;
+  color:rgba(242,242,242,.42);
+  text-wrap:pretty;
 }
 
-button {
-  font-weight: 600;
-  font-size: 15px;
+.result-box{
+  background:rgba(79,220,164,.1);
+  border:1px solid rgba(79,220,164,.3);
+  border-radius:16px;
+  padding:16px;
+  margin:16px 0;
+  text-align:center;
 }
+.result-box .label{font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.18em;color:rgba(242,242,242,.5);margin-bottom:8px}
+.result-box .value{font:500 20px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--ok)}
 
-.btn-primary {
-  background: linear-gradient(145deg, #ef168e, #bf2178);
-  color: white;
-  box-shadow: 0 8px 20px rgba(191, 33, 120, 0.3);
+.explain{
+  margin-top:22px;
+  padding:18px 20px;
+  border-radius:20px;
+  background:rgba(95,194,217,.08);
+  border:1px solid rgba(95,194,217,.22);
+  font:300 12.5px/1.7 Manrope,sans-serif;
+  color:rgba(242,242,242,.7);
+  text-align:center;
 }
+.explain strong{color:#F2F2F2;font-weight:600}
+.explain .hi{color:var(--info-soft);font-weight:600}
 
-.btn-primary:hover:not(:disabled) {
-  box-shadow: 0 12px 28px rgba(191, 33, 120, 0.4);
-  transform: translateY(-2px);
+#branche-preview img{width:100%;border-radius:16px;max-height:300px;object-fit:cover;border:1px solid rgba(255,255,255,.12)}
+
+/* ---- Lecteur code-barres ---- */
+.video-overlay.scan{width:88%;aspect-ratio:5/2;border-radius:12px}
+.scan-laser{
+  position:absolute;left:8%;right:8%;top:50%;height:2px;
+  background:linear-gradient(90deg,transparent,var(--info),transparent);
+  box-shadow:0 0 14px var(--info);
+  animation:laser 2.1s ease-in-out infinite;
 }
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+@keyframes laser{0%,100%{transform:translateY(-64px)}50%{transform:translateY(64px)}}
+.scan-log{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto}
+.scan-row{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 14px;border-radius:14px;
+  font:500 12px/1.3 'JetBrains Mono',monospace;
+  border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);
 }
+.scan-row .sr-ic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none;font-size:14px}
+.scan-row .sr-ic i{width:14px;height:14px}
+.scan-row .sr-code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.04em}
+.scan-row .sr-time{font-size:10px;color:rgba(242,242,242,.4);flex:none}
+.scan-row.pending .sr-ic{background:rgba(95,194,217,.16);color:var(--info)}
+.scan-row.pending .sr-ic i{animation:spin 1s linear infinite}
+.scan-row.ok{border-color:rgba(79,220,164,.3);background:rgba(79,220,164,.08)}
+.scan-row.ok .sr-ic{background:rgba(79,220,164,.16);color:var(--ok)}
+.scan-row.err{border-color:rgba(242,19,142,.34);background:rgba(242,19,142,.08);cursor:pointer}
+.scan-row.err .sr-ic{background:rgba(242,19,142,.16);color:var(--acc-soft)}
 
-.btn-secondary {
-  background: rgba(95, 194, 217, 0.2);
-  color: #5fc2d9;
-  border: 1px solid rgba(95, 194, 217, 0.4);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: rgba(95, 194, 217, 0.3);
-}
-
-.btn-back {
-  background: rgba(200, 200, 200, 0.1);
-  color: #b6bac8;
-  border: 1px solid rgba(200, 200, 200, 0.2);
-}
-
-.btn-back:hover:not(:disabled) {
-  background: rgba(200, 200, 200, 0.15);
-}
-
-input[type="text"], input[type="password"] {
-  background: #11131a;
-  border: 1px solid #4a4d5a;
-  color: white;
-  font: inherit;
-  padding: 14px 16px;
-}
-
-video {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 16px;
-  background: #000;
-  margin: 16px 0;
-  object-fit: cover;
-}
-
-.video-container {
-  position: relative;
-  border-radius: 16px;
-  overflow: hidden;
-  background: #000;
-  margin: 16px 0;
-}
-
-.video-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 80%;
-  aspect-ratio: 3/4;
-  border: 2px solid rgba(95, 194, 217, 0.4);
-  border-radius: 12px;
-  pointer-events: none;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
-}
-
-.section-label {
-  font-weight: 600;
-  font-size: 15px;
-  margin-bottom: 12px;
-  color: #f7f7fa;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.step-indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: rgba(95, 194, 217, 0.3);
-  color: #5fc2d9;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-small {
-  color: #7a7e8a;
-  display: block;
-  margin-top: 8px;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.result-box {
-  background: rgba(52, 201, 141, 0.1);
-  border: 1px solid rgba(30, 143, 99, 0.3);
-  border-radius: 12px;
-  padding: 16px;
-  margin: 16px 0;
-  text-align: center;
-}
-
-.result-box .label {
-  color: #7a7e8a;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 8px;
-}
-
-.result-box .value {
-  font-size: 20px;
-  font-weight: 600;
-  color: #34c98d;
-  font-family: 'JetBrains Mono', monospace;
-  letter-spacing: 0.05em;
-}
-
-/* Cache le canvas utilisé pour la capture */
-.capture-canvas { display: none; }
+.capture-canvas{display:none}
 </style>
+</head>
 
 <body>
+<div class="bg" aria-hidden="true">
+  <div class="wash"></div>
+  <div class="orb-a"></div>
+  <div class="orb-b"></div>
+  <div class="grid"></div>
+</div>
+
 <main>
+  <header class="brandbar">
+    <div class="logo"><img src="assets/logo-lunetterie.jpeg" alt="La Lunetterie"></div>
+    <div class="names">
+      <span class="name">LA LUNETTERIE</span>
+      <span class="sub">SUIVI DE STOCK</span>
+    </div>
+    <div class="sep"></div>
+    <span class="tag">LECTEUR MOBILE</span>
+  </header>
+
   <!-- ÉCRAN 1 : AUTHENTIFICATION -->
   <div id="screen-login" class="screen active">
     <div class="card">
-      <h1>📱 Lecteur mobile</h1>
-      <p>Scannez le QR code du poste pour démarrer</p>
+      <div class="eyebrow">ÉTAPE 1 · APPAIRAGE</div>
+      <h1><span class="h-ic"><i data-lucide="smartphone"></i></span>Lecteur mobile</h1>
+      <p>Scannez le QR code du poste pour démarrer.</p>
 
       <div id="login-status" class="status info" style="display:none;">
         <span id="login-status-text">Attente d'entrée...</span>
       </div>
 
-      <div class="video-container" style="margin-top: 16px;">
+      <div class="video-container" style="margin-top:16px;">
         <video id="video-qr" playsinline muted autoplay></video>
         <div class="video-overlay"></div>
       </div>
 
-      <button class="btn-primary" id="btn-scan-qr">🔲 Scanner le QR</button>
-      <button class="btn-secondary" id="btn-manual-entry">Saisir manuellement</button>
+      <button class="btn btn-primary" id="btn-scan-qr"><i data-lucide="scan-line"></i>Scanner le QR</button>
+      <button class="btn btn-secondary" id="btn-manual-entry"><i data-lucide="keyboard"></i>Saisir manuellement</button>
 
-      <div id="manual-entry-panel" style="display:none; margin-top: 12px;">
+      <div id="manual-entry-panel" style="display:none;">
         <label class="section-label"><span class="step-indicator">1</span>Session (depuis QR code)</label>
-        <input id="session-code" type="text" placeholder="Code de session" autocomplete="off" style="opacity: 0.9;">
+        <input id="session-code" type="text" placeholder="Code de session" autocomplete="off">
 
-        <label class="section-label" style="margin-top: 20px;">Mot de passe (optionnel)</label>
+        <label class="section-label"><span class="step-indicator">2</span>Mot de passe (optionnel)</label>
         <input id="password" type="password" placeholder="Mot de passe si requis">
 
-        <button class="btn-primary" id="btn-login">Connecter au PC</button>
+        <button class="btn btn-primary" id="btn-login"><i data-lucide="link"></i>Connecter au PC</button>
       </div>
 
-      <small>ℹ️ Le scan QR est la méthode principale. La saisie manuelle reste disponible en secours.</small>
+      <small><i data-lucide="info" style="width:13px;height:13px"></i> Le scan QR est la méthode principale. La saisie manuelle reste disponible en secours.</small>
+    </div>
+  </div>
+
+  <!-- ÉCRAN HUB : CHOIX DU MODE -->
+  <div id="screen-hub" class="screen">
+    <div class="card">
+      <div class="eyebrow">POSTE CONNECTÉ</div>
+      <h1><span class="h-ic"><i data-lucide="check"></i></span>Téléphone prêt</h1>
+      <p>Choisissez ce que le téléphone doit faire pour le poste PC.</p>
+
+      <button class="btn btn-primary" id="btn-mode-scan"><i data-lucide="scan-barcode"></i>Lecteur code-barres</button>
+      <button class="btn btn-secondary" id="btn-mode-photo"><i data-lucide="camera"></i>Photo de branche</button>
+      <button class="btn btn-back" id="btn-hub-logout"><i data-lucide="log-out"></i>Déconnexion</button>
+    </div>
+  </div>
+
+  <!-- ÉCRAN SCANNER : LECTEUR CODE-BARRES -->
+  <div id="screen-scanner" class="screen">
+    <div class="card">
+      <div class="eyebrow">LECTEUR CODE-BARRES</div>
+      <h1><span class="h-ic"><i data-lucide="scan-barcode"></i></span>Scanner les cartons</h1>
+      <p>Visez un code-barres : chaque lecture part vers le poste PC.</p>
+
+      <div id="scanner-status" class="status info" style="display:none;">
+        <span id="scanner-status-text">Prêt</span>
+      </div>
+
+      <div class="video-container">
+        <video id="video-scan" playsinline muted autoplay></video>
+        <div class="video-overlay scan"></div>
+        <div class="scan-laser"></div>
+      </div>
+
+      <label class="section-label"><i data-lucide="keyboard" style="width:15px;height:15px"></i>Code non lu ? Saisir à la main</label>
+      <input id="scan-manual-input" type="text" inputmode="numeric" autocomplete="off" placeholder="ex. 3 802 4418 0021">
+      <button class="btn btn-secondary" id="btn-scan-manual-send"><i data-lucide="arrow-up-right"></i>Envoyer ce code</button>
+
+      <div class="section-label" style="margin-top:22px;">
+        <i data-lucide="history" style="width:15px;height:15px"></i>Codes envoyés
+        <span id="scan-count" class="step-indicator" style="margin-left:auto;">0</span>
+      </div>
+      <ul id="scan-log" class="scan-log"></ul>
+
+      <button class="btn btn-back" id="btn-scan-done"><i data-lucide="arrow-left"></i>Terminer</button>
     </div>
   </div>
 
   <!-- ÉCRAN 2 : CAPTURE BRANCHE -->
   <div id="screen-capture-branch" class="screen">
     <div class="card">
-      <h1>Photo de la branche</h1>
-      <p>Capturez la branche avec la référence lisible</p>
+      <div class="eyebrow">ÉTAPE 2 · CAPTURE</div>
+      <h1><span class="h-ic"><i data-lucide="camera"></i></span>Photo de la branche</h1>
+      <p>Capturez la branche avec la référence lisible.</p>
 
       <div id="branche-status" class="status info" style="display:none;">
         <span id="branche-status-text">Prêt</span>
       </div>
 
-      <label class="section-label"><span class="step-indicator">2</span>Branche</label>
+      <label class="section-label"><span class="step-indicator">1</span>Branche</label>
 
       <div class="video-container">
         <video id="video-branch" playsinline muted autoplay></video>
@@ -273,40 +371,43 @@ small {
 
       <canvas id="capture-canvas-branch" class="capture-canvas"></canvas>
 
-      <button class="btn-primary" id="btn-capture-branche">📸 Capturer</button>
+      <button class="btn btn-primary" id="btn-capture-branche"><i data-lucide="camera"></i>Capturer</button>
       <small>Cadrez la branche pour que la référence soit bien lisible et nette.</small>
 
-      <div id="branche-preview" style="margin-top: 16px; display: none;">
-        <img id="branche-preview-img" style="width: 100%; border-radius: 12px; max-height: 300px; object-fit: cover;">
+      <div id="branche-preview" style="margin-top:16px;display:none;">
+        <img id="branche-preview-img" alt="Aperçu de la branche">
       </div>
 
-      <button class="btn-back" id="btn-back-login">← Retour</button>
+      <button class="btn btn-back" id="btn-back-login"><i data-lucide="arrow-left"></i>Retour</button>
     </div>
   </div>
 
   <!-- ÉCRAN 3 : RÉSULTATS -->
   <div id="screen-results" class="screen">
     <div class="card">
-      <h1>Envoi réussi ✓</h1>
-      <p>La photo de branche a été envoyée au poste PC</p>
+      <div class="eyebrow">ENVOI</div>
+      <h1><span class="h-ic"><i data-lucide="check"></i></span>Envoi réussi</h1>
+      <p>La photo de branche a été envoyée au poste PC.</p>
 
       <div id="results-status" class="status ok" style="display:none;">
         <span id="results-status-text">Succès !</span>
       </div>
 
-      <p style="text-align: center; margin-top: 24px; color: #7a7e8a; line-height: 1.6;">
+      <div class="explain">
         <strong>La photo est en cours de traitement au poste PC.</strong><br><br>
         La référence sera lue automatiquement depuis la branche et s'affichera dans la page Stock Général.<br><br>
-        <strong style="color: #5fc2d9;">Vous pouvez capturer une autre branche.</strong>
-      </p>
+        <span class="hi">Vous pouvez capturer une autre branche.</span>
+      </div>
 
-      <button class="btn-secondary" id="btn-next-capture">Capturer une autre branche</button>
-      <button class="btn-back" id="btn-logout">Déconnexion</button>
+      <button class="btn btn-secondary" id="btn-next-capture"><i data-lucide="rotate-ccw"></i>Capturer une autre branche</button>
+      <button class="btn btn-back" id="btn-logout"><i data-lucide="log-out"></i>Déconnexion</button>
     </div>
   </div>
 </main>
 
 <script>
+const renderIcons = () => { try { window.lucide && window.lucide.createIcons(); } catch (e) {} };
+
 const state = {
   screen: 'login',
   sessionId: null,
@@ -316,11 +417,23 @@ const state = {
   qrStream: null,
   qrDetector: null,
   qrScanAnimation: null,
+  scanStream: null,
+  scanDetector: null,
+  scanAnimation: null,
+  lastScan: { value: null, at: 0 },
+  scanSent: 0,
   cameraStreams: {
     branch: null,
     qr: null
   }
 };
+
+// Indice de mode : ?mode=barcode / #mode=branche … (sinon écran hub)
+const urlMode = (
+  new URLSearchParams(location.hash.slice(1)).get('mode') ||
+  new URLSearchParams(location.search).get('mode') ||
+  ''
+).toLowerCase();
 
 const initFromURL = () => {
   const hash = new URLSearchParams(location.hash.slice(1));
@@ -340,6 +453,7 @@ const showScreen = (screenName) => {
   document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
   document.getElementById(`screen-${screenName}`).classList.add('active');
   state.screen = screenName;
+  renderIcons();
 };
 
 const showStatus = (elementId, message, type = 'info') => {
@@ -440,12 +554,24 @@ const initConnection = async () => {
     }
 
     showStatus('login-status', '✓ Connecté au poste PC', 'ok');
-    setTimeout(() => {
-      showScreen('capture-branch');
-      startCamera('video-branch');
-    }, 600);
+    const mode = String(
+      (data && (data.mode || (data.data && data.data.mode) || (data.session && data.session.mode))) || urlMode || ''
+    ).toLowerCase();
+    setTimeout(() => routeAfterConnect(mode), 600);
   } catch (error) {
     showStatus('login-status', 'Erreur : ' + error.message, 'err');
+  }
+};
+
+const routeAfterConnect = (mode) => {
+  if (mode === 'barcode' || mode === 'scan' || mode === 'codebarres') {
+    showScreen('scanner');
+    startBarcodeScan();
+  } else if (mode === 'branche' || mode === 'photo' || mode === 'monture') {
+    showScreen('capture-branch');
+    startCamera('video-branch');
+  } else {
+    showScreen('hub');
   }
 };
 
@@ -599,7 +725,7 @@ document.getElementById('btn-capture-branche').addEventListener('click', () => {
 
 document.getElementById('btn-back-login').addEventListener('click', () => {
   stopCamera('video-branch');
-  showScreen('login');
+  showScreen(state.sessionId ? 'hub' : 'login');
 });
 
 document.getElementById('btn-next-capture').addEventListener('click', () => {
@@ -609,13 +735,15 @@ document.getElementById('btn-next-capture').addEventListener('click', () => {
   startCamera('video-branch');
 });
 
-document.getElementById('btn-logout').addEventListener('click', () => {
+const doLogout = () => {
   state.sessionId = null;
   state.sessionToken = null;
   state.brancheBlobData = null;
   document.getElementById('session-code').value = '';
   document.getElementById('password').value = '';
 
+  stopQrScan();
+  stopBarcodeScan();
   Object.keys(state.cameraStreams).forEach((key) => {
     if (state.cameraStreams[key]) {
       state.cameraStreams[key].getTracks().forEach(track => track.stop());
@@ -626,6 +754,158 @@ document.getElementById('btn-logout').addEventListener('click', () => {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
   window.location.href = 'index.html';
+};
+
+document.getElementById('btn-logout').addEventListener('click', doLogout);
+document.getElementById('btn-hub-logout').addEventListener('click', doLogout);
+
+/* ---- Choix du mode depuis l'écran hub ---- */
+document.getElementById('btn-mode-scan').addEventListener('click', () => {
+  showScreen('scanner');
+  startBarcodeScan();
+});
+document.getElementById('btn-mode-photo').addEventListener('click', () => {
+  showScreen('capture-branch');
+  startCamera('video-branch');
+});
+
+/* ---- Lecteur code-barres ---- */
+const SCAN_FORMATS = ['qr_code', 'code_128', 'code_39', 'code_93', 'codabar', 'ean_13', 'ean_8', 'itf', 'upc_a', 'upc_e', 'data_matrix', 'pdf417', 'aztec'];
+
+// Le téléphone pousse chaque code lu vers la session du poste PC.
+// ⚠️ Route à confirmer côté API : essaie /barcode puis /scan en secours.
+const pushBarcode = async (code, format) => {
+  const base = `${state.apiBase}/sessions/${encodeURIComponent(state.sessionId)}`;
+  const q = `token=${encodeURIComponent(state.sessionToken)}`;
+  const body = JSON.stringify({ barcode: code, code, format: format || 'unknown' });
+  const opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body };
+  let res = await fetch(`${base}/barcode?${q}`, opts);
+  if (res.status === 404) res = await fetch(`${base}/scan?${q}`, opts);
+  return res;
+};
+
+const startBarcodeScan = async () => {
+  const video = document.getElementById('video-scan');
+
+  if (!('BarcodeDetector' in window)) {
+    showStatus('scanner-status', 'Scan non supporté sur cet appareil. Utilisez la saisie manuelle.', 'info');
+    return;
+  }
+
+  try {
+    let formats = SCAN_FORMATS;
+    try {
+      const supported = await BarcodeDetector.getSupportedFormats();
+      const filtered = SCAN_FORMATS.filter((f) => supported.includes(f));
+      if (filtered.length) formats = filtered;
+    } catch (_) {}
+
+    state.scanDetector = new BarcodeDetector({ formats });
+    showStatus('scanner-status', 'Caméra active — visez un code', 'info');
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
+      audio: false
+    });
+
+    state.scanStream = stream;
+    video.srcObject = stream;
+    await video.play();
+
+    const loop = async () => {
+      if (!state.scanDetector) return;
+      if (video.videoWidth && video.videoHeight) {
+        try {
+          const codes = await state.scanDetector.detect(video);
+          if (codes && codes.length > 0) handleScan(codes[0].rawValue, codes[0].format);
+        } catch (_) {}
+      }
+      state.scanAnimation = requestAnimationFrame(loop);
+    };
+
+    state.scanAnimation = requestAnimationFrame(loop);
+  } catch (error) {
+    console.error('Scanner code-barres indisponible:', error);
+    showStatus('scanner-status', 'Caméra indisponible : ' + error.message, 'err');
+  }
+};
+
+const stopBarcodeScan = () => {
+  if (state.scanAnimation) {
+    cancelAnimationFrame(state.scanAnimation);
+    state.scanAnimation = null;
+  }
+  state.scanDetector = null;
+  if (state.scanStream) {
+    state.scanStream.getTracks().forEach((track) => track.stop());
+    state.scanStream = null;
+  }
+  const video = document.getElementById('video-scan');
+  if (video) video.srcObject = null;
+};
+
+const handleScan = (raw, format) => {
+  const value = String(raw || '').trim();
+  if (!value) return;
+
+  const now = Date.now();
+  if (value === state.lastScan.value && now - state.lastScan.at < 3000) return;
+  state.lastScan = { value, at: now };
+
+  if (navigator.vibrate) { try { navigator.vibrate(40); } catch (_) {} }
+  sendBarcode(value, format);
+};
+
+const addScanRow = (value) => {
+  const li = document.createElement('li');
+  li.className = 'scan-row pending';
+  const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  li.innerHTML = '<span class="sr-ic"><i data-lucide="loader"></i></span><span class="sr-code"></span><span class="sr-time"></span>';
+  li.querySelector('.sr-code').textContent = value;
+  li.querySelector('.sr-time').textContent = time;
+  document.getElementById('scan-log').prepend(li);
+  renderIcons();
+  return li;
+};
+
+const sendBarcode = async (value, format) => {
+  const row = addScanRow(value);
+  try {
+    const res = await pushBarcode(value, format);
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || payload.success === false) throw new Error(payload.error || 'Envoi refusé');
+
+    row.className = 'scan-row ok';
+    row.querySelector('.sr-ic').innerHTML = '<i data-lucide="check"></i>';
+    state.scanSent += 1;
+    document.getElementById('scan-count').textContent = String(state.scanSent);
+    showStatus('scanner-status', 'Code envoyé au poste PC', 'ok');
+  } catch (error) {
+    console.error('Envoi code-barres échoué:', error);
+    row.className = 'scan-row err';
+    row.querySelector('.sr-ic').innerHTML = '<i data-lucide="rotate-ccw"></i>';
+    row.title = 'Toucher pour renvoyer';
+    row.addEventListener('click', () => { row.remove(); sendBarcode(value, format); }, { once: true });
+    showStatus('scanner-status', 'Échec de l\'envoi — touchez la ligne pour renvoyer', 'err');
+  }
+  renderIcons();
+};
+
+document.getElementById('btn-scan-manual-send').addEventListener('click', () => {
+  const input = document.getElementById('scan-manual-input');
+  const value = (input.value || '').trim();
+  if (!value) { showStatus('scanner-status', 'Saisissez un code', 'err'); return; }
+  sendBarcode(value, 'manual');
+  input.value = '';
+});
+
+document.getElementById('scan-manual-input').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') { event.preventDefault(); document.getElementById('btn-scan-manual-send').click(); }
+});
+
+document.getElementById('btn-scan-done').addEventListener('click', () => {
+  stopBarcodeScan();
+  showScreen('hub');
 });
 
 const dataUrlToBlob = (dataUrl) => {
@@ -640,6 +920,7 @@ const dataUrlToBlob = (dataUrl) => {
 };
 
 window.addEventListener('load', () => {
+  renderIcons();
   const hasParams = initFromURL();
 
   if (hasParams) {
@@ -660,5 +941,4 @@ window.addEventListener('load', () => {
 });
 </script>
 </body>
-</html>
 </html>
