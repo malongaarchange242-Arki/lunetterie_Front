@@ -2495,6 +2495,12 @@ class Component extends DCLogic {
           fd.append('pre_registration_box_id', String(cart.id));
           fd.append('carton_code', cart.code || '');
           if (cart.prix != null) fd.append('price', String(cart.prix));
+          const faceSource = ligne.photos.find(p => p.view === 'face');
+          const rearSource = ligne.photos.find(p => p.view === 'rear');
+          const branchSource = ligne.photos.find(p => p.view === 'branche');
+          if (!faceBlob && faceSource && faceSource.src) fd.append('photo_monture_url', faceSource.src);
+          if (!rearBlob && rearSource && rearSource.src) fd.append('photo_arriere_url', rearSource.src);
+          if (!branchBlob && branchSource && branchSource.src) fd.append('photo_branche_url', branchSource.src);
           
           // Ajouter les photos
           if (faceBlob && faceBlob.size > 0) fd.append('image', faceBlob, 'monture.jpg');
