@@ -1245,6 +1245,7 @@ class Component extends DCLogic {
         const mappedInventory = glasses.map((g, index) => ({
           id: g.id,
           uid: g.barcode || '',
+          stationId: Number(g.station_id) || null,
           ref: g.reference || g.ref || '—',
           marque: g.brand || '—',
           forme: g.shape || '—',
@@ -2163,6 +2164,13 @@ class Component extends DCLogic {
               const toStationID = await this.findStationIdByName(s.tDestination);
               if (!fromStationID || !toStationID) {
                 throw new Error('Impossible de retrouver les stations de départ et d’arrivée.');
+              }
+
+              const invalidItems = liste.map(uid => inventaireDB.find(item => item.uid === uid))
+                .filter(item => item && item.stationId !== fromStationID);
+              if (invalidItems.length) {
+                const firstInvalid = invalidItems[0];
+                throw new Error(`La monture ${firstInvalid.uid} est affectée à la station ${firstInvalid.stationId || 'inconnue'}, pas à la station de départ ${fromStationID}. Rechargez le stock avant de générer une nouvelle liste.`);
               }
 
               const createRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/transfers`, {
