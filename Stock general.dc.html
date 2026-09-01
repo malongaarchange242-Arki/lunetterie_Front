@@ -2534,20 +2534,51 @@ class Component extends DCLogic {
         for (const ligne of lignesCompletes) {
           // Pré-charger les photos avant de créer la FormData
           let faceBlob = null, rearBlob = null, branchBlob = null;
+          let faceUrl = '', rearUrl = '', branchUrl = '';
           if (ligne.photos && Array.isArray(ligne.photos)) {
             const facePhoto = ligne.photos.find(p => p.view === 'face');
             const rearPhoto = ligne.photos.find(p => p.view === 'rear');
             const branchPhoto = ligne.photos.find(p => p.view === 'branche');
-            if (facePhoto && facePhoto.src) faceBlob = await fetchImageBlob(facePhoto.src);
-            if (rearPhoto && rearPhoto.src) rearBlob = await fetchImageBlob(rearPhoto.src);
-            if (branchPhoto && branchPhoto.src) branchBlob = await fetchImageBlob(branchPhoto.src);
-            if (!faceBlob) {
+            const faceSource = facePhoto || ligne.photos.find(p => p && p.src && p.kind !== 'branche');
+            const rearSource = rearPhoto || ligne.photos.find(p => p && p.view === 'rear' && p.src) || ligne.photos.find(p => p && p.src && /rear|arriere|back/i.test(String(p.kind || p.view || '')));
+            const branchSource = branchPhoto || ligne.photos.find(p => p && p.src && /branch|branche/i.test(String(p.kind || p.view || '')));
+
+            faceUrl = faceSource && faceSource.src ? String(faceSource.src) : '';
+            rearUrl = rearSource && rearSource.src ? String(rearSource.src) : '';
+            branchUrl = branchSource && branchSource.src ? String(branchSource.src) : '';
+
+            if (!faceUrl && faceSource && faceSource.url) faceUrl = String(faceSource.url);
+            if (!rearUrl && rearSource && rearSource.url) rearUrl = String(rearSource.url);
+            if (!branchUrl && branchSource && branchSource.url) branchUrl = String(branchSource.url);
+
+            if (faceUrl && /^(https?:|blob:|data:)/i.test(faceUrl)) {
+              faceBlob = null;
+            } else if (faceUrl) {
+              faceBlob = await fetchImageBlob(faceUrl);
+            }
+
+            if (rearUrl && /^(https?:|blob:|data:)/i.test(rearUrl)) {
+              rearBlob = null;
+            } else if (rearUrl) {
+              rearBlob = await fetchImageBlob(rearUrl);
+            }
+
+            if (branchUrl && /^(https?:|blob:|data:)/i.test(branchUrl)) {
+              branchBlob = null;
+            } else if (branchUrl) {
+              branchBlob = await fetchImageBlob(branchUrl);
+            }
+
+            if (!faceUrl && !faceBlob) {
               const fallbackPhoto = ligne.photos.find(p => p.view !== 'branche' && p.src) || ligne.photos.find(p => p.src);
-              if (fallbackPhoto) faceBlob = await fetchImageBlob(fallbackPhoto.src);
+              if (fallbackPhoto) {
+                faceUrl = String(fallbackPhoto.src || fallbackPhoto.url || '');
+                if (faceUrl && !/^(https?:|blob:|data:)/i.test(faceUrl)) faceBlob = await fetchImageBlob(faceUrl);
+              }
             }
           }
 
-          if (!faceBlob || faceBlob.size === 0) {
+          if (!faceUrl && (!faceBlob || faceBlob.size === 0)) {
             this.toast('triangle-alert', 'Photo monture manquante', `Ajoutez une photo face à la ligne ${ligne.key}.`, 'warn');
             return;
           }
@@ -2570,9 +2601,12 @@ class Component extends DCLogic {
           const faceSource = ligne.photos.find(p => p.view === 'face');
           const rearSource = ligne.photos.find(p => p.view === 'rear');
           const branchSource = ligne.photos.find(p => p.view === 'branche');
-          if (!faceBlob && faceSource && faceSource.src) fd.append('photo_monture_url', faceSource.src);
-          if (!rearBlob && rearSource && rearSource.src) fd.append('photo_arriere_url', rearSource.src);
-          if (!branchBlob && branchSource && branchSource.src) fd.append('photo_branche_url', branchSource.src);
+          if (faceUrl) fd.append('photo_monture_url', faceUrl);
+          if (rearUrl) fd.append('photo_arriere_url', rearUrl);
+          if (branchUrl) fd.append('photo_branche_url', branchUrl);
+          if (!faceUrl && faceSource && faceSource.src) fd.append('photo_monture_url', faceSource.src);
+          if (!rearUrl && rearSource && rearSource.src) fd.append('photo_arriere_url', rearSource.src);
+          if (!branchUrl && branchSource && branchSource.src) fd.append('photo_branche_url', branchSource.src);
           
           // Ajouter les photos
           if (faceBlob && faceBlob.size > 0) fd.append('image', faceBlob, 'monture.jpg');
