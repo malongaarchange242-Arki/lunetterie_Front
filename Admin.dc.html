@@ -2164,9 +2164,11 @@ class Component extends DCLogic {
               }
 
               const createPayload = await createRes.json();
-              const transfer = createPayload && createPayload.transfer ? createPayload.transfer : (createPayload && createPayload.data ? createPayload.data : createPayload);
+              const dataObj = createPayload && createPayload.data ? createPayload.data : createPayload;
+              const transfer = dataObj && dataObj.transfer ? dataObj.transfer : dataObj;
               const transferId = transfer && transfer.id ? Number(transfer.id) : null;
               if (!transferId) {
+                console.error('Transfer response invalid:', createPayload);
                 throw new Error('Réponse du transfert invalide.');
               }
 
@@ -2178,8 +2180,8 @@ class Component extends DCLogic {
                 });
                 if (!itemRes.ok) {
                   const payload = await itemRes.json().catch(() => null);
-                  const message = payload && payload.message ? payload.message : `Erreur pour ${uid}`;
-                  throw new Error(message);
+                  const errorMsg = payload && payload.error ? payload.error : (payload && payload.message ? payload.message : `Erreur pour ${uid}`);
+                  throw new Error(errorMsg);
                 }
               }
 
@@ -2189,8 +2191,8 @@ class Component extends DCLogic {
               });
               if (!dispatchRes.ok) {
                 const payload = await dispatchRes.json().catch(() => null);
-                const message = payload && payload.message ? payload.message : 'Échec de dispatch du transfert.';
-                throw new Error(message);
+                const errorMsg = payload && payload.error ? payload.error : (payload && payload.message ? payload.message : 'Échec de dispatch du transfert.');
+                throw new Error(errorMsg);
               }
 
               const S = window.LStore;
