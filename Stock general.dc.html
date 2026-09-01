@@ -2252,14 +2252,36 @@ class Component extends DCLogic {
           for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
           return new Blob([bytes], { type: mime });
         };
-        const appendImage = (fd, fieldName, dataUrl, fileName) => {
-          if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return;
-          const blob = dataUrlToBlob(dataUrl);
-          if (blob && blob.size > 0) fd.append(fieldName, blob, fileName);
+        const fetchImageBlob = async (imageSource) => {
+          if (!imageSource || typeof imageSource !== 'string') return null;
+          
+          // Si c'est une data URL, convertir directement
+          if (imageSource.startsWith('data:')) {
+            return dataUrlToBlob(imageSource);
+          } 
+          // Si c'est une URL HTTP, la récupérer et convertir en Blob
+          else if (imageSource.startsWith('http://') || imageSource.startsWith('https://')) {
+            try {
+              const response = await fetch(imageSource);
+              if (response.ok) return await response.blob();
+            } catch (err) {
+              console.warn(`Erreur chargement photo: ${imageSource}`, err);
+            }
+          }
+          return null;
         };
         
         let savedCount = 0;
         for (const ligne of lignesCompletes) {
+          // Pré-charger les photos avant de créer la FormData
+          let faceBlob = null, rearBlob = null;
+          if (ligne.photos && Array.isArray(ligne.photos)) {
+            const facePhoto = ligne.photos.find(p => p.view === 'face');
+            const rearPhoto = ligne.photos.find(p => p.view === 'rear');
+            if (facePhoto && facePhoto.src) faceBlob = await fetchImageBlob(facePhoto.src);
+            if (rearPhoto && rearPhoto.src) rearBlob = await fetchImageBlob(rearPhoto.src);
+          }
+          
           const fd = new FormData();
           fd.append('station_id', String(s.stationId));
           fd.append('reference', String(ligne.ref).trim());
@@ -2276,13 +2298,9 @@ class Component extends DCLogic {
           fd.append('carton_code', cart.code || '');
           if (cart.prix != null) fd.append('price', String(cart.prix));
           
-          // Ajouter les photos de la ligne
-          if (ligne.photos && Array.isArray(ligne.photos)) {
-            const facePhoto = ligne.photos.find(p => p.view === 'face');
-            const rearPhoto = ligne.photos.find(p => p.view === 'rear');
-            if (facePhoto && facePhoto.src) appendImage(fd, 'image', facePhoto.src, 'monture.jpg');
-            if (rearPhoto && rearPhoto.src) appendImage(fd, 'rear_image', rearPhoto.src, 'arriere.jpg');
-          }
+          // Ajouter les photos
+          if (faceBlob && faceBlob.size > 0) fd.append('image', faceBlob, 'monture.jpg');
+          if (rearBlob && rearBlob.size > 0) fd.append('rear_image', rearBlob, 'arriere.jpg');
           
           try {
             const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception`, {
