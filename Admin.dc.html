@@ -932,15 +932,33 @@ class Component extends DCLogic {
   async findStationIdByName(name) {
     try {
       const response = await fetch(`${this.apiBaseUrl()}/api/v1/auth/stations`, { headers: this.apiHeaders() });
-      if (!response.ok) return null;
+      if (!response.ok) {
+        console.error(`Failed to fetch stations: ${response.status}`);
+        return null;
+      }
       const payload = await response.json();
       const stations = payload && Array.isArray(payload.stations) ? payload.stations : (payload && payload.data && Array.isArray(payload.data.stations) ? payload.data.stations : []);
+      console.log(`🏢 Available stations:`, stations.map(st => ({ id: st.id, name: st.name })));
       const target = String(name || '').trim();
+      console.log(`🔍 Looking for station: "${target}"`);
       const station = stations.find(st => {
         const current = String(st && st.name ? st.name : '').trim();
-        return current.toLowerCase() === target.toLowerCase() || this.normalizeSiteName(current) === this.normalizeSiteName(target);
+        const normalized = this.normalizeSiteName(current);
+        const normalizedTarget = this.normalizeSiteName(target);
+        const exactMatch = current.toLowerCase() === target.toLowerCase();
+        const normalizedMatch = normalized === normalizedTarget;
+        if (exactMatch || normalizedMatch) {
+          console.log(`  ✓ Match: "${current}" (ID: ${st.id})`);
+          return true;
+        }
+        return false;
       });
-      return station ? Number(station.id) : null;
+      if (station) {
+        console.log(`✅ Resolved "${target}" to station ID ${station.id}`);
+        return Number(station.id);
+      }
+      console.warn(`⚠️ Station not found: "${target}"`);
+      return null;
     } catch (error) {
       console.error('Erreur chargement stations:', error);
       return null;
@@ -2172,6 +2190,17 @@ class Component extends DCLogic {
                 throw new Error('Réponse du transfert invalide.');
               }
 
+              console.log(`✅ Transfer created: ID ${transferId}`);
+              console.log(`📦 Sending ${liste.length} items with fromStationID=${fromStationID}, toStationID=${toStationID}`);
+              console.log(`Items (UIDs):`, liste);
+              if (inventaireDB && Array.isArray(inventaireDB)) {
+                const itemDetails = liste.map(uid => {
+                  const m = inventaireDB.find(x => x.uid === uid);
+                  return m ? { uid: m.uid, ref: m.ref, site: m.site, statut: m.statut } : { uid, ref: 'NOT FOUND', site: 'NOT FOUND' };
+                });
+                console.log(`Item details:`, itemDetails);
+              }
+
               for (const uid of liste) {
                 const itemRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/transfers/${transferId}/items`, {
                   method: 'POST',
@@ -2181,8 +2210,11 @@ class Component extends DCLogic {
                 if (!itemRes.ok) {
                   const payload = await itemRes.json().catch(() => null);
                   const errorMsg = payload && payload.error ? payload.error : (payload && payload.message ? payload.message : `Erreur pour ${uid}`);
+                  const itemDetail = inventaireDB && Array.isArray(inventaireDB) ? inventaireDB.find(x => x.uid === uid) : null;
+                  console.error(`❌ Failed to add item ${uid}:`, { error: errorMsg, itemDetail });
                   throw new Error(errorMsg);
                 }
+                console.log(`✓ Item added: ${uid}`);
               }
 
               const dispatchRes = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/transfers/${transferId}/dispatch`, {
