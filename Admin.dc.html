@@ -907,6 +907,17 @@ class Component extends DCLogic {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
+  normalizeDateInput(v) {
+    const s = String(v ?? '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    return this.isoToday();
+  }
+  normalizePhotoUrl(v) {
+    const s = String(v ?? '').trim();
+    if (!s || s === 'null' || s === 'undefined') return null;
+    if (/^https?:\/\//i.test(s) || /^\/\//.test(s) || s.startsWith('/')) return s;
+    return null;
+  }
   isoToFr(v) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((v || '').trim());
     return m ? `${m[3]}/${m[2]}/${m[1]}` : (v || '').trim();
@@ -1458,10 +1469,10 @@ class Component extends DCLogic {
     const bonValide = uniInt > 0 && dateOk && fourOk;
 
     const bons = bonsDB.map(b => ({
-      ref: b.ref, fournisseur: b.fournisseur, provenance: b.provenance,
-      unites: b.unites.toLocaleString('fr-FR'), date: b.date,
-      barcodeNum: b.barcodeNum || b.ref,
-      barcodeStyle: this.barcode(b.barcodeNum || b.ref, 44),
+      ref: b.ref || '—', fournisseur: b.fournisseur || b.supplier || '—', provenance: b.provenance || '—',
+      unites: Number(b.unites || 0).toLocaleString('fr-FR'), date: b.date || this.isoToFr((b.order_date || '').slice(0, 10)) || this.isoToday(),
+      barcodeNum: b.barcodeNum || b.ref || 'bon',
+      barcodeStyle: this.barcode(b.barcodeNum || b.ref || 'bon', 44),
       statutLabel: (bonStatuts[b.statut] || bonStatuts.attente).label, statutStyle: (bonStatuts[b.statut] || bonStatuts.attente).style,
       cardStyle: `padding:22px 24px;border-radius:22px;background:${glass};border:1px solid ${b.statut === 'arrive' ? 'rgba(30,143,99,.24)' : 'var(--ink-09)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9)`
     }));
@@ -1738,7 +1749,7 @@ class Component extends DCLogic {
                 site: x.statut === 'transit' ? `${x.site} · en transit` : x.site,
                 siteStyle: x.statut === 'transit' ? tagWarn : (x.site === 'Stock général' ? tagWip : tagNeutre),
                 prix: this.fcfa(x.prix),
-                photoUrl: x.photo_monture_url || x.photoMontureUrl || x.photo_url || x.image_url || x.photo || null,
+                photoUrl: this.normalizePhotoUrl(x.photo_monture_url || x.photoMontureUrl || x.photo_url || x.image_url || x.photo || null),
                 photoStyle: `width:50px;height:50px;border-radius:12px;flex:none;display:grid;place-items:center;background:${this.PHOTOS[(x.photo || 0) % this.PHOTOS.length]};border:1px solid var(--ink-12)`
               }))
             };
@@ -1939,11 +1950,11 @@ class Component extends DCLogic {
       hasBonsArrivés: bonsArrivés.length > 0,
       fournisseurOpts: this.FOURNISSEURS.map(f => ({ label: f, value: f })),
       provenanceOpts: this.PROVENANCES.map(p => ({ label: p, value: p })),
-      bFournisseur: s.bFournisseur, bProvenance: s.bProvenance, bUnites: s.bUnites, bDate: s.bDate,
+      bFournisseur: String(s.bFournisseur || ''), bProvenance: String(s.bProvenance || 'Dubaï'), bUnites: String(s.bUnites || ''), bDate: this.normalizeDateInput(s.bDate),
       setBFournisseur: e => this.setState({ bFournisseur: e.target.value }),
       setBProvenance: e => this.setState({ bProvenance: e.target.value }),
       setBUnites: e => this.setState({ bUnites: e.target.value.replace(/[^0-9]/g, '') }),
-      setBDate: e => this.setState({ bDate: e.target.value }),
+      setBDate: e => this.setState({ bDate: this.normalizeDateInput(e.target.value) }),
       bDateMin: this.isoToday(),
       bonHint: !fourOk ? 'Saisissez le nom du fournisseur.'
         : !uniInt ? 'Indiquez le nombre de lunettes commandées.'

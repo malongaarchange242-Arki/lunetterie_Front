@@ -465,7 +465,22 @@ class Component extends DCLogic {
       const key = [m.marque, m.forme, m.type, m.gamme, m.genre].join('|');
       let g = map.get(key);
       if (!g) {
-        g = { key, marque: m.marque || '—', forme: m.forme || '—', type: m.type || '—', gamme: m.gamme || '—', genre: m.genre || '—', matieres: [], prix: m.prix || 0, couleurs: new Map(), total: 0, photoUrl: m.photo || m.photo_monture_url || m.photoMontureUrl || m.photoMonture || null };
+        g = {
+          key,
+          marque: m.marque || '—',
+          forme: m.forme || '—',
+          type: m.type || '—',
+          gamme: m.gamme || '—',
+          genre: m.genre || '—',
+          reference: m.ref || m.reference || m.barcode || '',
+          locationCode: m.valise || m.location_code || m.carton || '',
+          matieres: [],
+          prix: m.prix || 0,
+          couleurs: new Map(),
+          glassIds: new Map(),
+          total: 0,
+          photoUrl: m.photo || m.photo_monture_url || m.photoMontureUrl || m.photoMonture || null
+        };
         map.set(key, g);
       }
       g.total++;
@@ -473,8 +488,12 @@ class Component extends DCLogic {
       if (m.matiere && g.matieres.indexOf(m.matiere) < 0) g.matieres.push(m.matiere);
       if (m.prix && (!g.prix || m.prix < g.prix)) g.prix = m.prix;
       const c = m.couleur || 'Sans couleur';
-      if (!g.couleurs.has(c)) g.couleurs.set(c, []);
+      if (!g.couleurs.has(c)) {
+        g.couleurs.set(c, []);
+        g.glassIds.set(c, []);
+      }
       g.couleurs.get(c).push(m.uid);
+      if (m.id != null) g.glassIds.get(c).push(Number(m.id));
     });
     const result = Array.from(map.values()).sort((a, b) => b.total - a.total);
     console.log('modelesSrc: Final result =', result.length, 'groupes');
@@ -683,44 +702,80 @@ class Component extends DCLogic {
       envoiStyle: `display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:15px 22px;border-radius:999px;font:600 13.5px/1.3 Manrope,sans-serif;` + (envoiActif
         ? 'border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;cursor:pointer;box-shadow:0 16px 34px -20px rgba(191,33,120,.8)'
         : 'border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);cursor:not-allowed'),
-      onEnvoi: () => {
+      onEnvoi: async () => {
         if (!envoiActif || !S) return;
-        const uids = [];
+
+        const payloadItems = [];
         entries.forEach(e => {
           const pool = e.grp.couleurs.get(e.couleur) || [];
-          pool.slice(0, e.qty).forEach(u => uids.push(u));
+          const ids = e.grp.glassIds.get(e.couleur) || [];
+          const selected = pool.slice(0, e.qty);
+          selected.forEach((uid, index) => {
+            const glassId = ids[index];
+            if (glassId == null) return;
+            payloadItems.push({
+              glass_id: Number(glassId),
+              barcode: String(uid),
+              reference: String(e.grp.reference || e.grp.marque || uid),
+              brand: String(e.grp.marque || '—'),
+              location_code: String(e.grp.locationCode || '')
+            });
+          });
         });
-        const un = f => {
-          const set = Array.from(new Set(entries.map(f)));
-          return set.length === 1 ? set[0] : 'Plusieurs';
-        };
-        const n = S.nextSeq('demande');
-        const ref = `CT-2026-${String(n).padStart(4, '0')}`;
-        const dem = {
-          id: 'cat' + Date.now(),
-          magasin: s.boutique,
-          source: 'Stock général',
-          origine: 'responsable',
-          canal: 'catalogue',
-          ref,
-          date: this.dateFr(),
-          motif: (s.motif.trim() || 'Commande depuis le catalogue') + ` · ${entries.length} modèle(s)`,
-          type: un(e => e.grp.type),
-          gamme: un(e => e.grp.gamme),
-          genre: un(e => e.grp.genre),
-          couleur: un(e => e.couleur),
-          urgence: s.urgence,
-          besoin: total,
-          uids,
-          statut: 'attente',
-          scanned: [],
-          expedie: false,
-          cartonCode: null
-        };
-        S.set({ demandes: [dem].concat(DB.demandes || []) });
-        S.mouvement({ sens: 'interne', de: s.boutique, vers: 'Administration', ref, motif: 'Commande catalogue', qty: total });
-        this.setState({ panier: {}, motif: '' });
-        this.toast('send-horizontal', 'Liste envoyée à l\u2019admin', `${ref} · ${total} montures · ${s.boutique}`, 'ok');
+
+        try {
+          const token = localStorage.getItem('token');
+          if (!token) throw new Error('Token absent');
+
+          const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/send-lists`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ city: s.boutique, items: payloadItems })
+          });
+
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || 'Erreur de création de la liste');
+          }
+
+          const un = f => {
+            const set = Array.from(new Set(entries.map(f)));
+            return set.length === 1 ? set[0] : 'Plusieurs';
+          };
+          const n = S.nextSeq('demande');
+          const ref = `CT-2026-${String(n).padStart(4, '0')}`;
+          const dem = {
+            id: 'cat' + Date.now(),
+            magasin: s.boutique,
+            source: 'Stock général',
+            origine: 'responsable',
+            canal: 'catalogue',
+            ref,
+            date: this.dateFr(),
+            motif: (s.motif.trim() || 'Commande depuis le catalogue') + ` · ${entries.length} modèle(s)`,
+            type: un(e => e.grp.type),
+            gamme: un(e => e.grp.gamme),
+            genre: un(e => e.grp.genre),
+            couleur: un(e => e.couleur),
+            urgence: s.urgence,
+            besoin: total,
+            uids: payloadItems.map(i => i.barcode),
+            statut: 'attente',
+            scanned: [],
+            expedie: false,
+            cartonCode: null
+          };
+          S.set({ demandes: [dem].concat(DB.demandes || []) });
+          S.mouvement({ sens: 'interne', de: s.boutique, vers: 'Administration', ref, motif: 'Commande catalogue', qty: total });
+          this.setState({ panier: {}, motif: '' });
+          this.toast('send-horizontal', 'Liste envoyée à l\u2019admin', `${ref} · ${total} montures · ${s.boutique}`, 'ok');
+        } catch (error) {
+          console.error('Catalogue send-list error:', error);
+          this.toast('alert-triangle', 'Envoi impossible', error.message || 'Vérifiez la connexion et vos droits', 'warn');
+        }
       },
 
       envoyees: mesEnvois.map(d => ({
