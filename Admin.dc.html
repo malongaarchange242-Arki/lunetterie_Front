@@ -180,33 +180,75 @@ input::placeholder{color:var(--ink-34)}
           </div>
         </div>
 
-        <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-66);margin-bottom:16px">BONS ÉMIS</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px">
-          <sc-for list="{{ bons }}" as="b" hint-placeholder-count="3">
-            <div style="{{ b.cardStyle }}">
-              <div style="display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px dashed var(--ink-14);margin-bottom:14px;flex-wrap:wrap">
-                <div style="min-width:0;flex:1">
-                  <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-64);margin-bottom:6px">BON DE COMMANDE</div>
-                  <div style="font:700 14px/1.2 'JetBrains Mono',monospace">{{ b.ref }}</div>
+        <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-66);margin-bottom:16px;margin-top:32px">EN PRÉ-ENREGISTREMENT</div>
+        <sc-if value="{{ hasBonsEnAttente }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px;margin-bottom:32px">
+            <sc-for list="{{ bonsEnAttente }}" as="b" hint-placeholder-count="2">
+              <div style="{{ b.cardStyle }}">
+                <div style="display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px dashed var(--ink-14);margin-bottom:14px;flex-wrap:wrap">
+                  <div style="min-width:0;flex:1">
+                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-64);margin-bottom:6px">BON DE COMMANDE</div>
+                    <div style="font:700 14px/1.2 'JetBrains Mono',monospace">{{ b.ref }}</div>
+                  </div>
+                  <span style="{{ b.statutStyle }}">{{ b.statutLabel }}</span>
                 </div>
-                <span style="{{ b.statutStyle }}">{{ b.statutLabel }}</span>
+                <div style="display:flex;flex-direction:column;gap:9px;font:500 12.5px/1.4 Manrope,sans-serif;color:var(--ink-72);margin-bottom:14px">
+                  <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Fournisseur</span><span>{{ b.fournisseur }}</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Provenance</span><span>{{ b.provenance }}</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Lunettes</span><span style="font-family:'JetBrains Mono',monospace">{{ b.unites }}</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Date d'envoi</span><span style="font-family:'JetBrains Mono',monospace">{{ b.date }}</span></div>
+                </div>
+                <div style="padding:14px 16px 11px;border-radius:16px;background:var(--card);border:1px solid var(--ink-1)">
+                  <div style="{{ b.barcodeStyle }}"></div>
+                  <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ink-68);margin-top:8px;text-align:center">{{ b.barcodeNum }}</div>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+                  <button data-bon-print="true" data-bon-ref="{{ b.ref }}" data-bon-barcode="{{ b.barcodeNum }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;flex:1;min-width:140px;padding:12px 16px;border-radius:999px;border:1px solid rgba(95,194,217,.34);background:rgba(95,194,217,.14);color:var(--info-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.26)"><span data-icon="printer" style="display:grid;place-items:center;font-size:16px"></span>Imprimer & télécharger</button>
+                </div>
               </div>
-              <div style="display:flex;flex-direction:column;gap:9px;font:500 12.5px/1.4 Manrope,sans-serif;color:var(--ink-72);margin-bottom:14px">
-                <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Fournisseur</span><span>{{ b.fournisseur }}</span></div>
-                <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Provenance</span><span>{{ b.provenance }}</span></div>
-                <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Lunettes</span><span style="font-family:'JetBrains Mono',monospace">{{ b.unites }}</span></div>
-                <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Date d'envoi</span><span style="font-family:'JetBrains Mono',monospace">{{ b.date }}</span></div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ hasBonsEnAttente }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:24px;border-radius:18px;background:var(--srf-7);border:1.5px dashed var(--ink-12);text-align:center;margin-bottom:32px">
+            <div style="font:500 13px/1.4 Manrope,sans-serif;color:var(--ink-62)">Aucun bon en pré-enregistrement</div>
+          </div>
+        </sc-if>
+
+        <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-66);margin-bottom:16px">ARRIVÉS AU STOCK GÉNÉRAL</div>
+        <sc-if value="{{ hasBonsArrivés }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px">
+            <sc-for list="{{ bonsArrivés }}" as="b" hint-placeholder-count="2">
+              <div style="{{ b.cardStyle }}">
+                <div style="display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px dashed var(--ink-14);margin-bottom:14px;flex-wrap:wrap">
+                  <div style="min-width:0;flex:1">
+                    <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ink-64);margin-bottom:6px">BON DE COMMANDE</div>
+                    <div style="font:700 14px/1.2 'JetBrains Mono',monospace">{{ b.ref }}</div>
+                  </div>
+                  <span style="{{ b.statutStyle }}">{{ b.statutLabel }}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:9px;font:500 12.5px/1.4 Manrope,sans-serif;color:var(--ink-72);margin-bottom:14px">
+                  <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Fournisseur</span><span>{{ b.fournisseur }}</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Provenance</span><span>{{ b.provenance }}</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Lunettes</span><span style="font-family:'JetBrains Mono',monospace">{{ b.unites }}</span></div>
+                  <div style="display:flex;justify-content:space-between;gap:10px"><span style="color:var(--ink-62)">Date d'envoi</span><span style="font-family:'JetBrains Mono',monospace">{{ b.date }}</span></div>
+                </div>
+                <div style="padding:14px 16px 11px;border-radius:16px;background:var(--card);border:1px solid var(--ink-1)">
+                  <div style="{{ b.barcodeStyle }}"></div>
+                  <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ink-68);margin-top:8px;text-align:center">{{ b.barcodeNum }}</div>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+                  <button data-bon-print="true" data-bon-ref="{{ b.ref }}" data-bon-barcode="{{ b.barcodeNum }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;flex:1;min-width:140px;padding:12px 16px;border-radius:999px;border:1px solid rgba(95,194,217,.34);background:rgba(95,194,217,.14);color:var(--info-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.26)"><span data-icon="printer" style="display:grid;place-items:center;font-size:16px"></span>Imprimer & télécharger</button>
+                </div>
               </div>
-              <div style="padding:14px 16px 11px;border-radius:16px;background:var(--card);border:1px solid var(--ink-1)">
-                <div style="{{ b.barcodeStyle }}"></div>
-                <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--ink-68);margin-top:8px;text-align:center">{{ b.barcodeNum }}</div>
-              </div>
-              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
-                <button data-bon-print="true" data-bon-ref="{{ b.ref }}" data-bon-barcode="{{ b.barcodeNum }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;flex:1;min-width:140px;padding:12px 16px;border-radius:999px;border:1px solid rgba(95,194,217,.34);background:rgba(95,194,217,.14);color:var(--info-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.26)"><span data-icon="printer" style="display:grid;place-items:center;font-size:16px"></span>Imprimer & télécharger</button>
-              </div>
-            </div>
-          </sc-for>
-        </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ hasBonsArrivés }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:24px;border-radius:18px;background:var(--srf-7);border:1.5px dashed var(--ink-12);text-align:center">
+            <div style="font:500 13px/1.4 Manrope,sans-serif;color:var(--ink-62)">Aucun bon arrivé au stock général</div>
+          </div>
+        </sc-if>
       </div>
     </sc-if>
 
@@ -1405,6 +1447,16 @@ class Component extends DCLogic {
       cardStyle: `padding:22px 24px;border-radius:22px;background:${glass};border:1px solid ${b.statut === 'arrive' ? 'rgba(30,143,99,.24)' : 'var(--ink-09)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9)`
     }));
 
+    const bonsEnAttente = bons.filter((b, idx) => {
+      const orig = bonsDB[idx];
+      return orig && (orig.statut === 'attente' || orig.statut === 'preenr' || orig.statut === 'envoye');
+    });
+    
+    const bonsArrivés = bons.filter((b, idx) => {
+      const orig = bonsDB[idx];
+      return orig && orig.statut === 'arrive';
+    });
+
     // --- validations ---
     const valStatuts = {
       attente: { label: 'En attente de validation', style: tagWarn },
@@ -1858,6 +1910,10 @@ class Component extends DCLogic {
         { label: 'ARRIVÉS AU STOCK', value: String(bonsDB.filter(b => b.statut === 'arrive').length), color: 'var(--ok-ink)' }
       ],
       bons,
+      bonsEnAttente,
+      bonsArrivés,
+      hasBonsEnAttente: bonsEnAttente.length > 0,
+      hasBonsArrivés: bonsArrivés.length > 0,
       fournisseurOpts: this.FOURNISSEURS.map(f => ({ label: f, value: f })),
       provenanceOpts: this.PROVENANCES.map(p => ({ label: p, value: p })),
       bFournisseur: s.bFournisseur, bProvenance: s.bProvenance, bUnites: s.bUnites, bDate: s.bDate,

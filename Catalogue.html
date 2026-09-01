@@ -114,7 +114,7 @@
             <div style="{{ m.cardStyle }}">
               <button onClick="{{ m.onOpen }}" style="display:block;width:100%;padding:0;border:0;background:transparent;cursor:pointer;text-align:left">
                 <div style="position:relative;width:100%;aspect-ratio:4/3;border-radius:16px;overflow:hidden;background:var(--srf-7);border:1px solid var(--ink-09);margin-bottom:14px">
-                  <image-slot id="{{ m.slotId }}" shape="rect" placeholder="{{ m.slotHint }}"></image-slot>
+                  <image-slot id="{{ m.slotId }}" src="{{ m.photoUrl }}" shape="rect" placeholder="{{ m.slotHint }}"></image-slot>
                 </div>
                 <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
                   <span style="font:600 14px/1.25 Sora,sans-serif;letter-spacing:-.012em;flex:1;min-width:0">{{ m.marque }}</span>
@@ -239,7 +239,7 @@
       <div style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:26px;align-items:start">
         <div>
           <div style="position:relative;width:100%;aspect-ratio:4/3;border-radius:20px;overflow:hidden;background:var(--srf-7);border:1px solid var(--ink-09);margin-bottom:16px">
-            <image-slot id="{{ detSlotId }}" shape="rect" placeholder="{{ detSlotHint }}"></image-slot>
+            <image-slot id="{{ detSlotId }}" src="{{ detPhotoUrl }}" shape="rect" placeholder="{{ detSlotHint }}"></image-slot>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <sc-for list="{{ detCarac }}" as="c" hint-placeholder-count="6">
@@ -465,10 +465,11 @@ class Component extends DCLogic {
       const key = [m.marque, m.forme, m.type, m.gamme, m.genre].join('|');
       let g = map.get(key);
       if (!g) {
-        g = { key, marque: m.marque || '—', forme: m.forme || '—', type: m.type || '—', gamme: m.gamme || '—', genre: m.genre || '—', matieres: [], prix: m.prix || 0, couleurs: new Map(), total: 0 };
+        g = { key, marque: m.marque || '—', forme: m.forme || '—', type: m.type || '—', gamme: m.gamme || '—', genre: m.genre || '—', matieres: [], prix: m.prix || 0, couleurs: new Map(), total: 0, photoUrl: m.photo || m.photo_monture_url || m.photoMontureUrl || m.photoMonture || null };
         map.set(key, g);
       }
       g.total++;
+      if (!g.photoUrl) g.photoUrl = m.photo || m.photo_monture_url || m.photoMontureUrl || m.photoMonture || null;
       if (m.matiere && g.matieres.indexOf(m.matiere) < 0) g.matieres.push(m.matiere);
       if (m.prix && (!g.prix || m.prix < g.prix)) g.prix = m.prix;
       const c = m.couleur || 'Sans couleur';
@@ -526,6 +527,7 @@ class Component extends DCLogic {
       return {
         slotId: 'cat-' + this.slug(g.key),
         slotHint: 'Photo ' + g.marque,
+        photoUrl: g.photoUrl || '',
         marque: g.marque,
         sousTitre: `${g.forme} · ${g.type} · ${g.genre}`,
         gamme: g.gamme, gammeStyle: tagGamme,
@@ -558,6 +560,7 @@ class Component extends DCLogic {
       detOuvert: true,
       detSlotId: 'cat-' + this.slug(g.key),
       detSlotHint: 'Photo ' + g.marque,
+      detPhotoUrl: g.photoUrl || '',
       detMarque: g.marque,
       detType: g.type, detGamme: g.gamme,
       detSousTitre: `${g.forme} · ${g.genre} · ${g.total} exemplaires au stock général`,
