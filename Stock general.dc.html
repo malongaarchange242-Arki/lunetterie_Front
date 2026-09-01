@@ -2184,6 +2184,10 @@ class Component extends DCLogic {
         const curL = (st.lignes || {})[cart.id] || lignesState;
         return { lignes: { ...(st.lignes || {}), [cart.id]: curL.map(l => l.key === key ? { ...l, ...patch } : l) } };
       });
+      const photoView = photo => {
+        const kind = String(photo && (photo.kind || photo.type || '')).toLowerCase();
+        return kind === 'branche' || kind === 'branch' ? 'branche' : (kind === 'rear' || kind === 'arriere' ? 'rear' : 'face');
+      };
 
       const pool = photos.map((p, i) => {
         const picked = s.pickPhoto === p.id;
@@ -2266,7 +2270,9 @@ class Component extends DCLogic {
           // Vérifier si la photo est déjà dans CETTE LIGNE (pas d'autres)
           const isAlreadyInThisLine = (l.photos || []).some(p => p.id === draggedPhotoId);
           if (isAlreadyInThisLine) return;
-          setLigne(l.key, { photos: [...(l.photos || []), { ...draggedPhoto, view: 'face' }] });
+          const assignedPhoto = { ...draggedPhoto, view: photoView(draggedPhoto) };
+          setLigne(l.key, { photos: [...(l.photos || []), assignedPhoto] });
+          if (assignedPhoto.view === 'branche') this.extractBranchReference(assignedPhoto.src, cart.id, l.key);
           this.dragPhoto = null;
         },
         onWellClick: () => {
@@ -2277,7 +2283,9 @@ class Component extends DCLogic {
           // Vérifier si la photo est déjà dans CETTE LIGNE (pas d'autres)
           const isAlreadyInThisLine = (l.photos || []).some(p => p.id === pickedPhotoId);
           if (isAlreadyInThisLine) return;
-          setLigne(l.key, { photos: [...(l.photos || []), { ...pickedPhoto, view: 'face' }] });
+          const assignedPhoto = { ...pickedPhoto, view: photoView(pickedPhoto) };
+          setLigne(l.key, { photos: [...(l.photos || []), assignedPhoto] });
+          if (assignedPhoto.view === 'branche') this.extractBranchReference(assignedPhoto.src, cart.id, l.key);
           this.setState({ pickPhoto: null });
         },
         menuOpen: false,
