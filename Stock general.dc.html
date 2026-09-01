@@ -2309,21 +2309,29 @@ class Component extends DCLogic {
         return { lignes: { ...(st.lignes || {}), [cart.id]: curL.map(l => l.key === key ? { ...l, ...patch } : l) } };
       });
       const duplicateLine = source => {
-        if (!source || source.saved) {
+        if (!source) {
           this.toast('triangle-alert', 'Ligne invalide', 'Cette ligne ne peut pas être dupliquée.', 'warn');
           return;
         }
-        if (!source.forme || !source.marque || !source.couleur || !source.matiere) {
-          this.toast('triangle-alert', 'Ligne incomplète', 'Renseignez la forme, la marque, la couleur et la matière avant de dupliquer.', 'warn');
-          return;
-        }
+
         const remaining = lignesState.filter(line => !line.saved && line.key !== source.key);
         if (!remaining.length) {
-          this.toast('copy', 'Aucune ligne restante', 'Cette monture est déjà la seule ligne à compléter.', 'info');
+          this.toast('copy', 'Aucune ligne restante', 'Toutes les lignes sont déjà remplies ou sauvegardées.', 'info');
           return;
         }
-        const hasRef = source.ref && String(source.ref).trim().length > 0;
+
+        const hasForme = !!source.forme;
+        const hasMarque = !!source.marque;
+        const hasCouleur = !!source.couleur;
+        const hasMatiere = !!source.matiere;
+        const hasRef = !!(source.ref && String(source.ref).trim().length > 0);
         const hasPhotos = Array.isArray(source.photos) && source.photos.length > 0;
+
+        if (!hasForme && !hasMarque && !hasCouleur && !hasMatiere && !hasRef && !hasPhotos) {
+          this.toast('triangle-alert', 'Rien à dupliquer', 'Cette ligne est vide. Remplissez au moins une caractéristique avant de dupliquer.', 'warn');
+          return;
+        }
+
         this.setState(st => {
           const currentLines = (st.lignes || {})[cart.id] || lignesState;
           return {
@@ -2333,12 +2341,12 @@ class Component extends DCLogic {
                 if (line.saved || line.key === source.key) return line;
                 return {
                   ...line,
-                  ref: hasRef ? source.ref : line.ref || '',
+                  ref: hasRef ? source.ref : (line.ref || ''),
                   refId: hasRef ? (source.refId || source.ref || '') : (line.refId || ''),
-                  forme: source.forme,
-                  marque: source.marque,
-                  couleur: source.couleur,
-                  matiere: source.matiere,
+                  forme: hasForme ? source.forme : (line.forme || ''),
+                  marque: hasMarque ? source.marque : (line.marque || ''),
+                  couleur: hasCouleur ? source.couleur : (line.couleur || ''),
+                  matiere: hasMatiere ? source.matiere : (line.matiere || ''),
                   photos: hasPhotos ? (source.photos || []).map(photo => ({
                     ...photo,
                     view: photo.view || photo.kind || 'face',
@@ -2349,8 +2357,17 @@ class Component extends DCLogic {
             }
           };
         });
+
+        const copiedFields = [];
+        if (hasForme) copiedFields.push('forme');
+        if (hasMarque) copiedFields.push('marque');
+        if (hasCouleur) copiedFields.push('couleur');
+        if (hasMatiere) copiedFields.push('matière');
+        if (hasRef) copiedFields.push('référence');
+        if (hasPhotos) copiedFields.push('photos');
+
         const count = remaining.length;
-        this.toast('copy', `Monture dupliquée sur ${count} ligne${count > 1 ? 's' : ''}`, `${count} ligne${count > 1 ? 's' : ''} pré-remplie${count > 1 ? 's' : ''} avec les mêmes caractéristiques${hasRef ? ' et référence' : ''}${hasPhotos ? ' et photos' : ''}.`, 'ok');
+        this.toast('copy', `Duplication sur ${count} ligne${count > 1 ? 's' : ''}`, `${copiedFields.join(', ')} copié${copiedFields.length > 1 ? 'es' : ''} sur ${count} ligne${count > 1 ? 's' : ''}.`, 'ok');
       };
       const photoView = photo => {
         const kind = String(photo && (photo.kind || photo.type || '')).toLowerCase();
