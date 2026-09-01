@@ -1436,6 +1436,25 @@ class Component extends DCLogic {
       this.toast('triangle-alert', 'Analyse branche impossible', error.message || 'Saisissez la référence manuellement.', 'warn');
     }
   }
+  assignReferenceToFirstAvailableLine(cartonId, reference, preferredLineKey) {
+    const value = String(reference || '').trim().toUpperCase();
+    if (!value || !cartonId) return;
+    this.setState(st => {
+      const currentLines = (st.lignes || {})[cartonId] || this.buildLignes(this.findCarton(cartonId));
+      if (!currentLines.length) return null;
+      const targetLine = preferredLineKey
+        ? currentLines.find(line => line.key === preferredLineKey && !line.saved)
+        : currentLines.find(line => !line.saved && (!line.ref || !String(line.ref).trim()));
+      if (!targetLine) return null;
+      return {
+        lignes: {
+          ...(st.lignes || {}),
+          [cartonId]: currentLines.map(line => line.key === targetLine.key ? { ...line, ref: value, refId: value } : line)
+        }
+      };
+    });
+  }
+
   addBranchReference(cartonId, reference, lineKey) {
     const value = String(reference || '').trim().toUpperCase();
     if (!value || !cartonId) return;
@@ -1450,6 +1469,7 @@ class Component extends DCLogic {
       };
       return { branchRefs: { ...(st.branchRefs || {}), [cartonId]: [...current, item] } };
     });
+    this.assignReferenceToFirstAvailableLine(cartonId, value, lineKey || undefined);
   }
   findCarton(cartonId) {
     const arrivals = (window.LStore ? window.LStore.get().arrivees : []) || [];
@@ -2290,8 +2310,8 @@ class Component extends DCLogic {
       });
       const duplicateLine = source => {
         if (source.saved) return;
-        if (!source.ref || !source.forme || !source.marque || !source.couleur || !source.matiere) {
-          this.toast('triangle-alert', 'Ligne incomplète', 'Renseignez la référence et les caractéristiques avant de dupliquer.', 'warn');
+        if (!source.forme || !source.marque || !source.couleur || !source.matiere) {
+          this.toast('triangle-alert', 'Ligne incomplète', 'Renseignez au moins les caractéristiques avant de dupliquer.', 'warn');
           return;
         }
         const remaining = lignesState.filter(line => !line.saved && line.key !== source.key);
@@ -2306,8 +2326,8 @@ class Component extends DCLogic {
               ...(st.lignes || {}),
               [cart.id]: currentLines.map(line => line.saved || line.key === source.key ? line : {
                 ...line,
-                ref: source.ref,
-                refId: '',
+                ref: source.ref || line.ref || '',
+                refId: source.refId || line.refId || '',
                 forme: source.forme,
                 marque: source.marque,
                 couleur: source.couleur,
@@ -2488,6 +2508,9 @@ class Component extends DCLogic {
       const lignesCompletes = lignesAEnregistrer.filter(l =>
         String(l.ref || '').trim() && l.forme && l.marque && l.couleur && l.matiere
       );
+      const readyLines = lignesAEnregistrer.filter(l =>
+        l.forme && l.marque && l.couleur && l.matiere && String(l.ref || '').trim()
+      );
       const createMontures = async () => {
         if (!lignesAEnregistrer.length) {
           this.toast('package-check', 'Carton déjà enregistré', 'Toutes les montures sont déjà en base.', 'info');
@@ -2650,7 +2673,7 @@ class Component extends DCLogic {
       return {
         lignes, pool, kVarChips, refPool,
         bulkSaveLabel: `Enregistrer les ${lignesAEnregistrer.length} montures`,
-        bulkSaveStyle: lignesAEnregistrer.length && lignesCompletes.length === lignesAEnregistrer.length
+        bulkSaveStyle: lignesAEnregistrer.length && readyLines.length === lignesAEnregistrer.length
           ? 'display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -14px rgba(191,33,33,.6)'
           : 'display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13.5px/1.3 Manrope,sans-serif;cursor:not-allowed',
         createMontures,
