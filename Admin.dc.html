@@ -1596,8 +1596,8 @@ class Component extends DCLogic {
             ref: item.reference || item.ref || item.barcode || item.uid || '—',
             uid: item.uid || item.barcode || item.reference || '',
             marque: item.brand || item.marque || '—',
-            forme: item.forme || '—',
-            couleur: item.couleur || '—',
+            forme: item.shape || item.forme || '—',
+            couleur: item.color || item.couleur || '—',
             emplacement: item.emplacement || item.location_code || '—',
             prix: Number(item.prix || 0)
           }))
