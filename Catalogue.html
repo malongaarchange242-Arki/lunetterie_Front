@@ -396,7 +396,9 @@ class Component extends DCLogic {
       this._backendStock = list
         .filter(item => (item.status || '').toUpperCase() === 'EN_STOCK_GENERAL')
         .map(item => ({
-          uid: item.barcode || item.id || `${Date.now()}-${Math.random()}`,
+          id: item.id ?? null,
+          barcode: String(item.barcode || '').trim(),
+          uid: String(item.barcode || item.id || '').trim() || `${Date.now()}-${Math.random()}`,
           ref: item.reference || item.barcode || '',
           marque: item.brand || '—',
           forme: item.shape || '—',
@@ -980,10 +982,12 @@ class Component extends DCLogic {
           const ids = e.grp.glassIds.get(e.couleur) || [];
           const selected = pool.slice(0, e.qty);
           selected.forEach((uid, index) => {
+            const rawBarcode = String(uid || '').trim();
+            if (!rawBarcode || rawBarcode === 'undefined' || rawBarcode === 'null') return;
             const glassId = ids[index] ?? ids[0];
             const item = {
-              barcode: String(uid),
-              reference: String(e.grp.reference || e.grp.marque || uid),
+              barcode: rawBarcode,
+              reference: String(e.grp.reference || e.grp.marque || rawBarcode),
               brand: String(e.grp.marque || '—'),
               location_code: String(e.grp.locationCode || '')
             };
