@@ -1184,13 +1184,7 @@ class Component extends DCLogic {
     stockQ: '', stockMarque: 'Toutes', stockForme: 'Toutes', stockGamme: 'Toutes', stockValise: 'Toutes', stockCarton: 'Toutes', stockDetailOpen: false, stockDetail: null, compoOnglet: 'Marque',
     magasin: 'Pointe-Noire', origFilter: 'tous', demId: null, sorties: 0,
     expeditions: [], expId: null,
-    demandes: [
-      { id: 'd1', magasin: 'Pointe-Noire', origine: 'auto', ref: 'RQ-2026-1041', date: '28/08/2026', motif: 'Seuil atteint · 9 % de stock restant', besoin: 4, statut: 'valide', scanned: [], expedie: false, cartonCode: null },
-      { id: 'd2', magasin: 'Brazzaville', origine: 'responsable', ref: 'RQ-2026-1042', date: '28/08/2026', motif: 'Responsable Brazzaville', besoin: 3, statut: 'valide', scanned: [], expedie: false, cartonCode: null },
-      { id: 'd3', magasin: 'Kinshasa', origine: 'auto', ref: 'RQ-2026-1043', date: '27/08/2026', motif: 'Seuil atteint · 7 % de stock restant', besoin: 2, statut: 'valide', scanned: [], expedie: false, cartonCode: null },
-      { id: 'd4', magasin: 'Lubumbashi', origine: 'responsable', ref: 'RQ-2026-1044', date: '26/08/2026', motif: 'Responsable Lubumbashi', besoin: 2, statut: 'valide', scanned: [], expedie: false, cartonCode: null },
-      { id: 'd5', magasin: 'Kolwezi', origine: 'auto', ref: 'RQ-2026-1045', date: '26/08/2026', motif: 'Seuil atteint · 8 % de stock restant', besoin: 2, statut: 'valide', scanned: [], expedie: false, cartonCode: null }
-    ],
+    demandes: [],
     commandes: [
       {
         id: 'c1', ref: 'BC-2026-0418', provenance: 'Dubaï', dateArr: '26/08/2026',
@@ -1240,18 +1234,16 @@ class Component extends DCLogic {
   };
 
   store() {
-    const localStore = window.LStore ? window.LStore.get() : {};
     const apiData = (this.state && this.state.apiData) ? this.state.apiData : null;
-    if (!apiData || typeof apiData !== 'object') return localStore;
+    if (!apiData || typeof apiData !== 'object') return {};
     return {
-      ...localStore,
       ...apiData,
-      arrivees: Array.isArray(apiData.arrivees) ? apiData.arrivees : (Array.isArray(localStore.arrivees) ? localStore.arrivees : []),
-      montures: Array.isArray(apiData.montures) ? apiData.montures : (Array.isArray(localStore.montures) ? localStore.montures : []),
-      demandes: Array.isArray(apiData.demandes) ? apiData.demandes : (Array.isArray(localStore.demandes) ? localStore.demandes : []),
-      cartonsBoutique: Array.isArray(apiData.cartonsBoutique) ? apiData.cartonsBoutique : (Array.isArray(localStore.cartonsBoutique) ? localStore.cartonsBoutique : []),
-      stockNeeds: Array.isArray(apiData.stockNeeds) ? apiData.stockNeeds : (Array.isArray(localStore.stockNeeds) ? localStore.stockNeeds : []),
-      approvisionnements: Array.isArray(apiData.approvisionnements) ? apiData.approvisionnements : (Array.isArray(localStore.approvisionnements) ? localStore.approvisionnements : [])
+      arrivees: Array.isArray(apiData.arrivees) ? apiData.arrivees : [],
+      montures: Array.isArray(apiData.montures) ? apiData.montures : [],
+      demandes: Array.isArray(apiData.demandes) ? apiData.demandes : [],
+      cartonsBoutique: Array.isArray(apiData.cartonsBoutique) ? apiData.cartonsBoutique : [],
+      stockNeeds: Array.isArray(apiData.stockNeeds) ? apiData.stockNeeds : [],
+      approvisionnements: Array.isArray(apiData.approvisionnements) ? apiData.approvisionnements : []
     };
   }
   componentDidMount() {
@@ -1259,6 +1251,16 @@ class Component extends DCLogic {
     this.paintBg();
     const S = window.LStore;
     if (S) this._sub = S.subscribe(() => this.setState({ _tick: Date.now() }));
+    if (S) {
+      S.set({
+        arrivees: [],
+        montures: [],
+        demandes: [],
+        cartonsBoutique: [],
+        stockNeeds: [],
+        approvisionnements: []
+      });
+    }
     this.loadCurrentUser();
     this.loadBackendData();
     this.loadExpedierData();
