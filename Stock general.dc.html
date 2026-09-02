@@ -1755,8 +1755,11 @@ class Component extends DCLogic {
             date: item.date || this.dateFr(),
             motif: item.motif || 'Liste envoyée vers le magasin',
             besoin: Number(item.besoin) || 0,
-            statut: item.statut === 'valide' ? 'valide' : (item.statut === 'refuse' ? 'refuse' : 'attente'),
-            scanned: Array.isArray(item.uids) ? item.uids : [],
+            statut: item.statut === 'valide' ? 'valide' : (item.statut === 'refuse' ? 'refuse' : (item.statut === 'expediee' ? 'expediee' : 'attente')),
+            source: item.source || item.sourceLabel || 'Stock général',
+            uids: Array.isArray(item.uids) ? item.uids : [],
+            items: Array.isArray(item.items) ? item.items : [],
+            scanned: [],
             expedie: !!item.cartonCode || item.statut === 'expediee',
             cartonCode: item.cartonCode || null
           }));
@@ -3031,7 +3034,29 @@ class Component extends DCLogic {
         .flatMap(d => Array.isArray(d.scanned) ? d.scanned : [])
     );
     const dispo = stock.filter(m => !m.sorti && !reserved.has(m.uid));
-        const demLignesSrc = dem ? dispo.slice(0, dem.besoin) : [];
+        const lineFromItem = item => {
+          const uid = String(item.uid || item.barcode || '').trim();
+          const ref = String(item.reference || item.ref || uid || '—').trim();
+          const found = stock.find(m => (uid && m.uid === uid) || (ref && m.ref === ref));
+          if (found) return found;
+          return {
+            uid,
+            ref,
+            marque: item.brand || item.marque || '—',
+            forme: item.shape || item.forme || '—',
+            couleur: item.color || item.couleur || '—',
+            matiere: item.matiere || '',
+            valise: item.valise || '—',
+            carton: item.carton || '—',
+            cartonNum: item.cartonNum || item.carton || '—',
+            photo: 0,
+            sorti: false
+          };
+        };
+        const demItems = dem && Array.isArray(dem.items) ? dem.items : [];
+        const demLignesSrc = dem
+          ? (demItems.length ? demItems.map(lineFromItem) : dispo.slice(0, dem.besoin))
+          : [];
         const scannedSet = new Set(dem ? dem.scanned : []);
         const demScanned = demLignesSrc.filter(m => scannedSet.has(m.uid)).length;
         const demTotal = demLignesSrc.length;
@@ -3062,8 +3087,9 @@ class Component extends DCLogic {
           })),
           magasinActif: s.magasin,
           demandes: view.map(d => {
-            const src = dispo.slice(0, d.besoin);
-            const set = new Set(d.scanned);
+            const dItems = Array.isArray(d.items) ? d.items : [];
+            const src = dItems.length ? dItems.map(lineFromItem) : dispo.slice(0, d.besoin);
+            const set = new Set(Array.isArray(d.scanned) ? d.scanned : []);
             const sc = src.filter(m => set.has(m.uid)).length;
             const tot = src.length;
             return {
@@ -3126,14 +3152,37 @@ class Component extends DCLogic {
           demCreateStyle: (dem && demTotal > 0 && demScanned === demTotal && !dem.expedie)
             ? `display:inline-flex;align-items:center;gap:10px;padding:15px 24px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap;box-shadow:0 14px 30px -14px rgba(191,33,120,${(.6 * glow).toFixed(2)}),inset 0 1px 0 var(--srf-5);transition:all .28s ${ease}`
             : `display:inline-flex;align-items:center;gap:10px;padding:15px 24px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13.5px/1.3 Manrope,sans-serif;cursor:not-allowed;white-space:nowrap`,
-          createCarton: () => {
+          createCarton: async () => {
             if (!dem || dem.expedie) return;
             if (!demTotal) { this.toast('triangle-alert', 'Stock insuffisant', 'Aucune monture disponible', 'warn'); return; }
             if (demScanned !== demTotal) {
               this.toast('lock', 'Liste incomplète', `${demTotal - demScanned} monture(s) à scanner`, 'warn');
               return;
             }
-            const code = `EXP-${dem.magasin.slice(0, 3).toUpperCase()}-${dem.ref.slice(-4)}`;
+            let code = `EXP-${dem.magasin.slice(0, 3).toUpperCase()}-${dem.ref.slice(-4)}`;
+            const numericID = Number(dem.id);
+            if (Number.isFinite(numericID) && numericID > 0) {
+              if (!s.stationId) {
+                this.toast('triangle-alert', 'Station inconnue', 'Reconnectez-vous pour identifier le stock expéditeur.', 'warn');
+                return;
+              }
+              try {
+                const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/send-lists/dispatch`, {
+                  method: 'POST',
+                  headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: numericID, from_station_id: Number(s.stationId) })
+                });
+                const payload = await response.json().catch(() => null);
+                if (!response.ok) {
+                  throw new Error(payload && (payload.error || payload.message) || 'Expédition backend impossible');
+                }
+                const dispatch = payload && payload.data && payload.data.dispatch ? payload.data.dispatch : null;
+                code = dispatch && dispatch.box_code ? dispatch.box_code : code;
+              } catch (error) {
+                this.toast('triangle-alert', 'Expédition impossible', error.message || 'Vérifiez la connexion backend.', 'warn');
+                return;
+              }
+            }
             this.markSortis(demLignesSrc);
             const envoi = {
               id: 'e' + Date.now(), ref: dem.ref, magasin: dem.magasin, origine: dem.origine,

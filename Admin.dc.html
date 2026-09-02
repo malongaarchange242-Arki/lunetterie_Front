@@ -1658,13 +1658,40 @@ class Component extends DCLogic {
       traiteeIcon: (d.statut === 'refuse' || d.statut === 'refusee') ? 'circle-slash' : (d.statut === 'expediee' ? 'truck' : 'badge-check'),
       traiteeColor: (d.statut === 'refuse' || d.statut === 'refusee') ? 'var(--acc-ink)' : 'var(--ok-ink)',
       cardStyle: `padding:22px 24px;border-radius:22px;background:${glass};border:1px solid ${d.statut === 'attente' ? 'rgba(166,106,5,.26)' : 'var(--ink-09)'};backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9)`,
-      onValider: () => {
-        S.set({ demandes: demandesDB.map(x => x.id === d.id ? { ...x, statut: 'valide' } : x) });
-        this.toast('badge-check', 'Liste validée', `${d.ref} · ${d.magasin} · ${d.besoin} u.`, 'ok');
+      onValider: async () => {
+        try {
+          const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/send-lists/seen`, {
+            method: 'POST',
+            headers: { ...this.apiHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [Number(d.id)] })
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload && (payload.error || payload.message) || 'Validation impossible');
+          }
+          S.set({ demandes: demandesDB.map(x => x.id === d.id ? { ...x, statut: 'valide' } : x) });
+          this.toast('badge-check', 'Liste validée', `${d.ref} · ${d.magasin} · ${d.besoin} u.`, 'ok');
+          this.loadValidations();
+        } catch (error) {
+          this.toast('triangle-alert', 'Validation impossible', error.message || 'Vérifiez la connexion backend', 'warn');
+        }
       },
-      onRefuser: () => {
-        S.set({ demandes: demandesDB.map(x => x.id === d.id ? { ...x, statut: 'refuse' } : x) });
-        this.toast('circle-slash', 'Liste refusée', `${d.ref} · ${d.magasin}`, 'warn');
+      onRefuser: async () => {
+        try {
+          const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/send-lists/${d.id}`, {
+            method: 'DELETE',
+            headers: this.apiHeaders()
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload && (payload.error || payload.message) || 'Refus impossible');
+          }
+          S.set({ demandes: demandesDB.map(x => x.id === d.id ? { ...x, statut: 'refuse' } : x) });
+          this.toast('circle-slash', 'Liste refusée', `${d.ref} · ${d.magasin}`, 'warn');
+          this.loadValidations();
+        } catch (error) {
+          this.toast('triangle-alert', 'Refus impossible', error.message || 'Vérifiez la connexion backend', 'warn');
+        }
       }
       };
     });
