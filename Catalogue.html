@@ -398,7 +398,7 @@ class Component extends DCLogic {
         .map(item => ({
           id: item.id ?? null,
           barcode: String(item.barcode || '').trim(),
-          uid: String(item.barcode || item.id || '').trim() || `${Date.now()}-${Math.random()}`,
+          uid: String(item.barcode || '').trim(),
           ref: item.reference || item.barcode || '',
           marque: item.brand || '—',
           forme: item.shape || '—',
@@ -679,7 +679,7 @@ class Component extends DCLogic {
     const map = new Map();
     stock.forEach(m => {
       const key = [m.marque, m.forme, m.type, m.gamme, m.genre].join('|');
-      const rawBarcode = String(m.barcode || m.uid || m.id || '').trim();
+      const rawBarcode = String(m.barcode || m.uid || '').trim();
       const rawId = m.id != null ? Number(m.id) : null;
       let g = map.get(key);
       if (!g) {
@@ -806,7 +806,7 @@ class Component extends DCLogic {
     const couleursArr = g ? Array.from(g.couleurs.entries()) : [];
     const selC = g ? (s.selCouleur && g.couleurs.has(s.selCouleur) ? s.selCouleur : (couleursArr[0] ? couleursArr[0][0] : null)) : null;
     const dejaSel = g && selC ? this.panierQty(g.key, selC) : 0;
-    const maxSel = g && selC ? g.couleurs.get(selC).length - dejaSel : 0;
+    const maxSel = g && selC ? Math.max(g.couleurs.get(selC).length, g.glassIds.get(selC).length) - dejaSel : 0;
     const qty = Math.max(1, Math.min(Math.max(maxSel, 1), parseInt(s.qty, 10) || 1));
     const detImageView = s.detImageView || 'front';
     const detFrontUrl = g ? (g.photoFrontUrl || g.photoUrl || '') : '';
@@ -875,7 +875,7 @@ class Component extends DCLogic {
         : 'border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);cursor:not-allowed'),
       detAdd: () => {
         if (maxSel <= 0) return;
-        this.setPanier(g.key, selC, dejaSel + qty, g.couleurs.get(selC).length);
+        this.setPanier(g.key, selC, dejaSel + qty, Math.max(g.couleurs.get(selC).length, g.glassIds.get(selC).length));
         this.toast('shopping-bag', 'Ajouté à la liste', `${g.marque} · ${selC} · ×${qty}`, 'ok');
         this.setState({ ouvert: null, qty: 1 });
       }
@@ -891,7 +891,7 @@ class Component extends DCLogic {
     const montant = entries.reduce((n, e) => n + e.qty * (e.grp.prix || 0), 0);
 
     const panierLignes = entries.map(e => {
-      const max = e.grp.couleurs.get(e.couleur).length;
+      const max = Math.max(e.grp.couleurs.get(e.couleur).length, e.grp.glassIds.get(e.couleur).length);
       return {
         titre: `${e.grp.marque} · ${e.grp.forme}`,
         sous: `${e.couleur} · ${e.grp.type} · ${e.grp.gamme}`,
@@ -980,20 +980,33 @@ class Component extends DCLogic {
         entries.forEach(e => {
           const pool = e.grp.couleurs.get(e.couleur) || [];
           const ids = e.grp.glassIds.get(e.couleur) || [];
-          const selected = pool.slice(0, e.qty);
-          selected.forEach((uid, index) => {
+          const selectedBarcodes = pool.slice(0, e.qty);
+          const selectedIds = ids.slice(0, e.qty);
+
+          selectedBarcodes.forEach((uid, index) => {
             const rawBarcode = String(uid || '').trim();
-            if (!rawBarcode || rawBarcode === 'undefined' || rawBarcode === 'null') return;
-            const glassId = ids[index] ?? ids[0];
+            const glassId = selectedIds[index] ?? ids[0] ?? null;
             const item = {
-              barcode: rawBarcode,
-              reference: String(e.grp.reference || e.grp.marque || rawBarcode),
+              reference: String(e.grp.reference || e.grp.marque || rawBarcode || glassId || ''),
               brand: String(e.grp.marque || '—'),
               location_code: String(e.grp.locationCode || '')
             };
             if (glassId != null) item.glass_id = Number(glassId);
-            payloadItems.push(item);
+            if (rawBarcode && rawBarcode !== 'undefined' && rawBarcode !== 'null') item.barcode = rawBarcode;
+            if (item.barcode || item.glass_id != null) payloadItems.push(item);
           });
+
+          if (selectedBarcodes.length === 0 && selectedIds.length > 0) {
+            selectedIds.slice(0, e.qty).forEach(glassId => {
+              const item = {
+                reference: String(e.grp.reference || e.grp.marque || glassId),
+                brand: String(e.grp.marque || '—'),
+                location_code: String(e.grp.locationCode || ''),
+                glass_id: Number(glassId)
+              };
+              payloadItems.push(item);
+            });
+          }
         });
 
         if (!payloadItems.length) {
