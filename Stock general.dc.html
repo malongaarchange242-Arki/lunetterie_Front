@@ -1717,16 +1717,13 @@ class Component extends DCLogic {
         };
       });
 
-      const apiData = {
-        arrivees: updated_arrivees,
-        montures: apiMontures,
-        demandes: Array.isArray(this.state?.apiData?.demandes) ? this.state.apiData.demandes : [],
-        cartonsBoutique: Array.isArray(this.state?.apiData?.cartonsBoutique) ? this.state.apiData.cartonsBoutique : [],
-        stockNeeds: Array.isArray(this.state?.apiData?.stockNeeds) ? this.state.apiData.stockNeeds : [],
-        approvisionnements: Array.isArray(this.state?.apiData?.approvisionnements) ? this.state.apiData.approvisionnements : []
-      };
-
-      this.setState({ apiData });
+      this.setState(prev => ({
+        apiData: {
+          ...(prev.apiData || {}),
+          arrivees: updated_arrivees,
+          montures: apiMontures
+        }
+      }));
       S.set({ 
         arrivees: updated_arrivees,
         montures: apiMontures
