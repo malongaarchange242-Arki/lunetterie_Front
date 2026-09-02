@@ -3096,6 +3096,9 @@ class Component extends DCLogic {
           const valise = String(item.valise || item.valise_code || item.valiseName || '—').trim();
           const carton = String(item.carton || item.carton_code || item.cartonNum || '—').trim();
           const emplacement = valise !== '—' && carton !== '—' ? `${valise}/${carton}` : (locationCode || `${valise !== '—' ? valise : 'Emplacement'}${carton !== '—' ? `/${carton}` : ''}`);
+          const itemPhotos = Array.isArray(item.photos) ? item.photos : [];
+          const itemPhoto = itemPhotos.find(photo => String(photo && (photo.kind || photo.type || '')).toLowerCase() === 'face') || itemPhotos[0];
+          const photoUrl = this.photoUrl(item.photo_monture_url || item.photoMontureUrl || item.photo_url || item.photo || item.image_url || itemPhoto || '');
           if (found) {
             return {
               ...found,
@@ -3104,10 +3107,9 @@ class Component extends DCLogic {
               valise: found.valise || valise || '—',
               carton: found.carton || carton || '—',
               cartonNum: found.cartonNum || found.carton || carton || '—',
-              photoUrl: found.photoFront || found.photo || found.photo_monture_url || found.photoMontureUrl || ''
+              photoUrl: this.photoUrl(found.photoFront || found.photo || found.photo_monture_url || found.photoMontureUrl || photoUrl || '')
             };
           }
-            const photoUrl = this.photoUrl(item.photo_monture_url || item.photoMontureUrl || item.photo_url || item.photo || item.image_url || '');
           return {
             uid: uid || '—',
             ref,
