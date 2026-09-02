@@ -1747,22 +1747,28 @@ class Component extends DCLogic {
         const rawDemandes = validationPayload && validationPayload.data && Array.isArray(validationPayload.data.demandes) ? validationPayload.data.demandes : [];
         const mappedDemandes = rawDemandes
           .filter(item => item && (item.ref || item.magasin || item.id))
-          .map(item => ({
-            id: String(item.id || item.ref || `dem-${Date.now()}-${Math.random()}`),
-            magasin: item.magasin || 'Stock général',
-            origine: item.origine === 'admin' ? 'admin' : (item.origine === 'auto' ? 'auto' : 'responsable'),
-            ref: item.ref || `RQ-${item.id || 'N/A'}`,
-            date: item.date || this.dateFr(),
-            motif: item.motif || 'Liste envoyée vers le magasin',
-            besoin: Number(item.besoin) || 0,
-            statut: item.statut === 'valide' ? 'valide' : (item.statut === 'refuse' ? 'refuse' : (item.statut === 'expediee' ? 'expediee' : 'attente')),
-            source: item.source || item.sourceLabel || 'Stock général',
-            uids: Array.isArray(item.uids) ? item.uids : [],
-            items: Array.isArray(item.items) ? item.items : [],
-            scanned: [],
-            expedie: !!item.cartonCode || item.statut === 'expediee',
-            cartonCode: item.cartonCode || null
-          }));
+          .map(item => {
+            const origine = item.origine === 'admin' ? 'admin' : (item.origine === 'auto' ? 'auto' : 'responsable');
+            const statut = origine === 'admin'
+              ? 'valide'
+              : (item.statut === 'valide' ? 'valide' : (item.statut === 'refuse' ? 'refuse' : (item.statut === 'expediee' ? 'expediee' : 'attente')));
+            return {
+              id: String(item.id || item.ref || `dem-${Date.now()}-${Math.random()}`),
+              magasin: item.magasin || 'Stock général',
+              origine,
+              ref: item.ref || `RQ-${item.id || 'N/A'}`,
+              date: item.date || this.dateFr(),
+              motif: item.motif || 'Liste envoyée vers le magasin',
+              besoin: Number(item.besoin) || 0,
+              statut,
+              source: item.source || item.sourceLabel || 'Stock général',
+              uids: Array.isArray(item.uids) ? item.uids : [],
+              items: Array.isArray(item.items) ? item.items : [],
+              scanned: [],
+              expedie: !!item.cartonCode || item.statut === 'expediee',
+              cartonCode: item.cartonCode || null
+            };
+          });
 
         if (mappedDemandes.length > 0) {
           this.setState(prev => ({
@@ -3012,7 +3018,7 @@ class Component extends DCLogic {
       ...(() => {
         const MAGASINS = ['Pointe-Noire', 'Brazzaville', 'Kinshasa', 'Lubumbashi', 'Kolwezi'];
         const dem = s.demId ? demandesDB.find(d => d.id === s.demId) : null;
-        const forMag = demandesDB.filter(d => d.magasin === s.magasin && (d.statut === 'valide' || d.expedie));
+        const forMag = demandesDB.filter(d => d.magasin === s.magasin && (d.statut === 'valide' || d.expedie || d.origine === 'admin'));
         const view = forMag.filter(d => s.origFilter === 'tous' || d.origine === s.origFilter);
 
         const origTag = o => o === 'auto'
