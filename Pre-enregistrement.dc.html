@@ -592,7 +592,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
                           </div>
                           <span style="{{ h.statutStyle }}">Archivée</span>
                         </div>
-                        <div style="font:500 12px/1.5 Manrope,sans-serif;color:var(--ink-66);margin-bottom:14px">{{ h.provenance }} → {{ h.destination }}</div>
+                        <div style="font:500 12px/1.5 Manrope,sans-serif;color:var(--ink-66);margin-bottom:14px">{{ h.provenance }} ? {{ h.destination }}</div>
                         <div style="height:1px;background:var(--ink-08);margin-bottom:14px"></div>
                         <div style="display:flex;align-items:center;gap:14px;font:500 11.5px/1.4 'JetBrains Mono',monospace;color:var(--ink-68);flex-wrap:wrap">
                           <span style="white-space:nowrap">{{ h.unites }} u.</span>
@@ -835,7 +835,7 @@ Créez les cartons librement : chaque carton reçoit le nombre de montures que v
         <div style="flex:1;min-width:200px">
           <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.18em;color:var(--ok-ink);margin-bottom:10px">BON ARCHIVÉ</div>
           <div style="font:700 20px/1.2 'JetBrains Mono',monospace;letter-spacing:-.01em;margin-bottom:10px">{{ hRef }}</div>
-          <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-72)">{{ hProvenance }} → {{ hDestination }} · {{ hTransport }}</div>
+          <div style="font:400 12.5px/1.5 Manrope,sans-serif;color:var(--ink-72)">{{ hProvenance }} ? {{ hDestination }} · {{ hTransport }}</div>
         </div>
         <button onClick="{{ closeHist }}" style="width:36px;height:36px;border-radius:12px;border:1px solid var(--ink-1);background:var(--srf-78);color:var(--ink);cursor:pointer;display:grid;place-items:center;flex:none"><span data-icon="x" style="display:grid;place-items:center;font-size:16px"></span></button>
       </div>
@@ -1371,7 +1371,7 @@ class Component extends DCLogic {
 
       return commands;
     } catch (error) {
-      console.error('❌ Erreur chargement commandes:', error);
+      console.error('? Erreur chargement commandes:', error);
       this.setState({ loading: false });
       const SS = window.LStore;
       if (SS) {
@@ -2677,7 +2677,7 @@ class Component extends DCLogic {
         if (kVariable && kPrixVal <= 0) { this.toast('triangle-alert', 'Prix requis', `${kGammeObj.label} : tarif variable`, 'warn'); return; }
         const seq = editK ? cur.cartons.indexOf(editK) + 1 : cur.cartons.length + 1;
         const id = editK ? editK.id : 'k' + Date.now();
-        const code = editK ? editK.code : `CTN-${String(seq).padStart(3, '0')}`;
+        const code = editK ? editK.code : '';
         const carton = { id, qty: nextQty, code, formes: { ...s.kFormes }, marques: [...s.kMarques], couleurs: [...s.kCouleurs], matieres: [...s.kMatieres], photos: [], gamme: s.kGamme || cur.gamme, type: s.kType, prix: kPrixVal };
         
         if (!editK) {
@@ -2712,7 +2712,7 @@ class Component extends DCLogic {
             }
             savedCase = (payload.data && payload.data.case) || payload.case || null;
             const savedCartons = savedCase && Array.isArray(savedCase.cartons) ? savedCase.cartons : [];
-            savedBox = savedCartons.find(box => box.code === code) || savedCartons[savedCartons.length - 1] || null;
+            savedBox = (code ? savedCartons.find(box => box.code === code) : null) || savedCartons[savedCartons.length - 1] || null;
             if (!savedBox || !savedBox.id) {
               throw new Error('Carton créé mais réponse API incomplète');
             }
