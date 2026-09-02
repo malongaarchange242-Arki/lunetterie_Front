@@ -791,20 +791,23 @@ input::placeholder{color:var(--ink-34)}
             <sc-if value="{{ demListeVisible }}" hint-placeholder-val="{{ true }}">
             <div style="border-radius:24px;overflow:hidden;border:1px solid var(--ink-09);background:linear-gradient(160deg,var(--srf-9),var(--srf-64));backdrop-filter:blur(24px);box-shadow:0 24px 56px -30px var(--ink-2)">
               <div style="overflow-x:auto">
-                <div style="min-width:660px">
-                  <div style="display:grid;grid-template-columns:minmax(120px,1.2fr) minmax(96px,.9fr) minmax(88px,.8fr) minmax(104px,.9fr) minmax(150px,1.2fr) 52px;gap:14px;padding:14px 20px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
-                    <div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>EMPLACEMENT</div><div>IDENTIFIANT</div><div></div>
+                <div style="min-width:720px">
+                  <div style="display:grid;grid-template-columns:52px minmax(120px,1.2fr) minmax(96px,.9fr) minmax(88px,.8fr) minmax(190px,1.4fr) 52px;gap:14px;padding:14px 20px;background:var(--srf-6);border-bottom:1px solid var(--ink-09);font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--ink-66)">
+                    <div>PHOTO</div><div>RÉFÉRENCE</div><div>MARQUE</div><div>FORME</div><div>EMPLACEMENT</div><div></div>
                   </div>
                   <sc-for list="{{ demLignes }}" as="l" hint-placeholder-count="4">
                     <div style="{{ l.rowStyle }}">
+                      <div style="{{ l.photoStyle }}">
+                        <sc-if value="{{ l.photoUrl }}" hint-placeholder-val="false"><img bindSrc="{{ l.photoUrl }}" alt="Photo de {{ l.ref }}" style="display:block;width:100%;height:100%;object-fit:cover"></sc-if>
+                        <sc-if value="{{ l.photoUrl }}" hint-placeholder-val="true"><span data-icon="glasses" style="display:grid;place-items:center;font-size:18px;color:var(--ink-4)"></span></sc-if>
+                      </div>
                       <div style="min-width:0">
                         <div style="font:600 12.5px/1.3 'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.ref }}</div>
                         <div style="font:500 10.5px/1.4 Manrope,sans-serif;color:var(--ink-64);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.couleur }}</div>
                       </div>
                       <div style="min-width:0;font:500 12px/1.4 Manrope,sans-serif;color:var(--ink-72)">{{ l.marque }}</div>
                       <div style="min-width:0;font:500 12px/1.4 Manrope,sans-serif;color:var(--ink-72)">{{ l.forme }}</div>
-                      <div style="min-width:0;font:500 11px/1.4 'JetBrains Mono',monospace;color:var(--ink-7)">{{ l.emplacement }}</div>
-                      <div style="min-width:0;font:500 10.5px/1.4 'JetBrains Mono',monospace;color:var(--info-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.uid || '—' }}</div>
+                      <div style="min-width:0;font:500 11px/1.4 'JetBrains Mono',monospace;color:var(--ink-7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.emplacement }}</div>
                       <div style="display:grid;place-items:center"><button onClick="{{ l.onScan }}" style="{{ l.btnStyle }}"><span data-icon="{{ l.btnIcon }}" style="display:grid;place-items:center;font-size:16px"></span></button></div>
                     </div>
                   </sc-for>
@@ -3096,12 +3099,14 @@ class Component extends DCLogic {
             return {
               ...found,
               uid: found.uid || uid || '—',
-              emplacement: found.emplacement || locationCode || `${valise !== '—' ? `Valise ${valise}` : 'Emplacement'}${carton !== '—' ? ` · Carton ${carton}` : ''}` || '—',
+              emplacement: `${found.emplacement || locationCode || (valise !== '—' ? `Valise ${valise}` : 'Emplacement')}${carton !== '—' ? ` · Carton ${carton}` : ''}`,
               valise: found.valise || valise || '—',
               carton: found.carton || carton || '—',
-              cartonNum: found.cartonNum || found.carton || carton || '—'
+              cartonNum: found.cartonNum || found.carton || carton || '—',
+              photoUrl: found.photoFront || found.photo || found.photo_monture_url || found.photoMontureUrl || ''
             };
           }
+            const photoUrl = this.photoUrl(item.photo_monture_url || item.photoMontureUrl || item.photo_url || item.photo || item.image_url || '');
           return {
             uid: uid || '—',
             ref,
@@ -3112,8 +3117,9 @@ class Component extends DCLogic {
             valise: valise === '—' ? '—' : valise,
             carton: carton === '—' ? '—' : carton,
             cartonNum: carton === '—' ? '—' : carton,
-            emplacement: locationCode || `${valise !== '—' ? `Valise ${valise}` : 'Emplacement'}${carton !== '—' ? ` · Carton ${carton}` : ''}` || '—',
-            photo: 0,
+            emplacement: `${locationCode || (valise !== '—' ? `Valise ${valise}` : 'Emplacement')}${carton !== '—' ? ` · Carton ${carton}` : ''}`,
+            photoUrl,
+            photo: photoUrl,
             sorti: false
           };
         };
@@ -3194,7 +3200,9 @@ class Component extends DCLogic {
             return {
               ref: m.ref, uid: m.uid === '—' ? '—' : m.uid, valise: m.valise, carton: m.cartonNum, emplacement,
               marque: m.marque, forme: m.forme, couleur: m.couleur,
-              rowStyle: `display:grid;grid-template-columns:minmax(120px,1.2fr) minmax(96px,.9fr) minmax(88px,.8fr) minmax(104px,.9fr) minmax(150px,1.2fr) 52px;gap:14px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--ink-06);transition:all .34s ${ease};` +
+              photoUrl: this.photoUrl(m.photoUrl || m.photoFront || m.photo || ''),
+              photoStyle: `width:52px;height:52px;border-radius:13px;display:grid;place-items:center;overflow:hidden;background:var(--srf-7);border:1px solid var(--ink-12);flex:none`,
+              rowStyle: `display:grid;grid-template-columns:52px minmax(120px,1.2fr) minmax(96px,.9fr) minmax(88px,.8fr) minmax(190px,1.4fr) 52px;gap:14px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--ink-06);transition:all .34s ${ease};` +
                 (on ? 'background:rgba(52,201,141,.08);opacity:1' : 'background:transparent;opacity:.44;filter:grayscale(1)'),
               btnIcon: on ? 'badge-check' : 'scan-barcode',
               btnStyle: `width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:none;cursor:${on ? 'default' : 'pointer'};transition:all .26s ${ease};` +
