@@ -3095,11 +3095,12 @@ class Component extends DCLogic {
           const locationCode = String(item.location_code || item.location || item.emplacement || '').trim();
           const valise = String(item.valise || item.valise_code || item.valiseName || '—').trim();
           const carton = String(item.carton || item.carton_code || item.cartonNum || '—').trim();
+          const emplacement = valise !== '—' && carton !== '—' ? `${valise}/${carton}` : (locationCode || `${valise !== '—' ? valise : 'Emplacement'}${carton !== '—' ? `/${carton}` : ''}`);
           if (found) {
             return {
               ...found,
               uid: found.uid || uid || '—',
-              emplacement: `${found.emplacement || locationCode || (valise !== '—' ? `Valise ${valise}` : 'Emplacement')}${carton !== '—' ? ` · Carton ${carton}` : ''}`,
+              emplacement,
               valise: found.valise || valise || '—',
               carton: found.carton || carton || '—',
               cartonNum: found.cartonNum || found.carton || carton || '—',
@@ -3117,7 +3118,7 @@ class Component extends DCLogic {
             valise: valise === '—' ? '—' : valise,
             carton: carton === '—' ? '—' : carton,
             cartonNum: carton === '—' ? '—' : carton,
-            emplacement: `${locationCode || (valise !== '—' ? `Valise ${valise}` : 'Emplacement')}${carton !== '—' ? ` · Carton ${carton}` : ''}`,
+            emplacement,
             photoUrl,
             photo: photoUrl,
             sorti: false
