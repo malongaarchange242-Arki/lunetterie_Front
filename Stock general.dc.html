@@ -802,8 +802,8 @@ input::placeholder{color:var(--ink-34)}
                       </div>
                       <div style="min-width:0;font:500 12px/1.4 Manrope,sans-serif;color:var(--ink-72)">{{ l.marque }}</div>
                       <div style="min-width:0;font:500 12px/1.4 Manrope,sans-serif;color:var(--ink-72)">{{ l.forme }}</div>
-                      <div style="min-width:0;font:500 11px/1.4 'JetBrains Mono',monospace;color:var(--ink-7)">Valise {{ l.valise }}<br>Carton {{ l.carton }}</div>
-                      <div style="min-width:0;font:500 10.5px/1.4 'JetBrains Mono',monospace;color:var(--info-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.uid }}</div>
+                      <div style="min-width:0;font:500 11px/1.4 'JetBrains Mono',monospace;color:var(--ink-7)">{{ l.emplacement }}</div>
+                      <div style="min-width:0;font:500 10.5px/1.4 'JetBrains Mono',monospace;color:var(--info-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.uid || '—' }}</div>
                       <div style="display:grid;place-items:center"><button onClick="{{ l.onScan }}" style="{{ l.btnStyle }}"><span data-icon="{{ l.btnIcon }}" style="display:grid;place-items:center;font-size:16px"></span></button></div>
                     </div>
                   </sc-for>
@@ -3035,20 +3035,33 @@ class Component extends DCLogic {
     );
     const dispo = stock.filter(m => !m.sorti && !reserved.has(m.uid));
         const lineFromItem = item => {
-          const uid = String(item.uid || item.barcode || '').trim();
+          const uid = String(item.uid || item.barcode || item.id || '').trim();
           const ref = String(item.reference || item.ref || uid || '—').trim();
           const found = stock.find(m => (uid && m.uid === uid) || (ref && m.ref === ref));
-          if (found) return found;
+          const locationCode = String(item.location_code || item.location || item.emplacement || '').trim();
+          const valise = String(item.valise || item.valise_code || item.valiseName || '—').trim();
+          const carton = String(item.carton || item.carton_code || item.cartonNum || '—').trim();
+          if (found) {
+            return {
+              ...found,
+              uid: found.uid || uid || '—',
+              emplacement: found.emplacement || locationCode || `${valise !== '—' ? `Valise ${valise}` : 'Emplacement'}${carton !== '—' ? ` · Carton ${carton}` : ''}` || '—',
+              valise: found.valise || valise || '—',
+              carton: found.carton || carton || '—',
+              cartonNum: found.cartonNum || found.carton || carton || '—'
+            };
+          }
           return {
-            uid,
+            uid: uid || '—',
             ref,
             marque: item.brand || item.marque || '—',
             forme: item.shape || item.forme || '—',
             couleur: item.color || item.couleur || '—',
             matiere: item.matiere || '',
-            valise: item.valise || '—',
-            carton: item.carton || '—',
-            cartonNum: item.cartonNum || item.carton || '—',
+            valise: valise === '—' ? '—' : valise,
+            carton: carton === '—' ? '—' : carton,
+            cartonNum: carton === '—' ? '—' : carton,
+            emplacement: locationCode || `${valise !== '—' ? `Valise ${valise}` : 'Emplacement'}${carton !== '—' ? ` · Carton ${carton}` : ''}` || '—',
             photo: 0,
             sorti: false
           };
@@ -3126,8 +3139,9 @@ class Component extends DCLogic {
           demRestant: demTotal - demScanned,
           demLignes: demLignesSrc.map(m => {
             const on = scannedSet.has(m.uid);
+            const emplacement = String(m.emplacement || (m.valise && m.carton ? `Valise ${m.valise} · Carton ${m.carton}` : '—')).trim();
             return {
-              ref: m.ref, uid: m.uid, valise: m.valise, carton: m.cartonNum,
+              ref: m.ref, uid: m.uid === '—' ? '—' : m.uid, valise: m.valise, carton: m.cartonNum, emplacement,
               marque: m.marque, forme: m.forme, couleur: m.couleur,
               rowStyle: `display:grid;grid-template-columns:minmax(120px,1.2fr) minmax(96px,.9fr) minmax(88px,.8fr) minmax(104px,.9fr) minmax(150px,1.2fr) 52px;gap:14px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--ink-06);transition:all .34s ${ease};` +
                 (on ? 'background:rgba(52,201,141,.08);opacity:1' : 'background:transparent;opacity:.44;filter:grayscale(1)'),
