@@ -442,10 +442,15 @@ input::placeholder{color:var(--ink-34)}
 
     <sc-if value="{{ isStock }}" hint-placeholder-val="{{ false }}">
       <div style="animation:rise .42s cubic-bezier(.22,1,.36,1)">
-        <div style="margin-bottom:26px;padding-right:238px">
-          <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">INVENTAIRE</div>
-          <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Gestion du stock</h1>
-          <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Toutes les montures enregistrées, avec leur identifiant unique et leur provenance.</p>
+        <div style="margin-bottom:26px;padding-right:238px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px">
+          <div>
+            <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--info-ink);margin-bottom:12px">INVENTAIRE</div>
+            <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Gestion du stock</h1>
+            <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:66ch;text-wrap:pretty">Toutes les montures enregistrées, avec leur identifiant unique et leur provenance.</p>
+          </div>
+          <button onClick="{{ exportToExcel }}" style="display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border-radius:999px;border:1px solid rgba(30,143,99,.34);background:rgba(52,201,141,.12);color:var(--ok-ink);font:600 13px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap;transition:all .26s cubic-bezier(.22,1,.36,1);flex:none;margin-top:4px" style-hover="background:rgba(52,201,141,.22);transform:translateY(-1px)">
+            <span data-icon="file-spreadsheet" style="display:grid;place-items:center;font-size:18px"></span>Télécharger en Excel
+          </button>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:14px;margin-bottom:24px">
@@ -2123,6 +2128,47 @@ class Component extends DCLogic {
     });
   }
 
+  exportToExcel() {
+    const DB = this.store();
+    const estStockGeneral = m => m && (m.statut === 'stock' || m.statut === 'EN_STOCK_GENERAL');
+    const dispoStock = (DB.montures || []).filter(estStockGeneral);
+    if (!dispoStock.length) {
+      this.toast('triangle-alert', 'Stock vide', 'Aucune donnée à exporter.', 'warn');
+      return;
+    }
+    const data = dispoStock.map(m => ({
+      'RÉFÉRENCE': m.ref || '—',
+      'MARQUE': m.marque || '—',
+      'FORME': m.forme || '—',
+      'GENRE': m.genre || '—',
+      'COULEUR': m.couleur || '—',
+      'MATIÈRE': m.matiere || '—',
+      'GAMME': m.gamme || '—',
+      'PRIX (F CFA)': m.prix || 0,
+      'EMPLACEMENT': m.emplacement || m.location || m.carton || '—',
+      'VALISE': m.valise || '—',
+      'CARTON': m.carton || '—',
+      'IDENTIFIANT': m.uid || '—'
+    }));
+    const headers = Object.keys(data[0]);
+    const csvCell = value => {
+      const text = String(value ?? '');
+      return /[;"\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const csv = [headers, ...data.map(row => headers.map(header => csvCell(row[header])))]
+      .map(row => row.join(';')).join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Stock_Lunetterie_${this.dateFr().replace(/\//g, '-')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    this.toast('download', 'Export Excel', `${data.length} montures exportées`, 'ok');
+  }
+
   renderVals() {
     const S0 = window.LStore;
     if (S0 && !this._poll) {
@@ -3510,6 +3556,7 @@ class Component extends DCLogic {
           stockAucunResultat: dispoAll.length > 0 && view.length === 0,
           stockTableVisible: view.length > 0,
           stockFiltresVisible: dispoAll.length > 0,
+          exportToExcel: this.exportToExcel.bind(this),
           stockDetailOpen: !!s.stockDetailOpen,
           stockDetail: s.stockDetail || null,
           closeStockDetail: () => this.setState({ stockDetailOpen: false, stockDetail: null }),

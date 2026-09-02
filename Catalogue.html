@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="lnt-theme.css">
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="store.js"></script>
 <script src="./image-slot.js"></script>
 </helmet>
@@ -46,13 +47,10 @@
 
     <div style="padding:16px;border-radius:20px;background:rgba(242,19,142,.09);border:1px solid rgba(191,33,120,.24)">
       <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
-        <span data-icon="shopping-bag" style="display:grid;place-items:center;font-size:15px;color:var(--acc-ink)"></span>
         <span style="font:600 11.5px/1.3 Manrope,sans-serif;color:var(--acc-ink)">Ma liste</span>
       </div>
       <div style="font:500 26px/1 'JetBrains Mono',monospace;letter-spacing:-.03em;margin-bottom:6px">{{ panierTotal }}</div>
-      <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-66)">montures · {{ panierMontant }}</div>
     </div>
-
     <div style="margin-top:auto;display:flex;flex-direction:column;gap:12px">
       <button onClick="{{ goMagasin }}" style="display:flex;align-items:center;gap:11px;width:100%;padding:13px 15px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-6);color:var(--ink-72);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;text-align:left;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-9);color:var(--ink)">
         <span data-icon="corner-up-left" style="display:grid;place-items:center;font-size:16px;flex:none"></span>{{ retourLabel }}
@@ -69,7 +67,12 @@
   <main style="padding:34px 40px 48px;min-width:0">
 
     <div style="margin-bottom:24px">
-      <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--acc-ink);margin-bottom:12px">COMMANDE PAR MODÈLE</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--acc-ink)">COMMANDE PAR MODÈLE</div>
+        <button onClick="{{ downloadCatalogue }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 16px;border-radius:999px;border:1px solid rgba(95,194,217,.34);background:rgba(95,194,217,.13);color:var(--info-ink);font:600 12px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.24);border-color:rgba(95,194,217,.55)">
+          <span data-icon="file-down" style="display:grid;place-items:center;font-size:16px;flex:none"></span>Télécharger le catalogue
+        </button>
+      </div>
       <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Catalogue du stock général</h1>
       <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:74ch;text-wrap:pretty">Chaque vignette est un modèle disponible au stock général, avec le nombre d'exemplaires en stock. Ouvrez-la pour voir les caractéristiques, choisir la couleur et la quantité. La liste terminée part chez l'administrateur, qui la valide et la transmet au stock général.</p>
     </div>
@@ -121,6 +124,9 @@
                   <span style="font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--ok-ink);white-space:nowrap">{{ m.stockLabel }}</span>
                 </div>
                 <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-64);margin-bottom:12px">{{ m.sousTitre }}</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;font:500 10.5px/1.4 'JetBrains Mono',monospace;color:var(--ink-56)">
+                  <span data-icon="map-pin" style="display:grid;place-items:center;font-size:13px;flex:none;color:var(--acc-ink)"></span>{{ m.emplacementLabel }}
+                </div>
                 <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:12px">
                   <sc-for list="{{ m.dots }}" as="c" hint-placeholder-count="3">
                     <span title="{{ c.label }}" style="{{ c.style }}"></span>
@@ -154,28 +160,44 @@
           </sc-if>
 
           <div style="display:flex;flex-direction:column;gap:10px">
-            <sc-for list="{{ panierLignes }}" as="l" hint-placeholder-count="0">
-              <div style="padding:12px 13px;border-radius:15px;background:var(--srf-8);border:1px solid var(--ink-08)">
-                <div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:10px">
-                  <span style="{{ l.dotStyle }}"></span>
-                  <div style="flex:1;min-width:0">
-                    <div style="font:600 12px/1.35 Manrope,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.titre }}</div>
-                    <div style="font:400 10.5px/1.45 Manrope,sans-serif;color:var(--ink-62);margin-top:3px">{{ l.sous }}</div>
+            <sc-for list="{{ panierGammes }}" as="gamme" hint-placeholder-count="0">
+              <div style="border-radius:15px;background:var(--srf-8);border:1px solid var(--ink-08);overflow:hidden">
+                <button onClick="{{ gamme.onToggle }}" style="display:flex;align-items:center;gap:9px;width:100%;padding:13px;border:0;background:transparent;color:var(--ink);cursor:pointer;text-align:left">
+                  <span data-icon="chevron-right" style="display:grid;place-items:center;font-size:15px;flex:none;transform:{{ gamme.chevronTransform }};transition:transform .2s ease"></span>
+                  <span style="flex:1;font:600 12.5px/1.3 Manrope,sans-serif">{{ gamme.label }}</span>
+                  <span style="font:500 10.5px/1.3 'JetBrains Mono',monospace;color:var(--ink-62)">{{ gamme.qtyLabel }}</span>
+                </button>
+                <sc-if value="{{ gamme.ouvert }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:10px;padding:0 10px 10px">
+                    <sc-for list="{{ gamme.lignes }}" as="l" hint-placeholder-count="0">
+                      <div style="padding:12px 13px;border-radius:13px;background:var(--srf-8);border:1px solid var(--ink-08)">
+                        <div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:10px">
+                          <span style="{{ l.dotStyle }}"></span>
+                          <div style="flex:1;min-width:0">
+                            <div style="font:600 12px/1.35 Manrope,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.titre }}</div>
+                            <div style="font:400 10.5px/1.45 Manrope,sans-serif;color:var(--ink-62);margin-top:3px">{{ l.sous }}</div>
+                            <div style="display:flex;align-items:center;gap:5px;font:500 9.5px/1.4 'JetBrains Mono',monospace;color:var(--ink-56);margin-top:4px">
+                              <span data-icon="map-pin" style="display:grid;place-items:center;font-size:12px;color:var(--acc-ink)"></span>{{ l.emplacement }}
+                            </div>
+                          </div>
+                          <button onClick="{{ l.onDel }}" title="Retirer" style="width:24px;height:24px;border-radius:8px;border:1px solid var(--ink-1);background:var(--srf-6);color:var(--ink-56);display:grid;place-items:center;cursor:pointer;flex:none">
+                            <span data-icon="x" style="display:grid;place-items:center;font-size:13px"></span>
+                          </button>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <button onClick="{{ l.onMoins }}" style="width:28px;height:28px;border-radius:9px;border:1px solid var(--ink-12);background:var(--srf-9);color:var(--ink-72);display:grid;place-items:center;cursor:pointer;flex:none">
+                            <span data-icon="minus" style="display:grid;place-items:center;font-size:14px"></span>
+                          </button>
+                          <span style="font:500 14px/1 'JetBrains Mono',monospace;min-width:30px;text-align:center">{{ l.qty }}</span>
+                          <button onClick="{{ l.onPlus }}" style="width:28px;height:28px;border-radius:9px;border:1px solid var(--ink-12);background:var(--srf-9);color:var(--ink-72);display:grid;place-items:center;cursor:pointer;flex:none">
+                            <span data-icon="plus" style="display:grid;place-items:center;font-size:14px"></span>
+                          </button>
+                          <span style="flex:1;text-align:right;font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--ink-66);white-space:nowrap">{{ l.maxLabel }}</span>
+                        </div>
+                      </div>
+                    </sc-for>
                   </div>
-                  <button onClick="{{ l.onDel }}" title="Retirer" style="width:24px;height:24px;border-radius:8px;border:1px solid var(--ink-1);background:var(--srf-6);color:var(--ink-56);display:grid;place-items:center;cursor:pointer;flex:none">
-                    <span data-icon="x" style="display:grid;place-items:center;font-size:13px"></span>
-                  </button>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px">
-                  <button onClick="{{ l.onMoins }}" style="width:28px;height:28px;border-radius:9px;border:1px solid var(--ink-12);background:var(--srf-9);color:var(--ink-72);display:grid;place-items:center;cursor:pointer;flex:none">
-                    <span data-icon="minus" style="display:grid;place-items:center;font-size:14px"></span>
-                  </button>
-                  <span style="font:500 14px/1 'JetBrains Mono',monospace;min-width:30px;text-align:center">{{ l.qty }}</span>
-                  <button onClick="{{ l.onPlus }}" style="width:28px;height:28px;border-radius:9px;border:1px solid var(--ink-12);background:var(--srf-9);color:var(--ink-72);display:grid;place-items:center;cursor:pointer;flex:none">
-                    <span data-icon="plus" style="display:grid;place-items:center;font-size:14px"></span>
-                  </button>
-                  <span style="flex:1;text-align:right;font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--ink-66);white-space:nowrap">{{ l.maxLabel }}</span>
-                </div>
+                </sc-if>
               </div>
             </sc-for>
           </div>
@@ -186,17 +208,11 @@
             <span style="font:400 11px/1.4 Manrope,sans-serif;color:var(--ink-62)">u.</span>
           </div>
 
-          <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-62);margin-bottom:8px">URGENCE</div>
-          <select value="{{ urgence }}" onChange="{{ setUrgence }}" style="width:100%;padding:11px 13px;border-radius:14px;background:var(--srf-9);border:1.5px solid var(--ink-12);color:var(--ink);font:600 12px/1.3 Manrope,sans-serif;cursor:pointer;margin-bottom:14px">
-            <option value="Normale">Normale</option>
-            <option value="Prioritaire">Prioritaire</option>
-          </select>
-
           <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-62);margin-bottom:8px">MOTIF</div>
           <input value="{{ motif }}" onChange="{{ setMotif }}" placeholder="Réassort avant la rentrée…" style="width:100%;padding:12px 14px;border-radius:14px;background:var(--srf-9);border:1.5px solid var(--ink-12);color:var(--ink);font:500 12px/1.3 Manrope,sans-serif;margin-bottom:18px"></input>
 
           <button onClick="{{ onEnvoi }}" style="{{ envoiStyle }}">
-            <span data-icon="send-horizontal" style="display:grid;place-items:center;font-size:16px"></span>Envoyer la liste à l'admin
+            <span data-icon="send-horizontal" style="display:grid;place-items:center;font-size:16px"></span>Envoyer et télécharger la liste
           </button>
         </div>
 
@@ -328,7 +344,7 @@ class Component extends DCLogic {
     boutique: 'Pointe-Noire',
     q: '', fGamme: '', fGenre: '', fType: '', fMarque: '',
     ouvert: null, selCouleur: null, qty: 1, detImageView: 'front',
-    panier: {}, urgence: 'Normale', motif: '', toast: null
+    panier: {}, panierGammesOuvertes: {}, motif: '', toast: null
   };
 
   componentDidMount() {
@@ -446,6 +462,185 @@ class Component extends DCLogic {
     if (/^https?:\/\//i.test(s) || /^\/\//.test(s) || s.startsWith('/')) return s;
     return '';
   }
+  async imageDataUrl(url) {
+    if (!url) return '';
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) return '';
+      const blob = await response.blob();
+      return await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.warn('Catalogue PDF: image unavailable', url, error);
+      return '';
+    }
+  }
+  async downloadCatalogue() {
+    const JsPDF = window.jspdf && window.jspdf.jsPDF;
+    if (!JsPDF) {
+      this.toast('alert-triangle', 'Téléchargement indisponible', 'La bibliothèque PDF n’est pas encore chargée', 'warn');
+      return;
+    }
+    const groupes = this.modelesSrc();
+    if (!groupes.length) {
+      this.toast('alert-triangle', 'Catalogue vide', 'Aucune monture disponible à télécharger', 'warn');
+      return;
+    }
+    this.toast('loader-circle', 'Préparation du catalogue', `${groupes.length} modèle(s) en cours`, 'ok');
+    try {
+      const pdf = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = 210;
+      const margin = 14;
+      const cardW = 86;
+      const cardH = 88;
+      const gap = 10;
+      const imageW = cardW - 10;
+      const imageH = 43;
+      const date = new Date();
+      const dateStamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+      const addHeader = () => {
+        pdf.setTextColor(35, 35, 40);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(18);
+        pdf.text('LA LUNETTERIE', margin, 17);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.setTextColor(105, 105, 112);
+        pdf.text(`Catalogue du stock général · ${date.toLocaleDateString('fr-FR')}`, margin, 24);
+        pdf.setDrawColor(242, 19, 142);
+        pdf.line(margin, 29, pageW - margin, 29);
+      };
+      addHeader();
+      for (let index = 0; index < groupes.length; index++) {
+        const g = groupes[index];
+        const position = index % 4;
+        if (index > 0 && position === 0) {
+          pdf.addPage();
+          addHeader();
+        }
+        const col = index % 2;
+        const row = Math.floor(position / 2);
+        const x = margin + col * (cardW + gap);
+        const y = 35 + row * (cardH + gap);
+        pdf.setFillColor(248, 247, 249);
+        pdf.setDrawColor(225, 222, 228);
+        pdf.roundedRect(x, y, cardW, cardH, 3, 3, 'FD');
+        const image = await this.imageDataUrl(g.photoFrontUrl || g.photoUrl || g.photoBackUrl);
+        if (image) {
+          const imageFormat = image.indexOf('image/png') >= 0 ? 'PNG' : image.indexOf('image/webp') >= 0 ? 'WEBP' : 'JPEG';
+          try { pdf.addImage(image, imageFormat, x + 5, y + 5, imageW, imageH, undefined, 'FAST'); } catch (error) {}
+        } else {
+          pdf.setTextColor(145, 142, 150);
+          pdf.setFontSize(9);
+          pdf.text('Aucune photo', x + cardW / 2, y + 28, { align: 'center' });
+        }
+        pdf.setTextColor(30, 30, 35);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.text(String(g.marque || '—').slice(0, 25), x + 5, y + 55);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(88, 85, 94);
+        pdf.text(`${g.forme} · ${g.type} · ${g.genre}`.slice(0, 42), x + 5, y + 62);
+        pdf.text(`Gamme : ${g.gamme}`.slice(0, 42), x + 5, y + 68);
+        pdf.text(`Prix : ${this.fcfa(g.prix)} · Stock : ${g.total}`, x + 5, y + 74);
+        pdf.text(this.emplacementLabel(g).slice(0, 42), x + 5, y + 80);
+        pdf.text(`Coloris : ${Array.from(g.couleurs.keys()).join(', ')}`.slice(0, 42), x + 5, y + 86);
+      }
+      pdf.save(`Catalogue_La_Lunetterie_${dateStamp}.pdf`);
+      this.setState({ toast: null });
+    } catch (error) {
+      console.error('Catalogue PDF error:', error);
+      this.toast('alert-triangle', 'Téléchargement impossible', 'Une erreur est survenue pendant la création du PDF', 'warn');
+    }
+  }
+  async downloadCommande(entries, total, boutique) {
+    const JsPDF = window.jspdf && window.jspdf.jsPDF;
+    if (!JsPDF) throw new Error('La bibliothèque PDF n’est pas encore chargée');
+    const pdf = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const margin = 10;
+    const pageW = 210;
+    const date = new Date();
+    const dateStamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+    const headers = ['OK', 'QUANTITÉ', 'MARQUE / RÉF.', 'COULEUR', 'FORME', 'TYPE', 'GAMME', 'VALISE', 'CARTON'];
+    const widths = [9, 15, 33, 22, 18, 18, 22, 25, 28];
+    const rowH = 7;
+    let y = 12;
+    const addHeader = () => {
+      pdf.setTextColor(35, 35, 40);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(15);
+      pdf.text('LA LUNETTERIE', margin, y);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(95, 92, 100);
+      pdf.text(`Checklist de commande · ${date.toLocaleDateString('fr-FR')} · Destination : ${boutique}`, margin, y + 6);
+      pdf.setDrawColor(242, 19, 142);
+      pdf.line(margin, y + 11, pageW - margin, y + 11);
+      y += 17;
+      pdf.setFillColor(242, 19, 142);
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(6.5);
+      let x = margin;
+      headers.forEach((header, index) => {
+        pdf.rect(x, y, widths[index], rowH, 'F');
+        pdf.text(header, x + widths[index] / 2, y + 4.5, { align: 'center' });
+        x += widths[index];
+      });
+      y += rowH;
+    };
+    addHeader();
+    for (const entry of entries) {
+      if (y > 278) {
+        pdf.addPage();
+        y = 12;
+        addHeader();
+      }
+      const g = entry.grp;
+      if (entries.indexOf(entry) % 2 === 0) {
+        pdf.setFillColor(248, 247, 249);
+        pdf.rect(margin, y, pageW - margin * 2, rowH, 'F');
+      }
+      pdf.setDrawColor(215, 212, 220);
+      pdf.rect(margin, y, pageW - margin * 2, rowH);
+      let x = margin;
+      widths.slice(0, -1).forEach(width => { x += width; pdf.line(x, y, x, y + rowH); });
+      pdf.setDrawColor(70, 68, 75);
+      pdf.rect(margin + 3, y + 2, 3, 3);
+      pdf.setTextColor(30, 30, 35);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(6.5);
+      const values = [
+        '',
+        String(entry.qty),
+        `${g.marque || '—'} / ${g.reference || '—'}`,
+        entry.couleur || '—',
+        g.forme || '—',
+        g.type || '—',
+        g.gamme || '—',
+        (g.valises || []).join(', ') || '—',
+        (g.cartons || []).join(', ') || '—'
+      ];
+      x = margin;
+      values.forEach((value, index) => {
+        if (index !== 0) pdf.text(String(value).slice(0, index === 2 ? 25 : 18), x + widths[index] / 2, y + 4.5, { align: 'center' });
+        x += widths[index];
+      });
+      y += rowH;
+    }
+    pdf.setDrawColor(242, 19, 142);
+    pdf.line(margin, y + 3, pageW - margin, y + 3);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8);
+    pdf.setTextColor(35, 35, 40);
+    pdf.text(`Total sélectionné : ${total} monture(s)`, margin, y + 9);
+    pdf.save(`Liste_Commande_La_Lunetterie_${dateStamp}.pdf`);
+  }
   swatch(c) { return this.SWATCH[c] || 'linear-gradient(135deg,#9AA0AD,#5A6070)'; }
 
   /* Regroupe les montures disponibles au stock général en modèles */
@@ -496,6 +691,8 @@ class Component extends DCLogic {
           reference: m.ref || m.reference || rawBarcode || '',
           locationCode: m.valise || m.location_code || m.carton || '',
           matieres: [],
+          valises: [],
+          cartons: [],
           prix: m.prix || 0,
           couleurs: new Map(),
           glassIds: new Map(),
@@ -511,6 +708,10 @@ class Component extends DCLogic {
       if (!g.photoFrontUrl) g.photoFrontUrl = this.normalizePhotoUrl(m.photoFront || m.photo_monture_url || m.photo || m.photoMontureUrl || m.photoMonture || null);
       if (!g.photoBackUrl) g.photoBackUrl = this.normalizePhotoUrl(m.photoBack || m.photo_arriere_url || m.photo_branche_url || m.photoArriereUrl || m.photoBackUrl || null);
       if (m.matiere && g.matieres.indexOf(m.matiere) < 0) g.matieres.push(m.matiere);
+      const valise = String(m.valise || m.valise_code || '').trim();
+      const carton = String(m.carton || m.location_code || '').trim();
+      if (valise && g.valises.indexOf(valise) < 0) g.valises.push(valise);
+      if (carton && g.cartons.indexOf(carton) < 0) g.cartons.push(carton);
       if (m.prix && (!g.prix || m.prix < g.prix)) g.prix = m.prix;
       const c = m.couleur || 'Sans couleur';
       if (!g.couleurs.has(c)) {
@@ -523,6 +724,11 @@ class Component extends DCLogic {
     const result = Array.from(map.values()).sort((a, b) => b.total - a.total);
     console.log('modelesSrc: Final result =', result.length, 'groupes');
     return result;
+  }
+  emplacementLabel(g) {
+    const valise = g.valises && g.valises.length ? g.valises.join(', ') : 'Non renseignée';
+    const carton = g.cartons && g.cartons.length ? g.cartons.join(', ') : 'Non renseigné';
+    return `Valise : ${valise} - Carton : ${carton}`;
   }
 
   panierQty(key, couleur) { return this.state.panier[key + '||' + couleur] || 0; }
@@ -574,6 +780,7 @@ class Component extends DCLogic {
         photoUrl: g.photoUrl || '',
         marque: g.marque,
         sousTitre: `${g.forme} · ${g.type} · ${g.genre}`,
+        emplacementLabel: this.emplacementLabel(g),
         gamme: g.gamme, gammeStyle: tagGamme,
         stockLabel: `${g.total} en stock`,
         prixLabel: this.fcfa(g.prix),
@@ -629,6 +836,7 @@ class Component extends DCLogic {
         { label: 'GAMME', valeur: g.gamme },
         { label: 'GENRE', valeur: g.genre },
         { label: 'MATIÈRE', valeur: g.matieres.join(', ') || '—' },
+        { label: 'EMPLACEMENT', valeur: this.emplacementLabel(g) },
         { label: 'PRIX UNITAIRE', valeur: this.fcfa(g.prix) },
         { label: 'DISPONIBLE', valeur: `${g.total} montures` }
       ],
@@ -685,6 +893,7 @@ class Component extends DCLogic {
       return {
         titre: `${e.grp.marque} · ${e.grp.forme}`,
         sous: `${e.couleur} · ${e.grp.type} · ${e.grp.gamme}`,
+        emplacement: this.emplacementLabel(e.grp),
         dotStyle: `width:18px;height:18px;border-radius:50%;flex:none;margin-top:2px;background:${this.swatch(e.couleur)};border:1px solid var(--ink-18)`,
         qty: e.qty,
         maxLabel: `max ${max}`,
@@ -693,6 +902,27 @@ class Component extends DCLogic {
         onDel: () => this.setPanier(e.key, e.couleur, 0, max)
       };
     });
+    const gammeMap = new Map();
+    entries.forEach((e, index) => {
+      const label = e.grp.gamme || 'Sans gamme';
+      if (!gammeMap.has(label)) gammeMap.set(label, { label, lignes: [], qty: 0 });
+      const gamme = gammeMap.get(label);
+      gamme.lignes.push(panierLignes[index]);
+      gamme.qty += e.qty;
+    });
+    const panierGammes = Array.from(gammeMap.values()).map(gamme => ({
+      label: gamme.label,
+      lignes: gamme.lignes,
+      qtyLabel: `${gamme.qty} monture${gamme.qty > 1 ? 's' : ''}`,
+      ouvert: !!s.panierGammesOuvertes[gamme.label],
+      chevronTransform: s.panierGammesOuvertes[gamme.label] ? 'rotate(90deg)' : 'rotate(0deg)',
+      onToggle: () => this.setState({
+        panierGammesOuvertes: {
+          ...this.state.panierGammesOuvertes,
+          [gamme.label]: !this.state.panierGammesOuvertes[gamme.label]
+        }
+      })
+    }));
 
     const tagOk = 'display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:rgba(52,201,141,.16);border:1px solid rgba(30,143,99,.3);color:var(--ok-ink);font:600 9.5px/1.3 Manrope,sans-serif;white-space:nowrap';
     const tagWip = 'display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:rgba(245,165,36,.16);border:1px solid rgba(166,106,5,.3);color:var(--warn-ink);font:600 9.5px/1.3 Manrope,sans-serif;white-space:nowrap';
@@ -723,6 +953,7 @@ class Component extends DCLogic {
       setBoutique: e => this.setState({ boutique: e.target.value }),
 
       q: s.q, setQ: e => this.setState({ q: e.target.value }),
+      downloadCatalogue: () => this.downloadCatalogue(),
       selects,
       compteLabel: `${vus.length} modèle(s) · ${vus.reduce((n, x) => n + x.total, 0)} montures`,
       vide: groupes.length === 0,
@@ -732,11 +963,10 @@ class Component extends DCLogic {
       ...det,
       closeDet: () => this.setState({ ouvert: null }),
 
-      panierLignes,
+      panierGammes,
       panierVide: entries.length === 0,
       panierTotal: total,
       panierMontant: this.fcfa(montant),
-      urgence: s.urgence, setUrgence: e => this.setState({ urgence: e.target.value }),
       motif: s.motif, setMotif: e => this.setState({ motif: e.target.value }),
       envoiStyle: `display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:15px 22px;border-radius:999px;font:600 13.5px/1.3 Manrope,sans-serif;` + (envoiActif
         ? 'border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;cursor:pointer;box-shadow:0 16px 34px -20px rgba(191,33,120,.8)'
@@ -768,6 +998,7 @@ class Component extends DCLogic {
         }
 
         try {
+          await this.downloadCommande(entries, total, s.boutique);
           const token = localStorage.getItem('token');
           if (!token) throw new Error('Token absent');
 
@@ -807,7 +1038,6 @@ class Component extends DCLogic {
             gamme: un(e => e.grp.gamme),
             genre: un(e => e.grp.genre),
             couleur: un(e => e.couleur),
-            urgence: s.urgence,
             besoin: total,
             uids: payloadItems.map(i => i.barcode),
             statut: 'attente',
@@ -818,6 +1048,7 @@ class Component extends DCLogic {
           S.set({ demandes: [dem].concat(DB.demandes || []) });
           S.mouvement({ sens: 'interne', de: s.boutique, vers: 'Administration', ref, motif: 'Commande catalogue', qty: total });
           this.setState({ panier: {}, motif: '' });
+          await this.loadBackendStock();
           this.toast('send-horizontal', 'Liste envoyée à l\u2019admin', `${ref} · ${total} montures · ${s.boutique}`, 'ok');
         } catch (error) {
           console.error('Catalogue send-list error:', error);
