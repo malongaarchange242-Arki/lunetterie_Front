@@ -363,6 +363,7 @@ input::placeholder{color:var(--ink-34)}
                       <button onClick="{{ ph.onClick }}" onDblClick="{{ ph.onDblClick }}" title="{{ ph.title }}" style="{{ ph.style }}">
                         <span style="{{ ph.imgStyle }}"></span>
                         <span style="{{ ph.tagStyle }}">{{ ph.tag }}</span>
+                        <span onClick="{{ ph.onRemove }}" title="Retirer cette photo" style="{{ ph.removeStyle }}">×</span>
                       </button>
                     </sc-for>
                     <sc-if value="{{ l.wellEmpty }}" hint-placeholder-val="{{ true }}">
@@ -1732,7 +1733,7 @@ class Component extends DCLogic {
       });
     } catch (error) {
       console.error('Erreur chargement backend stock général:', error);
-      this.toast('triangle-alert', 'Connexion backend impossible', 'Les données locales restent visibles.', 'warn');
+      this.toast('triangle-alert', 'Connexion backend impossible', 'Aucune donnée locale de démonstration disponible.', 'warn');
     }
   }
 
@@ -1784,6 +1785,13 @@ class Component extends DCLogic {
           S.set({ demandes: mappedDemandes });
         } else {
           console.log('DEBUG mappedDemandes empty for validation API. rawDemandes=', rawDemandes);
+          this.setState(prev => ({
+            apiData: {
+              ...(prev.apiData || {}),
+              demandes: []
+            }
+          }));
+          S.set({ demandes: [] });
         }
       }
 
@@ -2484,6 +2492,32 @@ class Component extends DCLogic {
       const branchRefs = (s.branchRefs || {})[cart.id] || [];
       const visibleRefs = readRefs.concat(branchRefs);
 
+      const openPhotoPicker = lineKey => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = event => {
+          const file = event.target.files && event.target.files[0];
+          if (!file) return;
+          if (file.size > 5 * 1024 * 1024) {
+            this.toast('triangle-alert', 'Image trop lourde', '5 Mo maximum', 'warn');
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = loadEvent => {
+            const src = String(loadEvent.target && loadEvent.target.result || '');
+            if (!src) return;
+            const currentLine = (this.state.lignes || {})[lineKey] || {};
+            const uploadedPhoto = { id: `upload-${Date.now()}-${Math.random().toString(36).slice(2)}`, src, view: 'face', kind: 'face' };
+            setLigne(lineKey, { photos: [...(currentLine.photos || []), uploadedPhoto] });
+            this.toast('check', 'Photo ajoutée', file.name, 'ok');
+          };
+          reader.onerror = () => this.toast('triangle-alert', 'Erreur de lecture', 'Impossible de lire l\'image', 'warn');
+          reader.readAsDataURL(file);
+        };
+        input.click();
+      };
+
       const refPool = visibleRefs.map(r => {
         const usedRefIds = {};
         lignesState.forEach(l => { if (l.refId) usedRefIds[l.refId] = true; });
@@ -2526,6 +2560,7 @@ class Component extends DCLogic {
           style: `position:absolute;top:2px;left:${pi * 28}px;z-index:${pi + 2};width:52px;height:52px;padding:0;overflow:hidden;border-radius:12px;background:var(--srf-8);cursor:pointer;box-shadow:0 8px 18px -10px var(--ink-3);border:1.5px solid ${ph.view === 'face' ? 'rgba(51,135,156,.65)' : 'rgba(191,33,120,.6)'}`,
           tag: ph.view === 'face' ? 'F' : (ph.view === 'rear' ? 'A' : 'B'),
           tagStyle: `position:absolute;bottom:2px;right:2px;width:14px;height:14px;border-radius:5px;display:grid;place-items:center;font:600 8px/1 'JetBrains Mono',monospace;color:#fff;background:${ph.view === 'face' ? '#33879C' : (ph.view === 'rear' ? '#BF2178' : '#E8B93A')}`,
+          removeStyle: 'position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:6px;display:grid;place-items:center;font:700 13px/1 Manrope,sans-serif;color:#fff;background:rgba(20,20,25,.78);cursor:pointer;z-index:4',
           onClick: e => {
             e.stopPropagation();
             const nextView = ph.view === 'face' ? 'rear' : (ph.view === 'rear' ? 'branche' : 'face');
@@ -2533,6 +2568,10 @@ class Component extends DCLogic {
             if (nextView === 'branche') this.extractBranchReference(ph.src, cart.id, l.key);
           },
           onDblClick: e => { e.stopPropagation(); this.setState({ photoLightboxOpen: true, photoLightboxSrc: ph.src }); },
+          onRemove: e => {
+            e.stopPropagation();
+            setLigne(l.key, { photos: (l.photos || []).filter((_, index) => index !== pi) });
+          }
         })),
         wellEmpty: (l.photos || []).length === 0,
         wellStyle: `position:relative;flex:none;width:86px;height:56px;border-radius:14px;display:grid;place-items:center;cursor:${s.pickPhoto ? 'copy' : 'default'};border:1.5px dashed ${(l.photos || []).length ? 'transparent' : 'var(--ink-16)'};background:${(l.photos || []).length ? 'transparent' : 'var(--srf-5)'}`,
@@ -2553,7 +2592,10 @@ class Component extends DCLogic {
         },
         onWellClick: () => {
           const pickedPhotoId = s.pickPhoto;
-          if (!pickedPhotoId) return;
+          if (!pickedPhotoId) {
+            openPhotoPicker(l.key);
+            return;
+          }
           const pickedPhoto = (cart.photos || []).find(p => p.id === pickedPhotoId);
           if (!pickedPhoto) return;
           // Vérifier si la photo est déjà dans CETTE LIGNE (pas d'autres)
