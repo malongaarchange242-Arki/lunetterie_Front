@@ -1329,6 +1329,12 @@ class Component extends DCLogic {
   gammeOf(label) { return this.GAMMES.find(g => g.label === label) || this.GAMMES[0]; }
   fcfa(n) { return (n || 0).toLocaleString('fr-FR') + ' F CFA'; }
 
+  apiBaseUrl() { return 'https://api-lunetterie.universearch.com'; }
+  apiHeaders() {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+  }
+
   toast(icon, title, sub, tone) {
     this.setState({ toast: { icon, title, sub, tone } });
     clearTimeout(this.tt);
@@ -2112,7 +2118,7 @@ class Component extends DCLogic {
       kCreateStyle: kValid
         ? magentaBtn(false)
         : `display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-66);color:var(--ink-36);font:600 13px/1 Manrope,sans-serif;cursor:not-allowed`,
-      createCarton: () => {
+      createCarton: async () => {
         if (!cur) return;
         if (!nextQty) { this.toast('triangle-alert', 'Quantité manquante', `Saisissez la quantité (max ${restInValise})`, 'warn'); return; }
         if (!kSelected.length) { this.toast('triangle-alert', 'Aucune forme', 'Sélectionnez au moins une forme', 'warn'); return; }
@@ -2121,10 +2127,50 @@ class Component extends DCLogic {
         if (!s.kMatieres.length) { this.toast('triangle-alert', 'Aucune matière', 'Indiquez les matières présentes', 'warn'); return; }
         if (kTotal !== nextQty) { this.toast('triangle-alert', 'Répartition incorrecte', `${kTotal} au lieu de ${nextQty}`, 'warn'); return; }
         if (kVariable && kPrixVal <= 0) { this.toast('triangle-alert', 'Prix requis', `${kGammeObj.label} : tarif variable`, 'warn'); return; }
+        const caseID = Number(cur.id);
+        if (!Number.isInteger(caseID) || caseID <= 0) {
+          this.toast('triangle-alert', 'Valise non synchronisée', 'Rechargez la commande depuis le backend avant de créer un carton.', 'warn');
+          return;
+        }
+        let carton;
+        try {
+          const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/reception-commands/cases/${caseID}/boxes`, {
+            method: 'POST',
+            headers: this.apiHeaders(),
+            body: JSON.stringify({
+              code: editK ? editK.code : '',
+              quantity: nextQty,
+              formes: { ...s.kFormes },
+              marques: [...s.kMarques],
+              couleurs: [...s.kCouleurs],
+              matieres: [...s.kMatieres],
+              photos: [...(s.kPhotos || [])],
+              gamme: s.kGamme || cur.gamme,
+              type: s.kType,
+              prix: kPrixVal
+            })
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload.success === false) throw new Error(payload.error || payload.message || `Erreur HTTP ${response.status}`);
+          const savedCase = payload.data && payload.data.case ? payload.data.case : payload.case;
+          const savedBoxes = savedCase && Array.isArray(savedCase.cartons) ? savedCase.cartons : [];
+          carton = savedBoxes[savedBoxes.length - 1] || {
+            id: editK ? editK.id : `api-${Date.now()}`,
+            qty: nextQty,
+            code: payload.data && payload.data.code ? payload.data.code : editK ? editK.code : '',
+            formes: { ...s.kFormes }, marques: [...s.kMarques], couleurs: [...s.kCouleurs], matieres: [...s.kMatieres], photos: [...(s.kPhotos || [])], gamme: s.kGamme || cur.gamme, type: s.kType, prix: kPrixVal
+          };
+        } catch (error) {
+          this.toast('triangle-alert', 'Carton non enregistré', error.message || 'Backend indisponible', 'warn');
+          return;
+        }
         const seq = editK ? cur.cartons.indexOf(editK) + 1 : cur.cartons.length + 1;
-        const id = editK ? editK.id : 'k' + Date.now();
-        const code = editK ? editK.code : `${cur.couleur.slice(0, 2).toUpperCase()}-${String(cur.montures)}-${String(seq).padStart(3, '0')}`;
-        const carton = { id, qty: nextQty, code, formes: { ...s.kFormes }, marques: [...s.kMarques], couleurs: [...s.kCouleurs], matieres: [...s.kMatieres], photos: [...(s.kPhotos || [])], gamme: s.kGamme || cur.gamme, type: s.kType, prix: kPrixVal };
+        carton = {
+          id: carton.id || (editK ? editK.id : `api-${Date.now()}`),
+          qty: carton.quantity || carton.qty || nextQty,
+          code: carton.code || (editK ? editK.code : ''),
+          formes: carton.formes || { ...s.kFormes }, marques: carton.marques || [...s.kMarques], couleurs: carton.couleurs || [...s.kCouleurs], matieres: carton.matieres || [...s.kMatieres], photos: carton.photos || [...(s.kPhotos || [])], gamme: carton.gamme || s.kGamme || cur.gamme, type: carton.type || s.kType, prix: carton.prix || kPrixVal
+        };
         this.setState(st => ({
           valises: st.valises.map(v => v.id !== cur.id ? v : {
             ...v,
