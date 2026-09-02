@@ -302,7 +302,7 @@ input::placeholder{color:var(--ink-34)}
                 <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-56);text-wrap:pretty">Aucune photo jointe à ce carton au pré-enregistrement. Les lignes restent enregistrables sans photo.</div>
               </div>
             </sc-if>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:9px">
+            <div style="display:flex;flex-direction:column;gap:14px">
               <sc-for list="{{ pool }}" as="p" hint-placeholder-count="0">
                 <button draggable="true" onDragStart="{{ p.onDragStart }}" onClick="{{ p.onPick }}" onDblClick="{{ p.onZoom }}" title="{{ p.title }} · double-cliquez pour agrandir" style="{{ p.style }}">
                   <span style="{{ p.imgStyle }}"></span>
@@ -1771,6 +1771,8 @@ class Component extends DCLogic {
           });
 
         if (mappedDemandes.length > 0) {
+          console.log('DEBUG mappedDemandes from validation API:', mappedDemandes);
+          window.__mappedDemandes = mappedDemandes;
           this.setState(prev => ({
             apiData: {
               ...(prev.apiData || {}),
@@ -1778,6 +1780,8 @@ class Component extends DCLogic {
             }
           }));
           S.set({ demandes: mappedDemandes });
+        } else {
+          console.log('DEBUG mappedDemandes empty for validation API. rawDemandes=', rawDemandes);
         }
       }
 
