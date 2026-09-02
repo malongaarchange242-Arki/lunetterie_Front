@@ -412,6 +412,7 @@ class Component extends DCLogic {
           carton: item.location_code || '',
           site: item.station_name || 'Stock général',
           statut: 'stock',
+          reservedForCity: item.reserved_for_city || item.reservedForCity || '',
           photo: this.normalizePhotoUrl(item.photo_monture_url || item.photo || null),
           photoFront: this.normalizePhotoUrl(item.photo_monture_url || item.photo || null),
           photoBack: this.normalizePhotoUrl(item.photo_arriere_url || item.photo_branche_url || item.photoArriereUrl || item.photoBackUrl || null),
@@ -657,9 +658,9 @@ class Component extends DCLogic {
       // Pour les données du backend, on fait confiance au filtrage status=EN_STOCK_GENERAL
       // Pas besoin de vérifier site === 'Stock général'
       stock = backendStock.filter(m => {
-        const passes = !m.sorti;
+        const passes = !m.sorti && !String(m.reservedForCity || m.reserved_for_city || '').trim();
         if (!passes) {
-          console.log('modelesSrc: filtered out item:', { marque: m.marque, site: m.site, statut: m.statut, sorti: m.sorti });
+          console.log('modelesSrc: filtered out item:', { marque: m.marque, site: m.site, statut: m.statut, sorti: m.sorti, reservedForCity: m.reservedForCity || m.reserved_for_city });
         }
         return passes;
       });
