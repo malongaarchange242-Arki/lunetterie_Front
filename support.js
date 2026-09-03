@@ -1,6 +1,30 @@
 // GENERATED from dc-runtime/src/*.ts — do not edit. Rebuild with `cd dc-runtime && bun run build`.
 "use strict";
+
+function isSendButton(el) {
+  if (!(el instanceof HTMLElement)) return false;
+  const label = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  const html = el.outerHTML || '';
+  const looksLikeSend = /envoyer|envoyer et|Envoyer|send|send-horizontal/i.test(label) || /data-icon="send"|data-icon="send-horizontal"|data-lucide="send"|data-lucide="arrow-up-right"/i.test(html);
+  return Boolean(looksLikeSend);
+}
+
+function markSendButtonBusy(el) {
+  if (!isSendButton(el) || el.dataset.sendBusy === 'true') return;
+  el.dataset.sendBusy = 'true';
+  el.disabled = true;
+  el.setAttribute('aria-disabled', 'true');
+  el.classList.add('is-send-busy');
+}
+
 (() => {
+  document.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target.closest('button') : null;
+    if (target && isSendButton(target)) {
+      markSendButtonBusy(target);
+    }
+  }, true);
+
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
