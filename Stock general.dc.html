@@ -3096,11 +3096,24 @@ class Component extends DCLogic {
         .flatMap(d => Array.isArray(d.scanned) ? d.scanned : [])
     );
     const dispo = stock.filter(m => !m.sorti && !reserved.has(m.uid));
+        const makeStableUid = (item, fallbackRef, locationCode) => {
+          const raw = String(item && (item.uid || item.barcode || item.id || '') || '').trim();
+          if (raw) return raw;
+          const parts = [
+            fallbackRef,
+            locationCode,
+            String(item && (item.brand || item.marque || '') || '').trim(),
+            String(item && (item.shape || item.forme || '') || '').trim(),
+            String(item && (item.color || item.couleur || '') || '').trim()
+          ].filter(Boolean);
+          if (parts.length) return parts.join('|');
+          return `line-${Math.random().toString(36).slice(2, 10)}`;
+        };
         const lineFromItem = item => {
-          const uid = String(item.uid || item.barcode || item.id || '').trim();
-          const ref = String(item.reference || item.ref || uid || '—').trim();
-          const found = stock.find(m => (uid && m.uid === uid) || (ref && m.ref === ref));
           const locationCode = String(item.location_code || item.location || item.emplacement || '').trim();
+          const ref = String(item.reference || item.ref || item.uid || item.barcode || '—').trim();
+          const uid = makeStableUid(item, ref, locationCode);
+          const found = stock.find(m => (uid && m.uid === uid) || (ref && m.ref === ref));
           const valise = String(item.valise || item.valise_code || item.valiseName || '—').trim();
           const carton = String(item.carton || item.carton_code || item.cartonNum || '—').trim();
           const emplacement = valise !== '—' && carton !== '—' ? `${valise}/${carton}` : (locationCode || `${valise !== '—' ? valise : 'Emplacement'}${carton !== '—' ? `/${carton}` : ''}`);
@@ -3119,7 +3132,7 @@ class Component extends DCLogic {
             };
           }
           return {
-            uid: uid || '—',
+            uid,
             ref,
             marque: item.brand || item.marque || '—',
             forme: item.shape || item.forme || '—',
