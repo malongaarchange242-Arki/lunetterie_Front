@@ -56,7 +56,7 @@ input::placeholder{color:var(--ink-34)}
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
         <div style="{{ avatarStyle }}"><span data-icon="store" style="display:grid;place-items:center;font-size:22px;color:#fff"></span></div>
         <div style="min-width:0">
-          <div style="font:600 12.5px/1.3 Manrope,sans-serif;margin-bottom:5px">Nadia K.</div>
+          <div style="font:600 12.5px/1.3 Manrope,sans-serif;margin-bottom:5px">{{ userName }}</div>
           <div style="font:500 9px/1.5 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--info-ink)">RESPONSABLE MAGASIN</div>
         </div>
       </div>
@@ -81,6 +81,12 @@ input::placeholder{color:var(--ink-34)}
         <div style="display:flex;align-items:center;gap:8px;font:600 11.5px/1.4 Manrope,sans-serif;color:{{ alerteInk }};margin-bottom:9px"><span data-icon="{{ alerteIcon }}" style="display:grid;place-items:center;font-size:14px"></span>{{ alerteTitre }}</div>
         <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-68)">{{ alerteTexte }}</div>
       </div>
+      
+      <!-- Bouton Réinitialiser toutes les données -->
+      <button onClick="{{ resetAllData }}" style="display:flex;align-items:center;gap:11px;width:100%;padding:13px 15px;border-radius:999px;border:1px solid rgba(242,19,142,.28);background:rgba(242,19,142,.09);color:var(--acc-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;text-align:left;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:#D3117C;color:#fff;border-color:var(--acc-strong)">
+        <span data-icon="trash-2" style="display:grid;place-items:center;font-size:16px;flex:none"></span>Réinitialiser les données
+      </button>
+      
       <button onClick="{{ goCatalogue }}" style="display:flex;align-items:center;gap:11px;width:100%;padding:13px 15px;border-radius:999px;border:1px solid rgba(51,135,156,.28);background:rgba(95,194,217,.12);color:var(--info-ink);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;text-align:left;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.22)">
         <span data-icon="glasses" style="display:grid;place-items:center;font-size:16px;flex:none"></span>Catalogue · commander
       </button>
@@ -1050,52 +1056,14 @@ class Component extends DCLogic {
     dType: 'Solaire', dGamme: 'Classique', dGenre: 'Mixte', dCouleur: '', dUnites: '', dUrgence: 'Normale', dNote: '', dSource: 'Stock général',
     cartonOuvert: null, cartonQ: '', statOnglet: 'Marque',
     phonePaired: false, pairing: false, scanQ: '', scanResultat: null, prepId: null, prepScanned: [], prepRef: '',
-    autos: [
-      { id: 'a1', ref: 'AUTO-2026-0071', boutique: 'Pointe-Noire', type: 'Solaire', gamme: 'Moyenne gamme', genre: 'Femme', couleur: '', unites: 4, date: '28/08/2026', motif: 'Seuil atteint · 9 % de stock restant', statut: 'attente' },
-      { id: 'a2', ref: 'AUTO-2026-0072', boutique: 'Pointe-Noire', type: 'Vue', gamme: 'Classique', genre: 'Homme', couleur: '', unites: 3, date: '28/08/2026', motif: 'Seuil atteint · 8 % de stock restant', statut: 'attente' },
-      { id: 'a3', ref: 'AUTO-2026-0070', boutique: 'Brazzaville', type: 'Lecture', gamme: 'Classique', genre: 'Mixte', couleur: '', unites: 5, date: '27/08/2026', motif: 'Seuil atteint · 6 % de stock restant', statut: 'attente' }
-    ],
-    seq: 1046,
-    cartons: [
-      {
-        id: 'c1', code: 'EXP-POI-1038', ref: 'RQ-2026-1038', boutique: 'Pointe-Noire', date: '27/08/2026',
-        recu: false, scanned: [],
-        lignes: [
-          { uid: 'RO-0060-001-001-4F2A', ref: 'OK-4482-NR', marque: 'Okulo', forme: 'Aviator', couleur: 'Noir', matiere: 'Acétate', type: 'Vue', gamme: 'Moyenne gamme', prix: 90000, photo: 0 },
-          { uid: 'RO-0060-001-002-B71C', ref: 'OK-4483-EC', marque: 'Okulo', forme: 'Ronde', couleur: 'Écaille', matiere: 'Acétate', type: 'Vue', gamme: 'Moyenne gamme', prix: 90000, photo: 1 },
-          { uid: 'RO-0060-002-003-9DE4', ref: 'CO-2210-RT', marque: 'Coline', forme: 'Œil de chat', couleur: 'Rose transparent', matiere: 'Acétate', type: 'Solaire', gamme: 'Moyenne gamme', prix: 90000, photo: 2 },
-          { uid: 'NO-0040-001-004-1A88', ref: 'JA-7701-CR', marque: 'Jane Austen', forme: 'Papillon', couleur: 'Cristal', matiere: 'Métal', type: 'Vue', gamme: 'Classique', prix: 70000, photo: 3 }
-        ]
-      },
-      {
-        id: 'c2', code: 'EXP-POI-1041', ref: 'RQ-2026-1041', boutique: 'Pointe-Noire', date: '28/08/2026',
-        recu: false, scanned: [],
-        lignes: [
-          { uid: 'NO-0040-002-005-3C57', ref: 'LE-3390-DO', marque: 'Level', forme: 'Rectangulaire', couleur: 'Doré', matiere: 'Métal', type: 'Lecture', gamme: 'Classique', prix: 70000, photo: 1 },
-          { uid: 'VI-0020-001-006-7B02', ref: 'LC-8820-TF', marque: 'Louis Carter', forme: 'Polygone', couleur: 'Transparent fumé', matiere: 'Titane', type: 'Vue', gamme: 'Luxe', prix: 180000, photo: 2 }
-        ]
-      },
-      {
-        id: 'c3', code: 'EXP-BRA-1039', ref: 'RQ-2026-1039', boutique: 'Brazzaville', date: '27/08/2026',
-        recu: false, scanned: [],
-        lignes: [
-          { uid: 'RO-0060-002-007-D4F1', ref: 'MI-5510-GU', marque: 'Milano', forme: 'Browline', couleur: 'Guépard', matiere: 'Acétate', type: 'Solaire', gamme: 'Moyenne gamme', prix: 90000, photo: 0 },
-          { uid: 'NO-0040-001-008-6E93', ref: 'LA-1120-HA', marque: 'Lapo', forme: 'Ovale', couleur: 'Havane', matiere: 'Acétate', type: 'Vue', gamme: 'Classique', prix: 70000, photo: 3 }
-        ]
-      }
-    ],
+    autos: [],
+    seq: 0,
+    cartons: [],
     cartonId: null,
-    sortantes: [
-      { id: 's1', ref: 'DEM-2026-0044', origine: 'Brazzaville', destination: 'Pointe-Noire', type: 'Solaire', gamme: 'Moyenne gamme', genre: 'Femme', unites: 2, date: '28/08/2026', motif: 'Rupture annoncée sur les solaires femme', statut: 'attente' },
-      { id: 's2', ref: 'DEM-2026-0045', origine: 'Kinshasa', destination: 'Pointe-Noire', type: 'Vue', gamme: 'Luxe', genre: 'Mixte', unites: 1, date: '27/08/2026', motif: 'Client en attente sur une monture titane', statut: 'attente' },
-      { id: 's3', ref: 'DEM-2026-0041', origine: 'Kolwezi', destination: 'Brazzaville', type: 'Lecture', gamme: 'Classique', genre: 'Homme', unites: 3, date: '26/08/2026', motif: 'Réassort avant les fêtes', statut: 'attente' }
-    ],
+    sortantes: [],
     retours: [],
     rQ: '', rMotif: 'Défaut constaté',
-    demandes: [
-      { id: 'd1', ref: 'RQ-2026-1041', boutique: 'Pointe-Noire', type: 'Solaire', gamme: 'Classique', genre: 'Femme', couleur: 'Écaille', unites: 4, urgence: 'Prioritaire', date: '28/08/2026', note: 'Seuil atteint sur les solaires femme', statut: 'prepa', origine: 'auto' },
-      { id: 'd2', ref: 'RQ-2026-1044', boutique: 'Pointe-Noire', type: 'Vue', gamme: 'Enfant', genre: 'Enfant', couleur: '', unites: 6, urgence: 'Normale', date: '26/08/2026', note: 'Réassort avant la rentrée', statut: 'attente', origine: 'magasin' }
-    ]
+    demandes: []
   };
 
   store() { return window.LStore ? window.LStore.get() : {}; }
@@ -1307,6 +1275,52 @@ class Component extends DCLogic {
       x += w + gap;
     }
     return `height:${h}px;width:100%;background-image:linear-gradient(90deg,${bars.join(',')});background-size:${x}px 100%;background-repeat:repeat-x`;
+  }
+
+  resetAllData() {
+    if (window.LStore && window.LStore.reset) window.LStore.reset();
+
+    this.setState({
+      cartons: [],
+      demandes: [],
+      autos: [],
+      sortantes: [],
+      retours: [],
+      seq: 0,
+      screen: 'receptions',
+      stockQ: '',
+      stockMarque: 'Toutes',
+      stockType: 'Tous',
+      dest: 'Brazzaville',
+      cartonOuvert: null,
+      cartonQ: '',
+      statOnglet: 'Marque',
+      phonePaired: false,
+      pairing: false,
+      scanQ: '',
+      scanResultat: null,
+      prepId: null,
+      prepScanned: [],
+      prepRef: '',
+      dType: 'Solaire',
+      dGamme: 'Classique',
+      dGenre: 'Mixte',
+      dCouleur: '',
+      dUnites: '',
+      dUrgence: 'Normale',
+      dNote: '',
+      dSource: 'Stock général',
+      rMotif: 'Défaut constaté',
+      cartonId: null,
+      hist: [],
+      toast: null,
+      scanning: false,
+      helpOpen: false
+    });
+
+    this.toast('check', 'Données réinitialisées', 'Toutes les données ont été effacées', 'ok');
+
+    setTimeout(() => window.location.reload(), 1000);
   }
 
   renderVals() {
@@ -1549,7 +1563,10 @@ class Component extends DCLogic {
       orbBStyle: `position:absolute;bottom:-240px;right:-120px;width:660px;height:660px;border-radius:999px;background:radial-gradient(circle at 60% 40%,rgba(242,19,142,${(.12 * glow).toFixed(3)}),transparent 66%);filter:blur(70px);animation:orbB 26s ease-in-out infinite;animation-play-state:${anim}`,
       avatarStyle: `width:48px;height:48px;border-radius:999px;flex:none;display:grid;place-items:center;background:radial-gradient(circle at 32% 28%,#3A3A3A,#141414 62%,#0A0A0A);border:1px solid var(--ink-14);box-shadow:0 14px 28px -14px var(--ink-5),0 0 0 6px rgba(95,194,217,.12),inset 0 1px 0 var(--srf-24)`,
 
+      resetAllData: this.resetAllData.bind(this),
+
       nav,
+      userName: s.userName || 'Utilisateur',
       boutique: s.boutique,
       boutiqueOpts: this.BOUTIQUES.map(b => ({ label: b, value: b })),
       setBoutique: e => {
@@ -1582,13 +1599,13 @@ class Component extends DCLogic {
       logout: () => { window.location.href = 'Connexion.dc.html'; },
       stop: e => e.stopPropagation(),
 
-      alerteStyle: seuils.length
+      alerteStyle: stock.length > 0 && seuils.length
         ? 'padding:16px;border-radius:18px;background:rgba(245,165,36,.12);border:1px solid rgba(166,106,5,.28)'
         : 'padding:16px;border-radius:18px;background:rgba(95,194,217,.12);border:1px solid rgba(51,135,156,.24)',
-      alerteInk: seuils.length ? 'var(--warn-ink)' : 'var(--info-ink)',
-      alerteIcon: seuils.length ? 'triangle-alert' : 'glasses',
-      alerteTitre: seuils.length ? `${seuils.length} catégorie(s) sous le seuil` : `${stock.length} monture(s) en stock`,
-      alerteTexte: seuils.length
+      alerteInk: stock.length > 0 && seuils.length ? 'var(--warn-ink)' : 'var(--info-ink)',
+      alerteIcon: stock.length > 0 && seuils.length ? 'triangle-alert' : 'glasses',
+      alerteTitre: stock.length > 0 && seuils.length ? `${seuils.length} catégorie(s) sous le seuil` : `${stock.length} monture(s) en stock`,
+      alerteTexte: stock.length > 0 && seuils.length
         ? 'Demandez un réassort depuis le stock de la boutique.'
         : (enAttente.length ? `${enAttente.length} carton(s) à réceptionner.` : 'Aucun carton en attente.'),
 
@@ -1817,7 +1834,7 @@ class Component extends DCLogic {
         { label: 'CATÉGORIES SOUS LE SEUIL', value: String(seuils.length), color: seuils.length ? 'var(--warn-ink)' : 'var(--ink)' }
       ],
       seuils,
-      seuilsVisible: seuils.length > 0,
+      seuilsVisible: stock.length > 0 && seuils.length > 0,
       stockQ: s.stockQ,
       setStockQ: e => this.setState({ stockQ: e.target.value }),
       stockMarqueOpts: ['Toutes', ...uniq('marque')].map(v => ({
@@ -2090,7 +2107,7 @@ class Component extends DCLogic {
         if (!demandeValide) { this.toast('triangle-alert', 'Quantité manquante', 'Indiquez les unités', 'warn'); return; }
         const seq = s.seq + 1;
         const ref = `RQ-2026-${seq}`;
-        this.setDB({ demandes: [{ id: 'd' + Date.now(), ref, magasin: st.boutique, boutique: st.boutique, source: st.dSource, type: st.dType, gamme: st.dGamme, genre: st.dGenre, couleur: st.dCouleur.trim(), unites: dUniInt, besoin: dUniInt, urgence: st.dUrgence, date: this.dateFr(), motif: st.dNote.trim() || 'Demande du responsable', note: st.dNote.trim() || 'Sans commentaire', statut: 'attente', origine: 'responsable', scanned: [], expedie: false, cartonCode: null }, ...st.demandes, ...(this.db().demandes || [])] });
+        this.setDB({ demandes: [{ id: 'd' + Date.now(), ref, magasin: s.boutique, boutique: s.boutique, source: s.dSource, type: s.dType, gamme: s.dGamme, genre: s.dGenre, couleur: s.dCouleur.trim(), unites: dUniInt, besoin: dUniInt, urgence: s.dUrgence, date: this.dateFr(), motif: s.dNote.trim() || 'Demande du responsable', note: s.dNote.trim() || 'Sans commentaire', statut: 'attente', origine: 'responsable', scanned: [], expedie: false, cartonCode: null }, ...s.demandes, ...(this.db().demandes || [])] });
         this.setState({ seq, dUnites: '', dNote: '', dCouleur: '' });
 
         this.toast('send', 'Demande envoyée', `${ref} · ${dUniInt} u. · ${s.dType}`, 'ok');
@@ -2101,7 +2118,7 @@ class Component extends DCLogic {
         cardStyle: `padding:20px 22px;border-radius:22px;background:${glass};border:1px solid rgba(166,106,5,.26);backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--srf-9)`,
         onValider: () => {
           this.setState(st => ({ autos: st.autos.map(x => x.id === a.id ? { ...x, statut: 'transmise' } : x) }));
-          this.setDB({ demandes: [{ id: 'd' + Date.now(), ref: a.ref, magasin: a.boutique, boutique: a.boutique, source: 'Stock général', type: a.type, gamme: a.gamme, genre: a.genre, couleur: a.couleur, unites: a.unites, besoin: a.unites, urgence: 'Prioritaire', date: this.dateFr(), motif: a.motif, note: a.motif, statut: 'attente', origine: 'auto', scanned: [], expedie: false, cartonCode: null }, ...st.demandes, ...(this.db().demandes || [])] });
+          this.setDB({ demandes: [{ id: 'd' + Date.now(), ref: a.ref, magasin: a.boutique, boutique: a.boutique, source: 'Stock général', type: a.type, gamme: a.gamme, genre: a.genre, couleur: a.couleur, unites: a.unites, besoin: a.unites, urgence: 'Prioritaire', date: this.dateFr(), motif: a.motif, note: a.motif, statut: 'attente', origine: 'auto', scanned: [], expedie: false, cartonCode: null }, ...s.demandes, ...(this.db().demandes || [])] });
           this.toast('badge-check', 'Liste transmise', `${a.ref} · en attente admin`, 'ok');
         },
         onIgnorer: () => {

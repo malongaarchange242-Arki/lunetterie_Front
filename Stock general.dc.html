@@ -422,7 +422,7 @@ input::placeholder{color:var(--ink-34)}
 
             <div style="display:flex;justify-content:flex-end;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px">
               <span style="font:500 11.5px/1.4 Manrope,sans-serif;color:var(--ink-64)">{{ bulkSaveLabel }}</span>
-              <button onClick="{{ createMontures }}" style="{{ bulkSaveStyle }}"><span data-icon="package-plus" style="display:grid;place-items:center;font-size:17px"></span>Enregistrer le carton</button>
+              <button onClick="{{ createMontures }}" style="{{ bulkSaveStyle }}" disabled="{{ savingCarton }}"><span data-icon="package-plus" style="display:grid;place-items:center;font-size:17px"></span>{{ bulkSaveLabel }}</button>
             </div>
 
             <sc-if value="{{ cartonPlein }}" hint-placeholder-val="{{ false }}">
@@ -2379,7 +2379,7 @@ class Component extends DCLogic {
         refPool: [], refPoolVide: true, refPoolLabel: '—', refPoolEmptyHint: '',
         kQrBlocks: [], phoneHint: '', phoneIcon: 'qr-code', phoneLabel: '', phoneBtnStyle: '',
         togglePhone: () => {}, readRef: () => {}, readRefLabel: '', readRefStyle: '',
-        bulkSaveLabel: '', bulkSaveStyle: '', createMontures: () => {}
+        bulkSaveLabel: '', bulkSaveStyle: '', savingCarton: false, createMontures: () => {}
       };
 
       const chipF = 'padding:4px 10px;border-radius:999px;white-space:nowrap;font:600 10.5px/1.4 Manrope,sans-serif;background:rgba(95,194,217,.18);border:1px solid rgba(51,135,156,.3);color:var(--info-ink)';
@@ -2711,6 +2711,7 @@ class Component extends DCLogic {
         })))
       });
       const createMontures = async () => {
+        if (s.savingCarton) return;
         if (!lignesAEnregistrer.length) {
           this.toast('package-check', 'Carton déjà enregistré', 'Toutes les montures sont déjà en base.', 'info');
           return;
@@ -2727,6 +2728,7 @@ class Component extends DCLogic {
           this.toast('triangle-alert', 'Station inconnue', 'Reconnectez-vous avant de valider.', 'warn');
           return;
         }
+        this.setState({ savingCarton: true });
         // Helpers pour convertir et ajouter les photos
         const dataUrlToBlob = dataUrl => {
           const parts = String(dataUrl).split(',');
@@ -2806,6 +2808,7 @@ class Component extends DCLogic {
 
           if (!faceUrl && (!faceBlob || faceBlob.size === 0)) {
             this.toast('triangle-alert', 'Photo monture manquante', `Ajoutez une photo face à la ligne ${ligne.key}.`, 'warn');
+            this.setState({ savingCarton: false });
             return;
           }
           
@@ -2867,16 +2870,21 @@ class Component extends DCLogic {
             savedCount++;
           } catch (error) {
             this.toast('triangle-alert', 'Enregistrement interrompu', `${savedCount} ligne(s) enregistrée(s) · ${error.message || 'Backend indisponible'}`, 'warn');
+            this.setState({ savingCarton: false });
             return;
           }
         }
         this.toast('package-check', 'Carton enregistré', `${savedCount} monture(s) ajoutée(s) dans glasses.`, 'ok');
+        this.setState({ savingCarton: false, screen: 'cartons' });
       };
 
       return {
         lignes, pool, kVarChips, refPool,
-        bulkSaveLabel: `Enregistrer les ${lignesAEnregistrer.length} montures`,
-        bulkSaveStyle: lignesAEnregistrer.length
+        savingCarton: !!s.savingCarton,
+        bulkSaveLabel: s.savingCarton ? 'Enregistrement...' : 'Enregistrer le carton',
+        bulkSaveStyle: s.savingCarton
+          ? 'display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13.5px/1.3 Manrope,sans-serif;cursor:not-allowed;opacity:.65;white-space:nowrap'
+          : lignesAEnregistrer.length
           ? 'display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;font:600 13.5px/1.3 Manrope,sans-serif;cursor:pointer;box-shadow:0 14px 30px -14px rgba(191,33,33,.6)'
           : 'display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:999px;border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);font:600 13.5px/1.3 Manrope,sans-serif;cursor:not-allowed',
         createMontures,

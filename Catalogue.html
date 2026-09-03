@@ -68,17 +68,86 @@
 
     <div style="margin-bottom:24px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:12px">
-        <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--acc-ink)">COMMANDE PAR MODÈLE</div>
+        <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--acc-ink)">CATALOGUE DES VALISES</div>
         <button onClick="{{ downloadCatalogue }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 16px;border-radius:999px;border:1px solid rgba(95,194,217,.34);background:rgba(95,194,217,.13);color:var(--info-ink);font:600 12px/1.3 Manrope,sans-serif;cursor:pointer;white-space:nowrap;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:rgba(95,194,217,.24);border-color:rgba(95,194,217,.55)">
           <span data-icon="file-down" style="display:grid;place-items:center;font-size:16px;flex:none"></span>Télécharger le catalogue
         </button>
       </div>
       <h1 style="font:600 27px/1.18 Sora,sans-serif;letter-spacing:-.022em;margin:0 0 10px">Catalogue du stock général</h1>
-      <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:74ch;text-wrap:pretty">Chaque vignette est un modèle disponible au stock général, avec le nombre d'exemplaires en stock. Ouvrez-la pour voir les caractéristiques, choisir la couleur et la quantité. La liste terminée part chez l'administrateur, qui la valide et la transmet au stock général.</p>
+      <p style="font:300 14px/1.55 Manrope,sans-serif;color:var(--ink-6);margin:0;max-width:74ch;text-wrap:pretty">Parcourez les valises, leurs cartons, puis les montures associées. Chaque niveau présente les quantités, les images et les caractéristiques enregistrées.</p>
     </div>
 
     <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
 
+      <sc-if value="{{ isValiseView }}" hint-placeholder-val="{{ false }}">
+        <div style="width:100%">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px">
+            <div>
+              <div style="font:500 10px/1.4 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--acc-ink)">RÉCEPTION</div>
+              <h2 style="font:600 22px/1.2 Sora,sans-serif;margin:6px 0 0">Valises disponibles</h2>
+            </div>
+            <span style="font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--ink-62)">{{ valiseCountLabel }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px">
+            <sc-for list="{{ valiseCards }}" as="v" hint-placeholder-count="6">
+              <button onClick="{{ v.onOpen }}" style="{{ v.cardStyle }}">
+                <div style="position:relative;height:190px;margin:-16px -16px 16px;overflow:hidden;background:var(--srf-7);border-bottom:1px solid var(--ink-09)">
+                  <sc-for list="{{ v.images }}" as="image" hint-placeholder-count="1">
+                    <img bindSrc="{{ image.src }}" alt="Lunette de {{ v.code }}" style="{{ image.style }}">
+                  </sc-for>
+                  <div style="position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(16,16,22,.55));pointer-events:none"></div>
+                  <span style="position:absolute;right:12px;bottom:10px;padding:5px 8px;border-radius:9px;background:rgba(16,16,22,.62);color:#fff;font:500 10px/1.2 'JetBrains Mono',monospace">{{ v.cartonLabel }}</span>
+                </div>
+                <div style="display:flex;align-items:baseline;gap:8px;text-align:left">
+                  <strong style="font:600 15px/1.3 'JetBrains Mono',monospace">{{ v.code }}</strong>
+                  <span style="margin-left:auto;font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--info-ink)">{{ v.quantityLabel }}</span>
+                </div>
+                <div style="margin-top:8px;text-align:left;font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">{{ v.summary }}</div>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isCartonView }}" hint-placeholder-val="{{ false }}">
+        <div style="width:100%">
+          <button onClick="{{ backToValises }}" style="display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--info-ink);font:600 12px/1.3 Manrope,sans-serif;cursor:pointer;padding:0;margin-bottom:18px"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:16px"></span>Valises</button>
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:18px"><h2 style="font:600 22px/1.2 Sora,sans-serif;margin:0">{{ selectedValiseCode }}</h2><span style="font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--ink-62)">{{ selectedValiseSummary }}</span></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px">
+            <sc-for list="{{ cartonCards }}" as="k" hint-placeholder-count="4">
+              <button onClick="{{ k.onOpen }}" style="{{ k.cardStyle }}">
+                <div style="position:relative;height:170px;margin:-16px -16px 16px;overflow:hidden;background:var(--srf-7);border-bottom:1px solid var(--ink-09)">
+                  <sc-for list="{{ k.images }}" as="image" hint-placeholder-count="1"><img bindSrc="{{ image.src }}" alt="Lunette de {{ k.code }}" style="{{ image.style }}"></sc-for>
+                </div>
+                <div style="display:flex;align-items:baseline;gap:8px;text-align:left"><strong style="font:600 14px/1.3 'JetBrains Mono',monospace">{{ k.code }}</strong><span style="margin-left:auto;font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--info-ink)">{{ k.quantityLabel }}</span></div>
+                <div style="margin-top:9px;text-align:left;font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Marques : {{ k.marques }}</div>
+                <div style="margin-top:4px;text-align:left;font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Couleurs : {{ k.couleurs }}</div>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isLunetteView }}" hint-placeholder-val="{{ false }}">
+      <div style="width:100%">
+        <button onClick="{{ backToCartons }}" style="display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--info-ink);font:600 12px/1.3 Manrope,sans-serif;cursor:pointer;padding:0;margin-bottom:18px"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:16px"></span>{{ selectedValiseCode }} · Cartons</button>
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:18px"><h2 style="font:600 22px/1.2 Sora,sans-serif;margin:0">{{ selectedCartonCode }}</h2><span style="font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--ink-62)">{{ selectedCartonSummary }}</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px">
+          <sc-for list="{{ lunetteCards }}" as="l" hint-placeholder-count="6">
+            <div style="{{ l.cardStyle }}">
+              <div style="height:150px;margin:-14px -14px 13px;overflow:hidden;background:var(--srf-7);border-radius:14px 14px 0 0"><img bindSrc="{{ l.image }}" alt="Monture {{ l.reference }}" style="width:100%;height:100%;object-fit:cover"></div>
+              <div style="font:600 13px/1.3 Manrope,sans-serif">{{ l.reference }}</div>
+              <div style="margin-top:6px;font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Marque : {{ l.marque }}</div>
+              <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Couleur : {{ l.couleur }}</div>
+              <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Forme : {{ l.forme }} · {{ l.matiere }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ lunettesVides }}" hint-placeholder-val="{{ false }}"><div style="padding:32px;border:1px dashed var(--ink-14);border-radius:18px;color:var(--ink-62);font:400 12px/1.5 Manrope,sans-serif">Les montures de ce carton ne sont pas encore enregistrées individuellement.</div></sc-if>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isModelView }}" hint-placeholder-val="{{ false }}">
       <div style="flex:1 1 460px;min-width:0">
 
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:18px 20px;border-radius:22px;background:linear-gradient(150deg,var(--srf-88),var(--srf-6));border:1px solid var(--ink-08);backdrop-filter:blur(22px);box-shadow:inset 0 1px 0 var(--srf-9);margin-bottom:20px">
@@ -121,7 +190,7 @@
                 </div>
                 <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
                   <span style="font:600 14px/1.25 Sora,sans-serif;letter-spacing:-.012em;flex:1;min-width:0">{{ m.marque }}</span>
-                  <span style="font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--ok-ink);white-space:nowrap">{{ m.stockLabel }}</span>
+                  <span style="font:500 11px/1.3 'JetBrains Mono',monospace;color:{{ m.commandable ? 'var(--ok-ink)' : 'var(--warn-ink)' }};white-space:nowrap">{{ m.stockLabel }}</span>
                 </div>
                 <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-64);margin-bottom:12px">{{ m.sousTitre }}</div>
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;font:500 10.5px/1.4 'JetBrains Mono',monospace;color:var(--ink-56)">
@@ -138,6 +207,9 @@
                   <span style="font:500 11.5px/1.3 'JetBrains Mono',monospace;color:var(--ink-72)">{{ m.prixLabel }}</span>
                 </div>
               </button>
+              <sc-if value="{{ m.preRegistration }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:12px;padding:9px 12px;border-radius:12px;background:rgba(245,165,36,.12);border:1px solid rgba(166,106,5,.24);font:600 11px/1.4 Manrope,sans-serif;color:var(--warn-ink)">Carton pré-enregistré · montures à enregistrer</div>
+              </sc-if>
               <sc-if value="{{ m.dansLaListe }}" hint-placeholder-val="{{ false }}">
                 <div style="margin-top:12px;padding:9px 12px;border-radius:12px;background:rgba(242,19,142,.1);border:1px solid rgba(191,33,120,.22);font:600 11px/1.4 Manrope,sans-serif;color:var(--acc-ink)">{{ m.dansLaListeLabel }}</div>
               </sc-if>
@@ -235,6 +307,7 @@
         </div>
       </div>
     </div>
+      </sc-if>
   </main>
 </div>
 
@@ -275,6 +348,23 @@
                 <div style="font:600 12.5px/1.35 Manrope,sans-serif">{{ c.valeur }}</div>
               </div>
             </sc-for>
+          </div>
+          <div style="margin-top:22px">
+            <div style="font:500 9.5px/1.5 'JetBrains Mono',monospace;letter-spacing:.16em;color:var(--ink-64);margin-bottom:12px">DÉTAIL DES CARTONS</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ detCartons }}" as="carton" hint-placeholder-count="1">
+                <div style="padding:14px;border-radius:15px;background:var(--srf-8);border:1px solid var(--ink-08)">
+                  <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">
+                    <strong style="font:600 12px/1.3 'JetBrains Mono',monospace">{{ carton.title }}</strong>
+                    <span style="margin-left:auto;font:500 10.5px/1.3 'JetBrains Mono',monospace;color:var(--info-ink)">{{ carton.quantity }}</span>
+                  </div>
+                  <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-64)">Montures enregistrées : {{ carton.status }}</div>
+                  <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-64)">Marques : {{ carton.marques }}</div>
+                  <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-64)">Couleurs : {{ carton.couleurs }}</div>
+                  <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-64)">Références : {{ carton.references }}</div>
+                </div>
+              </sc-for>
+            </div>
           </div>
         </div>
 
@@ -344,7 +434,8 @@ class Component extends DCLogic {
     boutique: 'Pointe-Noire',
     q: '', fGamme: '', fGenre: '', fType: '', fMarque: '',
     ouvert: null, selCouleur: null, qty: 1, detImageView: 'front',
-    panier: {}, panierGammesOuvertes: {}, motif: '', toast: null
+    panier: {}, panierGammesOuvertes: {}, motif: '', toast: null,
+    catalogLevel: 'valises', selectedValise: null, selectedCarton: null
   };
 
   componentDidMount() {
@@ -377,8 +468,8 @@ class Component extends DCLogic {
         console.log('Catalogue: No token in localStorage');
         return;
       }
-      console.log('Catalogue: Loading backend stock with token...');
-      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/glasses?status=EN_STOCK_GENERAL`, {
+      console.log('Catalogue: Loading pre-registration boxes with token...');
+      const response = await fetch(`${this.apiBaseUrl()}/api/v1/inventory/catalogue/pre-registration-boxes`, {
         headers: this.apiHeaders()
       });
       console.log('Catalogue API response:', response.status, response.ok);
@@ -391,35 +482,54 @@ class Component extends DCLogic {
       console.log('Catalogue payload received:', Array.isArray(payload) ? `array(${payload.length})` : typeof payload, payload);
       const rawList = Array.isArray(payload)
         ? payload
-        : (payload && Array.isArray(payload.glasses) ? payload.glasses : (payload && payload.data && Array.isArray(payload.data.glasses) ? payload.data.glasses : []));
+        : (payload && Array.isArray(payload.boxes) ? payload.boxes : (payload && payload.data && Array.isArray(payload.data.boxes) ? payload.data.boxes : []));
       const list = rawList;
       this._backendStock = list
-        .filter(item => (item.status || '').toUpperCase() === 'EN_STOCK_GENERAL')
-        .map(item => ({
-          id: item.id ?? null,
-          barcode: String(item.barcode || '').trim(),
-          uid: String(item.barcode || '').trim(),
-          ref: item.reference || item.barcode || '',
-          marque: item.brand || '—',
-          forme: item.shape || '—',
-          couleur: item.color || 'Sans couleur',
-          matiere: item.material || '—',
-          gamme: item.gamme || '—',
-          type: item.mount_type || '—',
-          genre: item.gender || '—',
-          prix: Number(item.price || 0),
-          valise: item.valise_code || '',
-          carton: item.location_code || '',
-          site: item.station_name || 'Stock général',
-          statut: 'stock',
-          reservedForCity: item.reserved_for_city || item.reservedForCity || '',
-          photo: this.normalizePhotoUrl(item.photo_monture_url || item.photo || null),
-          photoFront: this.normalizePhotoUrl(item.photo_monture_url || item.photo || null),
-          photoBack: this.normalizePhotoUrl(item.photo_arriere_url || item.photo_branche_url || item.photoArriereUrl || item.photoBackUrl || null),
-          photoBranche: this.normalizePhotoUrl(item.photo_branche_url || item.photoBackUrl || null),
+        .map(item => {
+          const box = item.pre_registration_box || item.preRegistrationBox || item.PreRegistrationBox || item;
+          const field = (source, key) => {
+            if (!source) return undefined;
+            const wanted = key.toLowerCase().replace(/_/g, '');
+            const found = Object.keys(source).find(name => name.toLowerCase().replace(/_/g, '') === wanted);
+            return found ? source[found] : undefined;
+          };
+          const values = key => field(box, key) ?? field(item, key) ?? [];
+          const photos = values('photos');
+          const marques = values('marques');
+          const couleurs = values('couleurs');
+          const matieres = values('matieres');
+          const formes = values('formes');
+          const photoPath = (photos || []).map(photo => String(photo?.src || photo?.url || '')).find(source => /pre-registration\//i.test(source)) || '';
+          const photoLocation = photoPath.match(/pre-registration\/([^/]+)\/([^/?#]+)/i);
+          const valiseCode = field(box, 'valise_code') || field(box, 'case_code') || field(box, 'CaseCode') || field(item, 'valise_code') || field(item, 'case_code') || field(item, 'CaseCode') || field(item, 'valise') || (photoLocation ? photoLocation[1] : '');
+          return {
+          id: box.id ?? null,
+          barcode: '',
+          uid: '',
+          ref: '',
+          marque: (marques || [])[0] || '—',
+          forme: Object.keys(formes || {})[0] || '—',
+          couleur: (couleurs || [])[0] || 'Sans couleur',
+          matiere: (matieres || [])[0] || '—',
+          gamme: field(box, 'gamme') || '—',
+          type: field(box, 'type') || field(box, 'type_lunette') || '—',
+          genre: field(item, 'valise_genre') || field(item, 'case_genre') || field(item, 'CaseGenre') || '—',
+          prix: Number(field(box, 'prix') || 0),
+          quantity: Number(field(box, 'qty') || field(box, 'quantity') || 0),
+          valise: valiseCode,
+          carton: field(box, 'code') || (photoLocation ? photoLocation[2] : ''),
+          site: 'Stock général',
+          statut: 'pre_registration',
+          preRegistration: true,
+          photos,
+          montures: values('montures'),
+          photo: this.normalizePhotoUrl(photos.find(p => p && (p.kind === 'face' || p.view === 'face'))?.src || null),
+          photoFront: this.normalizePhotoUrl(photos.find(p => p && (p.kind === 'face' || p.view === 'face'))?.src || null),
+          photoBack: this.normalizePhotoUrl(photos.find(p => p && (p.kind === 'arriere' || p.kind === 'branche' || p.view === 'rear'))?.src || null),
           sorti: false,
           test: false
-        }));
+          };
+        });
       console.log('Catalogue: Loaded', this._backendStock.length, 'items');
       this.setState({ _tick: Date.now() });
     } catch (error) {
@@ -700,13 +810,31 @@ class Component extends DCLogic {
           couleurs: new Map(),
           glassIds: new Map(),
           total: 0,
+          commandable: !m.preRegistration,
+          cartonDetails: [],
           photoUrl: this.normalizePhotoUrl(m.photo || m.photoFront || m.photo_monture_url || m.photoMontureUrl || m.photoMonture || null),
           photoFrontUrl: this.normalizePhotoUrl(m.photoFront || m.photo_monture_url || m.photo || m.photoMontureUrl || m.photoMonture || null),
           photoBackUrl: this.normalizePhotoUrl(m.photoBack || m.photo_arriere_url || m.photo_branche_url || m.photoArriereUrl || m.photoBackUrl || null)
         };
         map.set(key, g);
       }
-      g.total++;
+      g.total += Number(m.quantity) || 1;
+      g.commandable = g.commandable && !m.preRegistration;
+      const registered = Array.isArray(m.montures) ? m.montures : [];
+      const countValues = values => Object.entries(values.reduce((counts, value) => {
+        const label = String(value || 'Non renseigné');
+        counts[label] = (counts[label] || 0) + 1;
+        return counts;
+      }, {})).map(([label, count]) => `${label} : ${count}`).join(', ');
+      g.cartonDetails.push({
+        valise: m.valise || 'Valise non renseignée',
+        code: m.carton || 'Carton non renseigné',
+        quantity: Number(m.quantity) || 0,
+        registeredCount: registered.length,
+        marques: registered.length ? countValues(registered.map(item => item.marque)) : (m.marques || []).join(', ') || '—',
+        couleurs: registered.length ? countValues(registered.map(item => item.couleur)) : (m.couleurs || []).join(', ') || '—',
+        references: registered.map(item => item.reference || item.barcode).filter(Boolean).join(', ') || 'Aucune référence enregistrée'
+      });
       if (!g.photoUrl) g.photoUrl = this.normalizePhotoUrl(m.photo || m.photoFront || m.photo_monture_url || m.photoMontureUrl || m.photoMonture || null);
       if (!g.photoFrontUrl) g.photoFrontUrl = this.normalizePhotoUrl(m.photoFront || m.photo_monture_url || m.photo || m.photoMontureUrl || m.photoMonture || null);
       if (!g.photoBackUrl) g.photoBackUrl = this.normalizePhotoUrl(m.photoBack || m.photo_arriere_url || m.photo_branche_url || m.photoArriereUrl || m.photoBackUrl || null);
@@ -722,6 +850,7 @@ class Component extends DCLogic {
         g.glassIds.set(c, []);
       }
       if (rawBarcode) g.couleurs.get(c).push(rawBarcode);
+      else for (let index = 0; index < (Number(m.quantity) || 1); index++) g.couleurs.get(c).push('');
       if (rawId != null) g.glassIds.get(c).push(rawId);
     });
     const result = Array.from(map.values()).sort((a, b) => b.total - a.total);
@@ -751,6 +880,49 @@ class Component extends DCLogic {
     const groupes = this.modelesSrc();
     const byKey = {};
     groupes.forEach(g => { byKey[g.key] = g; });
+
+    const rawBoxes = Array.isArray(this._backendStock) ? this._backendStock : [];
+    const imageItems = (photos, limit) => (photos || []).filter(photo => photo && (photo.src || photo.url)).slice(0, limit).map((photo, index) => ({
+      src: this.normalizePhotoUrl(photo.src || photo.url),
+      style: `position:absolute;inset:${12 + index * 5}px ${18 + index * 4}px ${18 - index * 2}px ${12 + index * 4}px;width:calc(100% - ${(30 + index * 8)}px);height:calc(100% - ${(30 + index * 5)}px);object-fit:cover;border-radius:14px;transform:rotate(${(index - 1) * 4}deg);box-shadow:0 12px 22px rgba(23,23,28,.2);border:1px solid var(--srf-8)`
+    }));
+    const valiseMap = new Map();
+    rawBoxes.forEach(box => {
+      const code = String(box.valise_code || 'Valise non renseignée');
+      if (!valiseMap.has(code)) valiseMap.set(code, { code, boxes: [], quantity: 0, photos: [], marques: new Set(), couleurs: new Set() });
+      const valise = valiseMap.get(code);
+      valise.boxes.push(box);
+      valise.quantity += Number(box.quantity) || 0;
+      valise.photos.push(...(box.photos || []));
+      (box.marques || []).forEach(value => valise.marques.add(value));
+      (box.couleurs || []).forEach(value => valise.couleurs.add(value));
+    });
+    const selectedValise = valiseMap.get(s.selectedValise);
+    const selectedBox = selectedValise && selectedValise.boxes.find(box => String(box.id) === String(s.selectedCarton));
+    const valiseCards = Array.from(valiseMap.values()).map(valise => ({
+      code: valise.code,
+      images: imageItems(valise.photos, 4),
+      cartonLabel: `${valise.boxes.length} carton${valise.boxes.length > 1 ? 's' : ''}`,
+      quantityLabel: `${valise.quantity} montures`,
+      summary: `${Array.from(valise.marques).join(', ') || 'Marques à préciser'} · ${Array.from(valise.couleurs).join(', ') || 'Couleurs à préciser'}`,
+      cardStyle: 'display:block;width:100%;padding:16px;border-radius:22px;border:1px solid var(--ink-09);background:linear-gradient(150deg,var(--srf-9),var(--srf-62));box-shadow:inset 0 1px 0 var(--srf-9),0 18px 40px -30px var(--ink-2);cursor:pointer;text-align:left',
+      onOpen: () => this.setState({ catalogLevel: 'cartons', selectedValise: valise.code, selectedCarton: null })
+    }));
+    const cartonCards = selectedValise ? selectedValise.boxes.map(box => ({
+      code: box.code,
+      images: imageItems(box.photos, 3),
+      quantityLabel: `${box.quantity} montures`,
+      marques: (box.marques || []).join(', ') || '—',
+      couleurs: (box.couleurs || []).join(', ') || '—',
+      cardStyle: 'display:block;width:100%;padding:16px;border-radius:22px;border:1px solid var(--ink-09);background:linear-gradient(150deg,var(--srf-9),var(--srf-62));box-shadow:inset 0 1px 0 var(--srf-9),0 18px 40px -30px var(--ink-2);cursor:pointer;text-align:left',
+      onOpen: () => this.setState({ catalogLevel: 'lunettes', selectedCarton: box.id })
+    })) : [];
+    const lunetteCards = selectedBox ? (selectedBox.montures || []).map(monture => ({
+      reference: monture.reference || monture.barcode || 'Référence non renseignée',
+      marque: monture.marque || '—', couleur: monture.couleur || '—', forme: monture.forme || '—', matiere: monture.matiere || '—',
+      image: '',
+      cardStyle: 'padding:14px;border-radius:18px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);box-shadow:inset 0 1px 0 var(--srf-9)'
+    })) : [];
 
     const uniq = f => Array.from(new Set(groupes.map(f).filter(Boolean))).sort();
     const mkOpts = (tout, list) => [{ value: '', label: tout }].concat(list.map(v => ({ value: v, label: v })));
@@ -785,7 +957,8 @@ class Component extends DCLogic {
         sousTitre: `${g.forme} · ${g.type} · ${g.genre}`,
         emplacementLabel: this.emplacementLabel(g),
         gamme: g.gamme, gammeStyle: tagGamme,
-        stockLabel: `${g.total} en stock`,
+          stockLabel: g.commandable ? `${g.total} en stock` : `${g.total} à enregistrer`,
+          preRegistration: !g.commandable,
         prixLabel: this.fcfa(g.prix),
         couleursLabel: `${g.couleurs.size} coloris`,
         dots: Array.from(g.couleurs.keys()).slice(0, 6).map(c => ({
@@ -831,7 +1004,7 @@ class Component extends DCLogic {
       setDetImageBack: () => this.setState({ detImageView: 'back' }),
       detMarque: g.marque,
       detType: g.type, detGamme: g.gamme,
-      detSousTitre: `${g.forme} · ${g.genre} · ${g.total} exemplaires au stock général`,
+      detSousTitre: `${g.forme} · ${g.genre} · ${g.total} exemplaires ${g.commandable ? 'au stock général' : 'dans le pré-enregistrement'}`,
       detCarac: [
         { label: 'MARQUE', valeur: g.marque },
         { label: 'FORME', valeur: g.forme },
@@ -843,6 +1016,14 @@ class Component extends DCLogic {
         { label: 'PRIX UNITAIRE', valeur: this.fcfa(g.prix) },
         { label: 'DISPONIBLE', valeur: `${g.total} montures` }
       ],
+      detCartons: g.cartonDetails.map(carton => ({
+        title: `${carton.valise} · ${carton.code}`,
+        quantity: `${carton.quantity} monture${carton.quantity > 1 ? 's' : ''}`,
+        status: `${carton.registeredCount} enregistrée${carton.registeredCount > 1 ? 's' : ''}`,
+        marques: carton.marques,
+        couleurs: carton.couleurs,
+        references: carton.references
+      })),
       detCouleurs: couleursArr.map(([c, uids]) => {
         const on = c === selC;
         const pris = this.panierQty(g.key, c);
@@ -867,15 +1048,17 @@ class Component extends DCLogic {
           : 'background:var(--srf-9);border:1px solid var(--ink-12);color:var(--ink-72)'),
         onClick: () => this.setState({ qty: n })
       })),
-      detDispoTexte: maxSel > 0
+      detDispoTexte: !g.commandable
+        ? 'Ces montures seront commandables après leur enregistrement au stock général.'
+        : maxSel > 0
         ? `${maxSel} exemplaire(s) encore disponible(s) en ${selC}${dejaSel ? ` · ${dejaSel} déjà dans votre liste` : ''}.`
         : `Tous les exemplaires en ${selC} sont déjà dans votre liste.`,
-      detAddLabel: maxSel > 0 ? `Ajouter ${qty} à la liste` : 'Plus rien à ajouter',
-      detAddStyle: `display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:15px 22px;border-radius:999px;font:600 13.5px/1.3 Manrope,sans-serif;` + (maxSel > 0
+      detAddLabel: !g.commandable ? 'Enregistrement en cours' : (maxSel > 0 ? `Ajouter ${qty} à la liste` : 'Plus rien à ajouter'),
+      detAddStyle: `display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:15px 22px;border-radius:999px;font:600 13.5px/1.3 Manrope,sans-serif;` + (g.commandable && maxSel > 0
         ? 'border:1px solid var(--srf-6);background:linear-gradient(145deg,#F2138E,#BF2178);color:#fff;cursor:pointer;box-shadow:0 16px 34px -20px rgba(191,33,120,.8)'
         : 'border:1px solid var(--ink-09);background:var(--srf-5);color:var(--ink-4);cursor:not-allowed'),
       detAdd: () => {
-        if (maxSel <= 0) return;
+        if (!g.commandable || maxSel <= 0) return;
         this.setPanier(g.key, selC, dejaSel + qty, Math.max(g.couleurs.get(selC).length, g.glassIds.get(selC).length));
         this.toast('shopping-bag', 'Ajouté à la liste', `${g.marque} · ${selC} · ×${qty}`, 'ok');
         this.setState({ ouvert: null, qty: 1 });
@@ -943,6 +1126,21 @@ class Component extends DCLogic {
 
     return {
       theme,
+      isValiseView: s.catalogLevel === 'valises',
+      isCartonView: s.catalogLevel === 'cartons',
+      isLunetteView: s.catalogLevel === 'lunettes',
+      isModelView: s.catalogLevel === 'modeles',
+      valiseCards,
+      valiseCountLabel: `${valiseCards.length} valise${valiseCards.length > 1 ? 's' : ''}`,
+      cartonCards,
+      lunetteCards,
+      lunettesVides: lunetteCards.length === 0,
+      selectedValiseCode: selectedValise ? selectedValise.code : 'Valise',
+      selectedValiseSummary: selectedValise ? `${selectedValise.quantity} montures · ${selectedValise.boxes.length} carton${selectedValise.boxes.length > 1 ? 's' : ''}` : '',
+      selectedCartonCode: selectedBox ? selectedBox.code : 'Carton',
+      selectedCartonSummary: selectedBox ? `${selectedBox.quantity} montures · ${(selectedBox.montures || []).length} enregistrée(s)` : '',
+      backToValises: () => this.setState({ catalogLevel: 'valises', selectedValise: null, selectedCarton: null }),
+      backToCartons: () => this.setState({ catalogLevel: 'cartons', selectedCarton: null }),
       themeIcon: theme === 'dark' ? 'sun' : 'moon',
       themeLabel: theme === 'dark' ? 'Mode clair' : 'Mode sombre',
       toggleTheme: () => { if (S) S.setTheme(theme === 'dark' ? 'light' : 'dark'); },
