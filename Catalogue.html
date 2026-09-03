@@ -136,7 +136,7 @@
                   <sc-for list="{{ k.images }}" as="image" hint-placeholder-count="1"><img bindSrc="{{ image.src }}" alt="Lunette de {{ k.code }}" style="{{ image.style }}"></sc-for>
                 </div>
                 <div style="display:flex;align-items:baseline;gap:8px;text-align:left"><strong style="font:600 14px/1.3 'JetBrains Mono',monospace">{{ k.code }}</strong><span style="margin-left:auto;font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--info-ink)">{{ k.quantityLabel }}</span></div>
-                <div style="margin-top:9px;text-align:left;font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Marques : {{ k.marques }}</div>
+                <div style="margin-top:9px;text-align:left;font:600 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Marques : {{ k.marques }}</div>
                 <div style="margin-top:4px;text-align:left;font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Couleurs : {{ k.couleurs }}</div>
                 <div style="margin-top:4px;text-align:left;font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Forme : {{ k.forme }}</div>
                 <button onClick="{{ k.onAdd }}" style="{{ k.addStyle }}"><span data-icon="plus" style="display:grid;place-items:center;font-size:14px"></span>{{ k.addLabel }}</button>
@@ -149,7 +149,13 @@
       <sc-if value="{{ isLunetteView }}" hint-placeholder-val="{{ false }}">
       <div style="flex:1 1 0;min-width:0">
         <button onClick="{{ backToCartons }}" style="display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--info-ink);font:600 12px/1.3 Manrope,sans-serif;cursor:pointer;padding:0;margin-bottom:18px"><span data-icon="arrow-left" style="display:grid;place-items:center;font-size:16px"></span>{{ selectedValiseCode }} · Cartons {{ selectedCartonNumber }}</button>
-        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:18px"><h2 style="font:600 22px/1.2 Sora,sans-serif;margin:0">{{ selectedCartonCode }}</h2><span style="font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--ink-62)">{{ selectedCartonSummary }}</span></div>
+          <div style="margin-bottom:18px">
+            <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:6px"><h2 style="font:600 22px/1.2 Sora,sans-serif;margin:0">{{ selectedCartonCode }}</h2><span style="font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--ink-62)">{{ selectedCartonSummary }}</span></div>
+            <div style="display:inline-block;margin-top:4px;padding:9px 13px;border:2px solid #F2138E;border-radius:0;color:var(--ink)">
+              <div style="font:700 14px/1.5 Manrope,sans-serif">Marques : {{ selectedCartonMarqueSummary }}</div>
+              <div style="font:700 14px/1.5 Manrope,sans-serif">Formes : {{ selectedCartonFormeSummary }}</div>
+            </div>
+          </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px">
           <sc-for list="{{ lunetteCards }}" as="l" hint-placeholder-count="6">
             <div style="{{ l.cardStyle }}">
@@ -158,11 +164,16 @@
                 <sc-if value="{{ !l.image }}" hint-placeholder-val="{{ false }}"><div style="display:grid;place-items:center;width:100%;height:100%;color:var(--ink-56);font:600 12px/1.3 Manrope,sans-serif">Image indisponible</div></sc-if>
               </div>
               <div style="font:600 13px/1.3 Manrope,sans-serif">{{ l.reference }}</div>
-              <div style="margin-top:6px;font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Marque : {{ l.marque }}</div>
+              <div style="margin-top:6px;font:600 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Marque : {{ l.marque }}</div>
               <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Couleur : {{ l.couleur }}</div>
               <div style="font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Forme : {{ l.forme }} · {{ l.matiere }}</div>
               <div style="display:flex;align-items:center;gap:5px;margin-top:6px;font:500 10px/1.4 'JetBrains Mono',monospace;color:var(--ink-56)"><span data-icon="map-pin" style="display:grid;place-items:center;font-size:12px;color:var(--acc-ink)"></span>Emplacement : {{ l.emplacement }}</div>
-              <button onClick="{{ l.onAdd }}" style="{{ l.addStyle }}"><span data-icon="plus" style="display:grid;place-items:center;font-size:14px"></span>{{ l.addLabel }}</button>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">
+                <sc-if value="{{ l.hasBack }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ l.onToggle }}" style="{{ l.toggleStyle }}">{{ l.toggleLabel }}</button>
+                </sc-if>
+                <button onClick="{{ l.onAdd }}" style="{{ l.addStyle }}"><span data-icon="plus" style="display:grid;place-items:center;font-size:14px"></span>{{ l.addLabel }}</button>
+              </div>
             </div>
           </sc-for>
         </div>
@@ -371,7 +382,7 @@
                     <span style="margin-left:auto;font:500 10.5px/1.3 'JetBrains Mono',monospace;color:var(--info-ink)">{{ carton.quantity }}</span>
                   </div>
                   <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-64)">Montures enregistrées : {{ carton.status }}</div>
-                  <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-64)">Marques : {{ carton.marques }}</div>
+                  <div style="font:600 11px/1.5 Manrope,sans-serif;color:var(--ink-64)">Marques : {{ carton.marques }}</div>
                   <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-64)">Couleurs : {{ carton.couleurs }}</div>
                   <div style="font:400 11px/1.5 Manrope,sans-serif;color:var(--ink-64)">Références : {{ carton.references }}</div>
                 </div>
@@ -448,7 +459,7 @@ class Component extends DCLogic {
     boutique: 'Pointe-Noire',
     q: '', fGamme: '', fGenre: '', fType: '', fMarque: '', quickFilter: '', valiseQ: '', valiseFilter: '',
     ouvert: null, selCouleur: null, qty: 1, detImageView: 'front',
-    panier: {}, selectedCartons: {}, panierGammesOuvertes: {}, motif: '', toast: null,
+    panier: {}, selectedCartons: {}, photoViewMode: {}, panierGammesOuvertes: {}, motif: '', toast: null,
     catalogLevel: 'valises', selectedValise: null, selectedCarton: null
   };
 
@@ -564,7 +575,8 @@ class Component extends DCLogic {
           ref: '',
           marque: (marques || [])[0] || '—',
           marques,
-          forme: Object.keys(formes || {})[0] || '—',
+          formes,
+          forme: this.formatFormes(formes),
           couleur: (couleurs || [])[0] || 'Sans couleur',
           couleurs,
           matiere: (matieres || [])[0] || '—',
@@ -633,6 +645,11 @@ class Component extends DCLogic {
     const text = value.trim();
     if (!text) return value;
     try { return JSON.parse(text); } catch (error) { return value; }
+  }
+  formatFormes(value) {
+    const formes = this.parseJsonValue(value);
+    if (!formes || typeof formes !== 'object' || Array.isArray(formes)) return '—';
+    return Object.entries(formes).map(([forme, quantite]) => `${forme} : ${quantite}`).join(', ') || '—';
   }
   normalizePhotoUrl(v) {
     const s = String(v ?? '').trim();
@@ -972,6 +989,38 @@ class Component extends DCLogic {
     const selectedCartonCode = selectedBox ? (selectedBox.carton || selectedBox.code || 'Carton') : 'Carton';
     const selectedCartonDigits = (String(selectedCartonCode).match(/(?:CTN|CARTON)[-_ ]?(\d+)/i) || [])[1];
     const selectedCartonNumber = selectedCartonDigits ? String(Number(selectedCartonDigits)).padStart(2, '0') : selectedCartonCode;
+    const selectedCartonMarqueCounts = (() => {
+      const counts = {};
+      const rawItems = Array.isArray(selectedBox?.montures) ? selectedBox.montures : [];
+      rawItems.forEach(item => {
+        const label = String(item?.marque || item?.brand || 'Non renseigné').trim();
+        const key = label || 'Non renseigné';
+        counts[key] = (counts[key] || 0) + 1;
+      });
+      const fallbackBrands = Array.isArray(selectedBox?.marques)
+        ? selectedBox.marques
+        : (typeof selectedBox?.marques === 'string' ? selectedBox.marques.split(',').map(value => value.trim()).filter(Boolean) : []);
+      if (!Object.keys(counts).length && fallbackBrands.length) {
+        fallbackBrands.forEach(label => {
+          const key = String(label || 'Non renseigné').trim() || 'Non renseigné';
+          counts[key] = (counts[key] || 0) + 1;
+        });
+      }
+      if (!Object.keys(counts).length) {
+        const name = selectedBox?.marque || selectedBox?.brand || 'Non renseignée';
+        if (name) counts[String(name).trim()] = Number(selectedBox?.quantity) || 0;
+      }
+      return Object.entries(counts).map(([label, count]) => `${label} : ${count}`).join(' · ') || 'Non renseignée';
+    })();
+    const selectedCartonFormeSummary = (() => {
+      if (!selectedBox) return 'Non renseignée';
+      const formes = this.parseJsonValue(selectedBox.formes);
+      if (formes && typeof formes === 'object' && !Array.isArray(formes)) {
+        return Object.keys(formes).join(', ') || 'Non renseignée';
+      }
+      if (Array.isArray(formes)) return formes.join(', ') || 'Non renseignée';
+      return String(formes || 'Non renseignée');
+    })();
     const allValiseCards = Array.from(valiseMap.values()).map(valise => ({
       code: valise.code,
       images: imageItems(valise.photos, 4),
@@ -1011,7 +1060,7 @@ class Component extends DCLogic {
       quantityLabel: `${box.quantity} montures`,
       marques: (box.marques || []).join(', ') || '—',
       couleurs: (box.couleurs || []).join(', ') || '—',
-      forme: Object.keys(this.parseJsonValue(box.formes) || {}).join(', ') || '—',
+      forme: this.formatFormes(box.formes),
       addLabel: selectedCartonQty(box) ? 'Carton ajouté' : 'Ajouter tout le carton',
       addStyle: selectedCartonQty(box)
         ? 'display:inline-flex;align-items:center;gap:7px;margin-top:13px;padding:9px 13px;border:1px solid rgba(30,143,99,.3);border-radius:10px;background:rgba(52,201,141,.14);color:var(--ok-ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer'
@@ -1044,7 +1093,7 @@ class Component extends DCLogic {
         grp: {
           marque: marques.join(', ') || 'Pré-enregistrement',
           reference: code,
-          forme: Object.keys(formes || {}).join(', ') || '—',
+          forme: this.formatFormes(formes),
           type: box.type || box.type_lunette || '—',
           gamme: box.gamme || '—',
           genre: box.genre || '—',
@@ -1060,6 +1109,39 @@ class Component extends DCLogic {
       const source = String(photo.src || photo.url || '').toLowerCase();
       return !kind.includes('branche') && !/(^|[-_/])branche([-_/.]|$)/i.test(source);
     }) : [];
+    const isRearLike = source => {
+      const value = String(source || '').toLowerCase();
+      const kind = String(source || '').toLowerCase();
+      return /(rear|arriere|back)/i.test(value) || /(rear|arriere|back)/i.test(kind);
+    };
+    const pairedPhotos = [];
+    for (let i = 0; i < cartonPhotos.length; i += 2) {
+      const first = cartonPhotos[i];
+      const second = cartonPhotos[i + 1];
+      let front = first || null;
+      let back = null;
+      if (first && second) {
+        const firstIsRear = isRearLike(first.kind || first.view || first.type || first.src || first.url || '');
+        const secondIsRear = isRearLike(second.kind || second.view || second.type || second.src || second.url || '');
+        if (firstIsRear && !secondIsRear) {
+          front = second;
+          back = first;
+        } else if (!firstIsRear && secondIsRear) {
+          front = first;
+          back = second;
+        } else if (!firstIsRear && !secondIsRear) {
+          front = first;
+          back = second;
+        } else {
+          front = first;
+          back = null;
+        }
+      } else if (first) {
+        front = first;
+      }
+      if (front) pairedPhotos.push({ front, back, key: `photo-${selectedBox.id}-${pairedPhotos.length}` });
+    }
+    const selectedBoxMarque = selectedBox?.marque || (Array.isArray(selectedBox?.marques) ? selectedBox.marques.join(', ') : (typeof selectedBox?.marques === 'string' ? selectedBox.marques : 'Pré-enregistrement')) || 'Pré-enregistrement';
     const selectedGlassIds = new Set((s.selectedGlasses || []).map(glass => String(glass.selectionKey || glass.id)));
     const registeredCards = registeredGlasses.map(monture => ({
       reference: monture.reference || monture.barcode || 'Référence non renseignée',
@@ -1071,28 +1153,48 @@ class Component extends DCLogic {
       addStyle: selectedGlassIds.has(String(monture.id)) ? 'display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:8px 12px;border:1px solid rgba(30,143,99,.3);border-radius:10px;background:rgba(52,201,141,.14);color:var(--ok-ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer' : 'display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:8px 12px;border:1px solid rgba(242,19,142,.28);border-radius:10px;background:rgba(242,19,142,.1);color:var(--acc-ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer',
       onAdd: () => this.setState(st => ({ selectedGlasses: selectedGlassIds.has(String(monture.id)) ? (st.selectedGlasses || []).filter(glass => String(glass.id) !== String(monture.id)) : [...(st.selectedGlasses || []), { ...monture, selectionKey: monture.id, carton: selectedBox.code, valise: selectedValise.code }] }))
     }));
-    const photoCards = cartonPhotos.map((photo, index) => ({
-      reference: 'Lunette',
-      marque: 'Pré-enregistrement', couleur: selectedBox.couleurs?.join(', ') || '—', forme: selectedBox.formes ? Object.keys(selectedBox.formes).join(', ') : '—', matiere: selectedBox.matieres?.join(', ') || '—',
-      emplacement: `${selectedValise.code} · ${selectedBox.carton || selectedBox.code || 'Carton non renseigné'}`,
-      image: this.normalizePhotoUrl(photo.src || photo.url),
-      cardStyle: 'padding:14px;border-radius:18px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);box-shadow:inset 0 1px 0 var(--srf-9)',
-      addLabel: selectedGlassIds.has(`photo-${selectedBox.id}-${index}`) ? 'Ajoutée à la liste' : 'Ajouter à la liste',
-      addStyle: selectedGlassIds.has(`photo-${selectedBox.id}-${index}`) ? 'display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:8px 12px;border:1px solid rgba(30,143,99,.3);border-radius:10px;background:rgba(52,201,141,.14);color:var(--ok-ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer' : 'display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:8px 12px;border:1px solid rgba(242,19,142,.28);border-radius:10px;background:rgba(242,19,142,.1);color:var(--acc-ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer',
-      onAdd: () => this.setState(st => ({ selectedGlasses: selectedGlassIds.has(`photo-${selectedBox.id}-${index}`) ? (st.selectedGlasses || []).filter(glass => glass.selectionKey !== `photo-${selectedBox.id}-${index}`) : [...(st.selectedGlasses || []), { selectionKey: `photo-${selectedBox.id}-${index}`, reference: 'Lunette', marque: selectedBox.marques?.join(', ') || '', couleur: selectedBox.couleurs?.join(', ') || '', carton: selectedBox.code, valise: selectedValise.code }] }))
-    }));
+    const photoCards = pairedPhotos.map((pair, index) => {
+      const selectionKey = pair.key || `photo-${selectedBox.id}-${index}`;
+      const currentView = (s.photoViewMode || {})[selectionKey] === 'back' ? 'back' : 'front';
+      const frontUrl = this.normalizePhotoUrl(pair.front?.src || pair.front?.url || '');
+      const backUrl = pair.back ? this.normalizePhotoUrl(pair.back?.src || pair.back?.url || '') : '';
+      const image = currentView === 'back' ? (backUrl || frontUrl) : frontUrl;
+      return {
+        reference: 'Lunette',
+        marque: selectedBoxMarque,
+        couleur: selectedBox.couleurs?.join(', ') || '—',
+        forme: this.formatFormes(selectedBox.formes),
+        matiere: selectedBox.matieres?.join(', ') || '—',
+        emplacement: `${selectedValise.code} · ${selectedBox.carton || selectedBox.code || 'Carton non renseigné'}`,
+        image,
+        hasBack: !!backUrl,
+        currentView,
+        toggleLabel: currentView === 'back' ? 'Face' : 'Arrière',
+        toggleStyle: 'display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 10px;border-radius:10px;border:1px solid rgba(95,194,217,.3);background:rgba(95,194,217,.12);color:var(--info-ink);font:600 10px/1.3 Manrope,sans-serif;cursor:pointer',
+        cardStyle: 'padding:14px;border-radius:18px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);box-shadow:inset 0 1px 0 var(--srf-9)',
+        addLabel: selectedGlassIds.has(selectionKey) ? 'Ajoutée à la liste' : 'Ajouter à la liste',
+        addStyle: selectedGlassIds.has(selectionKey) ? 'display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:8px 12px;border:1px solid rgba(30,143,99,.3);border-radius:10px;background:rgba(52,201,141,.14);color:var(--ok-ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer' : 'display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:8px 12px;border:1px solid rgba(242,19,142,.28);border-radius:10px;background:rgba(242,19,142,.1);color:var(--acc-ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer',
+        onToggle: () => this.setState(st => ({
+          photoViewMode: {
+            ...(st.photoViewMode || {}),
+            [selectionKey]: ((st.photoViewMode || {})[selectionKey] === 'back') ? 'front' : 'back'
+          }
+        })),
+        onAdd: () => this.setState(st => ({ selectedGlasses: selectedGlassIds.has(selectionKey) ? (st.selectedGlasses || []).filter(glass => glass.selectionKey !== selectionKey) : [...(st.selectedGlasses || []), { selectionKey, reference: 'Lunette', marque: selectedBoxMarque, forme: this.formatFormes(selectedBox.formes), gamme: selectedBox.gamme || '—', couleur: selectedBox.couleurs?.join(', ') || '', carton: selectedBox.code, valise: selectedValise.code, photoView: currentView }] }))
+      };
+    });
     const placeholderCount = Math.max(0, (Number(selectedBox?.quantity) || 0) - photoCards.length);
     const placeholderCards = Array.from({ length: placeholderCount }, (_, index) => {
       const selectionKey = `placeholder-${selectedBox.id}-${index}`;
       return {
         reference: 'Lunette',
-        marque: 'Pré-enregistrement', couleur: selectedBox.couleurs?.join(', ') || '—', forme: selectedBox.formes ? Object.keys(selectedBox.formes).join(', ') : '—', matiere: selectedBox.matieres?.join(', ') || '—',
+        marque: selectedBoxMarque, couleur: selectedBox.couleurs?.join(', ') || '—', forme: this.formatFormes(selectedBox.formes), matiere: selectedBox.matieres?.join(', ') || '—',
         emplacement: `${selectedValise.code} · ${selectedBox.carton || selectedBox.code || 'Carton non renseigné'}`,
         image: '',
         cardStyle: 'padding:14px;border-radius:18px;background:linear-gradient(150deg,var(--srf-9),var(--srf-62));border:1px solid var(--ink-09);box-shadow:inset 0 1px 0 var(--srf-9)',
         addLabel: selectedGlassIds.has(selectionKey) ? 'Ajoutée à la liste' : 'Ajouter à la liste',
         addStyle: selectedGlassIds.has(selectionKey) ? 'display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:8px 12px;border:1px solid rgba(30,143,99,.3);border-radius:10px;background:rgba(52,201,141,.14);color:var(--ok-ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer' : 'display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:8px 12px;border:1px solid rgba(242,19,142,.28);border-radius:10px;background:rgba(242,19,142,.1);color:var(--acc-ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer',
-        onAdd: () => this.setState(st => ({ selectedGlasses: selectedGlassIds.has(selectionKey) ? (st.selectedGlasses || []).filter(glass => glass.selectionKey !== selectionKey) : [...(st.selectedGlasses || []), { selectionKey, reference: 'Lunette', marque: selectedBox.marques?.join(', ') || '', couleur: selectedBox.couleurs?.join(', ') || '', carton: selectedBox.code, valise: selectedValise.code }] }))
+        onAdd: () => this.setState(st => ({ selectedGlasses: selectedGlassIds.has(selectionKey) ? (st.selectedGlasses || []).filter(glass => glass.selectionKey !== selectionKey) : [...(st.selectedGlasses || []), { selectionKey, reference: 'Lunette', marque: selectedBoxMarque, forme: this.formatFormes(selectedBox.formes), gamme: selectedBox.gamme || '—', couleur: selectedBox.couleurs?.join(', ') || '', carton: selectedBox.code, valise: selectedValise.code }] }))
       };
     });
     const lunetteCards = registeredCards.length ? registeredCards : photoCards.concat(placeholderCards);
@@ -1335,6 +1437,8 @@ class Component extends DCLogic {
       selectedCartonCode,
       selectedCartonNumber,
       selectedCartonSummary: selectedBox ? `${selectedBox.quantity} montures · ${(selectedBox.montures || []).length} enregistrée(s) · ${(selectedBox.photos || []).length} photo(s)` : '',
+      selectedCartonMarqueSummary: selectedCartonMarqueCounts,
+      selectedCartonFormeSummary,
       backToValises: () => this.setState({ catalogLevel: 'valises', selectedValise: null, selectedCarton: null }),
       backToCartons: () => this.setState({ catalogLevel: 'cartons', selectedCarton: null }),
       themeIcon: theme === 'dark' ? 'sun' : 'moon',
@@ -1365,11 +1469,11 @@ class Component extends DCLogic {
       panierVide: entries.length === 0 && selectedGlasses.length === 0 && selectedCartonEntries.length === 0,
       panierTotal: totalCommande,
       selectedGlassesList: selectedGlasses.map(glass => ({
-        reference: glass.reference || glass.barcode || `Monture ${glass.id}`,
+        reference: `${glass.marque || glass.reference || 'Lunette'}${glass.gamme ? ` · ${glass.gamme}` : ''}${glass.forme ? ` · ${glass.forme}` : ''}`,
         onRemove: () => this.setState(st => ({ selectedGlasses: (st.selectedGlasses || []).filter(item => String(item.selectionKey || item.id) !== String(glass.selectionKey || glass.id)) }))
       })),
       selectedCartonsList: selectedCartonEntries.map(entry => ({
-        label: entry.label,
+        label: `${entry.grp.marque || 'Pré-enregistrement'} · ${entry.grp.forme || '—'} · ${entry.grp.gamme || '—'}`,
         qty: entry.qty,
         onRemove: () => this.setState(st => {
           const next = { ...(st.selectedCartons || {}) };
