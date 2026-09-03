@@ -53,6 +53,9 @@
       <sc-for list="{{ selectedGlassesList }}" as="glass" hint-placeholder-count="0">
         <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font:500 10px/1.3 Manrope,sans-serif;color:var(--ink-72)"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ glass.reference }}</span><button onClick="{{ glass.onRemove }}" title="Retirer" style="border:0;background:transparent;color:var(--acc-ink);cursor:pointer;padding:0"><span data-icon="x" style="display:grid;place-items:center;font-size:13px"></span></button></div>
       </sc-for>
+      <sc-for list="{{ selectedCartonsList }}" as="carton" hint-placeholder-count="0">
+        <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font:500 10px/1.3 Manrope,sans-serif;color:var(--ink-72)"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ carton.label }} · {{ carton.qty }} montures</span><button onClick="{{ carton.onRemove }}" title="Retirer" style="border:0;background:transparent;color:var(--acc-ink);cursor:pointer;padding:0"><span data-icon="x" style="display:grid;place-items:center;font-size:13px"></span></button></div>
+      </sc-for>
     </div>
     <div style="margin-top:auto;display:flex;flex-direction:column;gap:12px">
       <button onClick="{{ goMagasin }}" style="display:flex;align-items:center;gap:11px;width:100%;padding:13px 15px;border-radius:999px;border:1px solid var(--ink-1);background:var(--srf-6);color:var(--ink-72);font:600 12.5px/1.3 Manrope,sans-serif;cursor:pointer;text-align:left;transition:all .26s cubic-bezier(.22,1,.36,1)" style-hover="background:var(--srf-9);color:var(--ink)">
@@ -128,14 +131,16 @@
           <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:18px"><h2 style="font:600 22px/1.2 Sora,sans-serif;margin:0">{{ selectedValiseCode }}</h2><span style="font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--ink-62)">{{ selectedValiseSummary }}</span></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px">
             <sc-for list="{{ cartonCards }}" as="k" hint-placeholder-count="4">
-              <button onClick="{{ k.onOpen }}" style="{{ k.cardStyle }}">
+              <div onClick="{{ k.onOpen }}" style="{{ k.cardStyle }}">
                 <div style="position:relative;height:170px;margin:-16px -16px 16px;overflow:hidden;background:var(--srf-7);border-bottom:1px solid var(--ink-09)">
                   <sc-for list="{{ k.images }}" as="image" hint-placeholder-count="1"><img bindSrc="{{ image.src }}" alt="Lunette de {{ k.code }}" style="{{ image.style }}"></sc-for>
                 </div>
                 <div style="display:flex;align-items:baseline;gap:8px;text-align:left"><strong style="font:600 14px/1.3 'JetBrains Mono',monospace">{{ k.code }}</strong><span style="margin-left:auto;font:500 11px/1.3 'JetBrains Mono',monospace;color:var(--info-ink)">{{ k.quantityLabel }}</span></div>
                 <div style="margin-top:9px;text-align:left;font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Marques : {{ k.marques }}</div>
                 <div style="margin-top:4px;text-align:left;font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Couleurs : {{ k.couleurs }}</div>
-              </button>
+                <div style="margin-top:4px;text-align:left;font:400 11.5px/1.5 Manrope,sans-serif;color:var(--ink-62)">Forme : {{ k.forme }}</div>
+                <button onClick="{{ k.onAdd }}" style="{{ k.addStyle }}"><span data-icon="plus" style="display:grid;place-items:center;font-size:14px"></span>{{ k.addLabel }}</button>
+              </div>
             </sc-for>
           </div>
         </div>
@@ -443,7 +448,7 @@ class Component extends DCLogic {
     boutique: 'Pointe-Noire',
     q: '', fGamme: '', fGenre: '', fType: '', fMarque: '', quickFilter: '', valiseQ: '', valiseFilter: '',
     ouvert: null, selCouleur: null, qty: 1, detImageView: 'front',
-    panier: {}, panierGammesOuvertes: {}, motif: '', toast: null,
+    panier: {}, selectedCartons: {}, panierGammesOuvertes: {}, motif: '', toast: null,
     catalogLevel: 'valises', selectedValise: null, selectedCarton: null
   };
 
@@ -528,12 +533,17 @@ class Component extends DCLogic {
             const found = Object.keys(source).find(name => name.toLowerCase().replace(/_/g, '') === wanted);
             return found ? source[found] : undefined;
           };
-          const values = key => field(box, key) ?? field(item, key) ?? [];
-          const photos = values('photos');
-          const marques = values('marques');
-          const couleurs = values('couleurs');
-          const matieres = values('matieres');
-          const formes = values('formes');
+          const values = key => this.parseJsonValue(field(box, key) ?? field(item, key) ?? []);
+          const photosValue = values('photos');
+          const photos = Array.isArray(photosValue) ? photosValue : [];
+          const marquesValue = values('marques');
+          const marques = Array.isArray(marquesValue) ? marquesValue : [];
+          const couleursValue = values('couleurs');
+          const couleurs = Array.isArray(couleursValue) ? couleursValue : [];
+          const matieresValue = values('matieres');
+          const matieres = Array.isArray(matieresValue) ? matieresValue : [];
+          const formesValue = values('formes');
+          const formes = formesValue && typeof formesValue === 'object' && !Array.isArray(formesValue) ? formesValue : {};
           const allText = source => {
             if (source == null) return [];
             if (typeof source === 'string' || typeof source === 'number') return [String(source)];
@@ -571,10 +581,10 @@ class Component extends DCLogic {
           statut: 'pre_registration',
           preRegistration: true,
           photos,
-          montures: values('montures'),
-          photo: this.normalizePhotoUrl(photos.find(p => p && (p.kind === 'face' || p.view === 'face'))?.src || null),
-          photoFront: this.normalizePhotoUrl(photos.find(p => p && (p.kind === 'face' || p.view === 'face'))?.src || null),
-          photoBack: this.normalizePhotoUrl(photos.find(p => p && (p.kind === 'arriere' || p.kind === 'branche' || p.view === 'rear'))?.src || null),
+          montures: Array.isArray(values('montures')) ? values('montures') : [],
+          photo: this.normalizePhotoUrl(photos.find(p => p && ['face', 'front', 'avant'].includes(String(p.kind || p.view || '').toLowerCase()))?.src || null),
+          photoFront: this.normalizePhotoUrl(photos.find(p => p && ['face', 'front', 'avant'].includes(String(p.kind || p.view || '').toLowerCase()))?.src || null),
+          photoBack: this.normalizePhotoUrl(photos.find(p => p && ['rear', 'arriere', 'back'].includes(String(p.kind || p.view || '').toLowerCase()))?.src || null),
           sorti: false,
           test: false
           };
@@ -618,6 +628,12 @@ class Component extends DCLogic {
     this.tt = setTimeout(() => this.setState({ toast: null }), 3600);
   }
   slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+  parseJsonValue(value) {
+    if (typeof value !== 'string') return value;
+    const text = value.trim();
+    if (!text) return value;
+    try { return JSON.parse(text); } catch (error) { return value; }
+  }
   normalizePhotoUrl(v) {
     const s = String(v ?? '').trim();
     if (!s || s === 'null' || s === 'undefined') return '';
@@ -987,15 +1003,56 @@ class Component extends DCLogic {
         : 'background:var(--srf-8);border:1px solid var(--ink-12);color:var(--ink-72)'),
       onClick: () => this.setState({ valiseFilter: filter.value })
     }));
+    const selectedCartons = s.selectedCartons || {};
+    const selectedCartonQty = box => Number(selectedCartons[String(box.id)] || 0);
     const cartonCards = selectedValise ? selectedValise.boxes.map(box => ({
       code: box.carton || box.code || 'Carton non renseigné',
       images: imageItems(box.photos, 3),
       quantityLabel: `${box.quantity} montures`,
       marques: (box.marques || []).join(', ') || '—',
       couleurs: (box.couleurs || []).join(', ') || '—',
+      forme: Object.keys(this.parseJsonValue(box.formes) || {}).join(', ') || '—',
+      addLabel: selectedCartonQty(box) ? 'Carton ajouté' : 'Ajouter tout le carton',
+      addStyle: selectedCartonQty(box)
+        ? 'display:inline-flex;align-items:center;gap:7px;margin-top:13px;padding:9px 13px;border:1px solid rgba(30,143,99,.3);border-radius:10px;background:rgba(52,201,141,.14);color:var(--ok-ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer'
+        : 'display:inline-flex;align-items:center;gap:7px;margin-top:13px;padding:9px 13px;border:1px solid rgba(242,19,142,.28);border-radius:10px;background:rgba(242,19,142,.1);color:var(--acc-ink);font:600 11px/1.3 Manrope,sans-serif;cursor:pointer',
       cardStyle: 'display:block;width:100%;padding:16px;border-radius:22px;border:1px solid var(--ink-09);background:linear-gradient(150deg,var(--srf-9),var(--srf-62));box-shadow:inset 0 1px 0 var(--srf-9),0 18px 40px -30px var(--ink-2);cursor:pointer;text-align:left',
-      onOpen: () => this.setState({ catalogLevel: 'lunettes', selectedCarton: box.id })
+      onOpen: () => this.setState({ catalogLevel: 'lunettes', selectedCarton: box.id }),
+      onAdd: event => {
+        event.stopPropagation();
+        this.setState(st => {
+          const next = { ...(st.selectedCartons || {}) };
+          const id = String(box.id);
+          if (next[id]) delete next[id];
+          else next[id] = Number(box.quantity) || 0;
+          return { selectedCartons: next };
+        });
+      }
     })) : [];
+    const selectedCartonEntries = Object.entries(selectedCartons).map(([id, quantity]) => {
+      const box = rawBoxes.find(candidate => String(candidate.id) === id);
+      if (!box || !quantity) return null;
+      const formes = this.parseJsonValue(box.formes);
+      const marques = Array.isArray(box.marques) ? box.marques : [];
+      const couleurs = Array.isArray(box.couleurs) ? box.couleurs : [];
+      const code = box.carton || box.code || 'Carton non renseigné';
+      return {
+        id: `carton-${id}`,
+        qty: Number(quantity),
+        couleur: couleurs[0] || 'Sans couleur',
+        label: `${box.valise || 'Valise'} · ${code}`,
+        grp: {
+          marque: marques.join(', ') || 'Pré-enregistrement',
+          reference: code,
+          forme: Object.keys(formes || {}).join(', ') || '—',
+          type: box.type || box.type_lunette || '—',
+          gamme: box.gamme || '—',
+          genre: box.genre || '—',
+          valises: [box.valise || '—'],
+          cartons: [code]
+        }
+      };
+    }).filter(Boolean);
     const registeredGlasses = selectedBox ? (selectedBox.montures || []) : [];
     const cartonPhotos = selectedBox ? (selectedBox.photos || []).filter(photo => {
       if (!photo || !(photo.src || photo.url)) return false;
@@ -1255,7 +1312,9 @@ class Component extends DCLogic {
     const mesEnvois = (DB.demandes || []).filter(d => d.canal === 'catalogue');
 
     const selectedGlasses = s.selectedGlasses || [];
-    const envoiActif = total > 0 || selectedGlasses.length > 0;
+    const selectedCartonTotal = selectedCartonEntries.reduce((sum, entry) => sum + entry.qty, 0);
+    const totalCommande = total + selectedGlasses.length + selectedCartonTotal;
+    const envoiActif = totalCommande > 0;
 
     return {
       theme,
@@ -1303,11 +1362,20 @@ class Component extends DCLogic {
       closeDet: () => this.setState({ ouvert: null }),
 
       panierGammes,
-      panierVide: entries.length === 0 && selectedGlasses.length === 0,
-      panierTotal: total + selectedGlasses.length,
+      panierVide: entries.length === 0 && selectedGlasses.length === 0 && selectedCartonEntries.length === 0,
+      panierTotal: totalCommande,
       selectedGlassesList: selectedGlasses.map(glass => ({
         reference: glass.reference || glass.barcode || `Monture ${glass.id}`,
         onRemove: () => this.setState(st => ({ selectedGlasses: (st.selectedGlasses || []).filter(item => String(item.selectionKey || item.id) !== String(glass.selectionKey || glass.id)) }))
+      })),
+      selectedCartonsList: selectedCartonEntries.map(entry => ({
+        label: entry.label,
+        qty: entry.qty,
+        onRemove: () => this.setState(st => {
+          const next = { ...(st.selectedCartons || {}) };
+          delete next[String(entry.id).replace('carton-', '')];
+          return { selectedCartons: next };
+        })
       })),
       panierMontant: this.fcfa(montant),
       motif: s.motif, setMotif: e => this.setState({ motif: e.target.value }),
@@ -1361,6 +1429,15 @@ class Component extends DCLogic {
             }
           }
         });
+        selectedCartonEntries.forEach(entry => {
+          for (let index = 0; index < entry.qty; index++) {
+            payloadItems.push({
+              reference: entry.grp.reference,
+              brand: entry.grp.marque,
+              location_code: `${entry.grp.valises[0]} / ${entry.grp.cartons[0]}`
+            });
+          }
+        });
         selectedGlasses.forEach(glass => {
           const item = {
             reference: glass.reference || glass.barcode || '',
@@ -1380,7 +1457,7 @@ class Component extends DCLogic {
         }
 
         try {
-          await this.downloadCommande(entries, total + selectedGlasses.length, s.boutique);
+          await this.downloadCommande(entries.concat(selectedCartonEntries), totalCommande, s.boutique);
           const token = localStorage.getItem('token');
           if (!token) throw new Error('Token absent');
 
@@ -1420,7 +1497,7 @@ class Component extends DCLogic {
             gamme: un(e => e.grp.gamme),
             genre: un(e => e.grp.genre),
             couleur: un(e => e.couleur),
-            besoin: total,
+            besoin: totalCommande,
             uids: payloadItems.map(i => i.barcode),
             statut: 'attente',
             scanned: [],
@@ -1429,7 +1506,7 @@ class Component extends DCLogic {
           };
           S.set({ demandes: [dem].concat(DB.demandes || []) });
           S.mouvement({ sens: 'interne', de: s.boutique, vers: 'Administration', ref, motif: 'Commande catalogue', qty: total });
-          this.setState({ panier: {}, motif: '' });
+          this.setState({ panier: {}, selectedCartons: {}, motif: '' });
           this.setState({ selectedGlasses: [] });
           await this.loadBackendStock();
           this.toast('send-horizontal', 'Liste envoyée à l\u2019admin', `${ref} · ${total} montures · ${s.boutique}`, 'ok');
